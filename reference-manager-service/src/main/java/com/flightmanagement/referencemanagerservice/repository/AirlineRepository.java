@@ -8,6 +8,8 @@ import java.util.Optional;
 
 @Repository
 public interface AirlineRepository extends JpaRepository<Airline, Long> {
-    Optional<Airline> findByCode(String code);
-    boolean existsByCode(String code);
+    Optional<Airline> findByIataCode(String iataCode);
+    Optional<Airline> findByIcaoCode(String icaoCode);
+    boolean existsByIataCode(String iataCode);
+    boolean existsByIcaoCode(String icaoCode);
 }
