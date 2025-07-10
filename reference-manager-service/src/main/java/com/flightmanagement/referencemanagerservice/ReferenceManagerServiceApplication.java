@@ -6,9 +6,9 @@ import org.springframework.kafka.annotation.EnableKafka;
 
 @SpringBootApplication
 @EnableKafka
-public class ReferenceManagerApplication {
+public class ReferenceManagerServiceApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(ReferenceManagerApplication.class, args);
+        SpringApplication.run(ReferenceManagerServiceApplication.class, args);
     }
 }
