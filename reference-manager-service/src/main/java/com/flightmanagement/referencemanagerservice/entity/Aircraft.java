@@ -5,19 +5,19 @@ import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
 
 @Entity
 @Table(name = "aircrafts")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@ToString(exclude = {"airline", "seatConfiguration"}) // Circular reference'ı önlemek için
 public class Aircraft {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

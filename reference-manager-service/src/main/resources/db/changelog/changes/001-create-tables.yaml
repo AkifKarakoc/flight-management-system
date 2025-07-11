@@ -1,0 +1,733 @@
+databaseChangeLog:
+  - changeSet:
+      id: create-airlines-table
+      author: flight-management-team
+      comment: "Create airlines table if not exists"
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - not:
+            - tableExists:
+                tableName: airlines
+      changes:
+        - createTable:
+            tableName: airlines
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: iata_code
+                  type: VARCHAR(3)
+                  constraints:
+                    unique: true
+                    nullable: false
+              - column:
+                  name: icao_code
+                  type: VARCHAR(4)
+                  constraints:
+                    unique: true
+                    nullable: false
+              - column:
+                  name: name
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: country
+                  type: VARCHAR(100)
+              - column:
+                  name: type
+                  type: VARCHAR(50)
+              - column:
+                  name: active
+                  type: BOOLEAN
+                  defaultValueBoolean: true
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  defaultValueComputed: CURRENT_TIMESTAMP
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP
+                  defaultValueComputed: CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      rollback:
+        - dropTable:
+            tableName: airlines
+
+  - changeSet:
+      id: create-airports-table
+      author: flight-management-team
+      comment: "Create airports table if not exists"
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - not:
+            - tableExists:
+                tableName: airports
+      changes:
+        - createTable:
+            tableName: airports
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: iata_code
+                  type: VARCHAR(3)
+                  constraints:
+                    unique: true
+                    nullable: false
+              - column:
+                  name: icao_code
+                  type: VARCHAR(4)
+                  constraints:
+                    unique: true
+                    nullable: false
+              - column:
+                  name: name
+                  type: VARCHAR(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: city
+                  type: VARCHAR(100)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: country
+                  type: VARCHAR(100)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: timezone
+                  type: VARCHAR(50)
+              - column:
+                  name: latitude
+                  type: DOUBLE
+              - column:
+                  name: longitude
+                  type: DOUBLE
+              - column:
+                  name: elevation
+                  type: INT
+              - column:
+                  name: type
+                  type: VARCHAR(50)
+              - column:
+                  name: active
+                  type: BOOLEAN
+                  defaultValueBoolean: true
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  defaultValueComputed: CURRENT_TIMESTAMP
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP
+                  defaultValueComputed: CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      rollback:
+        - dropTable:
+            tableName: airports
+
+  - changeSet:
+      id: create-aircrafts-table
+      author: flight-management-team
+      comment: "Create aircrafts table if not exists"
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - not:
+            - tableExists:
+                tableName: aircrafts
+      changes:
+        - createTable:
+            tableName: aircrafts
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: registration_number
+                  type: VARCHAR(20)
+                  constraints:
+                    unique: true
+                    nullable: false
+              - column:
+                  name: aircraft_type
+                  type: VARCHAR(10)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: manufacturer
+                  type: VARCHAR(50)
+              - column:
+                  name: model
+                  type: VARCHAR(50)
+              - column:
+                  name: seat_capacity
+                  type: INT
+              - column:
+                  name: cargo_capacity
+                  type: INT
+              - column:
+                  name: max_range
+                  type: INT
+              - column:
+                  name: manufacture_date
+                  type: DATE
+              - column:
+                  name: last_maintenance
+                  type: DATE
+              - column:
+                  name: status
+                  type: VARCHAR(30)
+                  defaultValue: 'ACTIVE'
+              - column:
+                  name: airline_id
+                  type: BIGINT
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  defaultValueComputed: CURRENT_TIMESTAMP
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP
+                  defaultValueComputed: CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      rollback:
+        - dropTable:
+            tableName: aircrafts
+
+  - changeSet:
+      id: add-aircrafts-foreign-key
+      author: flight-management-team
+      comment: "Add foreign key constraint for aircrafts table"
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - tableExists:
+            tableName: aircrafts
+        - tableExists:
+            tableName: airlines
+        - not:
+            - foreignKeyConstraintExists:
+                foreignKeyName: fk_aircrafts_airline
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: aircrafts
+            baseColumnNames: airline_id
+            referencedTableName: airlines
+            referencedColumnNames: id
+            constraintName: fk_aircrafts_airline
+      rollback:
+        - dropForeignKeyConstraint:
+            baseTableName: aircrafts
+            constraintName: fk_aircrafts_airline
+
+  - changeSet:
+      id: create-routes-table
+      author: flight-management-team
+      comment: "Create routes table if not exists"
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - not:
+            - tableExists:
+                tableName: routes
+      changes:
+        - createTable:
+            tableName: routes
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: origin_airport_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: destination_airport_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: distance
+                  type: INT
+              - column:
+                  name: estimated_flight_time
+                  type: INT
+              - column:
+                  name: active
+                  type: BOOLEAN
+                  defaultValueBoolean: true
+              - column:
+                  name: route_type
+                  type: VARCHAR(30)
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  defaultValueComputed: CURRENT_TIMESTAMP
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP
+                  defaultValueComputed: CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      rollback:
+        - dropTable:
+            tableName: routes
+
+  - changeSet:
+      id: add-routes-foreign-keys
+      author: flight-management-team
+      comment: "Add foreign key constraints for routes table"
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - tableExists:
+            tableName: routes
+        - tableExists:
+            tableName: airports
+        - not:
+            - foreignKeyConstraintExists:
+                foreignKeyName: fk_routes_origin_airport
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: routes
+            baseColumnNames: origin_airport_id
+            referencedTableName: airports
+            referencedColumnNames: id
+            constraintName: fk_routes_origin_airport
+        - addForeignKeyConstraint:
+            baseTableName: routes
+            baseColumnNames: destination_airport_id
+            referencedTableName: airports
+            referencedColumnNames: id
+            constraintName: fk_routes_destination_airport
+        - addUniqueConstraint:
+            tableName: routes
+            columnNames: origin_airport_id, destination_airport_id
+            constraintName: unique_route
+      rollback:
+        - dropForeignKeyConstraint:
+            baseTableName: routes
+            constraintName: fk_routes_origin_airport
+        - dropForeignKeyConstraint:
+            baseTableName: routes
+            constraintName: fk_routes_destination_airport
+        - dropUniqueConstraint:
+            tableName: routes
+            constraintName: unique_route
+
+  - changeSet:
+      id: create-crew-members-table
+      author: flight-management-team
+      comment: "Create crew_members table if not exists"
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - not:
+            - tableExists:
+                tableName: crew_members
+      changes:
+        - createTable:
+            tableName: crew_members
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: first_name
+                  type: VARCHAR(100)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: last_name
+                  type: VARCHAR(100)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: employee_number
+                  type: VARCHAR(50)
+                  constraints:
+                    unique: true
+                    nullable: false
+              - column:
+                  name: national_id
+                  type: VARCHAR(20)
+              - column:
+                  name: date_of_birth
+                  type: DATE
+              - column:
+                  name: gender
+                  type: VARCHAR(10)
+              - column:
+                  name: phone_number
+                  type: VARCHAR(20)
+              - column:
+                  name: email
+                  type: VARCHAR(100)
+              - column:
+                  name: crew_type
+                  type: VARCHAR(30)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: license_number
+                  type: VARCHAR(50)
+              - column:
+                  name: license_expiry
+                  type: DATE
+              - column:
+                  name: aircraft_qualifications
+                  type: VARCHAR(255)
+              - column:
+                  name: languages
+                  type: VARCHAR(100)
+              - column:
+                  name: status
+                  type: VARCHAR(20)
+                  defaultValue: 'ACTIVE'
+              - column:
+                  name: base_airport_id
+                  type: BIGINT
+              - column:
+                  name: airline_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  defaultValueComputed: CURRENT_TIMESTAMP
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP
+                  defaultValueComputed: CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      rollback:
+        - dropTable:
+            tableName: crew_members
+
+  - changeSet:
+      id: add-crew-members-foreign-keys
+      author: flight-management-team
+      comment: "Add foreign key constraints for crew_members table"
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - tableExists:
+            tableName: crew_members
+        - tableExists:
+            tableName: airports
+        - tableExists:
+            tableName: airlines
+        - not:
+            - foreignKeyConstraintExists:
+                foreignKeyName: fk_crew_members_base_airport
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: crew_members
+            baseColumnNames: base_airport_id
+            referencedTableName: airports
+            referencedColumnNames: id
+            constraintName: fk_crew_members_base_airport
+        - addForeignKeyConstraint:
+            baseTableName: crew_members
+            baseColumnNames: airline_id
+            referencedTableName: airlines
+            referencedColumnNames: id
+            constraintName: fk_crew_members_airline
+      rollback:
+        - dropForeignKeyConstraint:
+            baseTableName: crew_members
+            constraintName: fk_crew_members_base_airport
+        - dropForeignKeyConstraint:
+            baseTableName: crew_members
+            constraintName: fk_crew_members_airline
+
+  - changeSet:
+      id: create-gates-table
+      author: flight-management-team
+      comment: "Create gates table if not exists"
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - not:
+            - tableExists:
+                tableName: gates
+      changes:
+        - createTable:
+            tableName: gates
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: gate_number
+                  type: VARCHAR(10)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: terminal
+                  type: VARCHAR(10)
+              - column:
+                  name: airport_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: gate_type
+                  type: VARCHAR(20)
+              - column:
+                  name: active
+                  type: BOOLEAN
+                  defaultValueBoolean: true
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  defaultValueComputed: CURRENT_TIMESTAMP
+      rollback:
+        - dropTable:
+            tableName: gates
+
+  - changeSet:
+      id: add-gates-constraints
+      author: flight-management-team
+      comment: "Add constraints for gates table"
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - tableExists:
+            tableName: gates
+        - tableExists:
+            tableName: airports
+        - not:
+            - foreignKeyConstraintExists:
+                foreignKeyName: fk_gates_airport
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: gates
+            baseColumnNames: airport_id
+            referencedTableName: airports
+            referencedColumnNames: id
+            constraintName: fk_gates_airport
+        - addUniqueConstraint:
+            tableName: gates
+            columnNames: airport_id, gate_number
+            constraintName: unique_gate
+      rollback:
+        - dropForeignKeyConstraint:
+            baseTableName: gates
+            constraintName: fk_gates_airport
+        - dropUniqueConstraint:
+            tableName: gates
+            constraintName: unique_gate
+
+  - changeSet:
+      id: create-aircraft-seat-configurations-table
+      author: flight-management-team
+      comment: "Create aircraft_seat_configurations table if not exists"
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - not:
+            - tableExists:
+                tableName: aircraft_seat_configurations
+      changes:
+        - createTable:
+            tableName: aircraft_seat_configurations
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: aircraft_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+                    unique: true
+              - column:
+                  name: total_seats
+                  type: INT
+              - column:
+                  name: total_rows
+                  type: INT
+              - column:
+                  name: seats_per_row
+                  type: INT
+              - column:
+                  name: economy_seats
+                  type: INT
+              - column:
+                  name: business_seats
+                  type: INT
+              - column:
+                  name: first_class_seats
+                  type: INT
+              - column:
+                  name: seat_layout
+                  type: TEXT
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  defaultValueComputed: CURRENT_TIMESTAMP
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP
+                  defaultValueComputed: CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      rollback:
+        - dropTable:
+            tableName: aircraft_seat_configurations
+
+  - changeSet:
+      id: add-aircraft-seat-configurations-foreign-key
+      author: flight-management-team
+      comment: "Add foreign key constraint for aircraft_seat_configurations table"
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - tableExists:
+            tableName: aircraft_seat_configurations
+        - tableExists:
+            tableName: aircrafts
+        - not:
+            - foreignKeyConstraintExists:
+                foreignKeyName: fk_aircraft_seat_configurations_aircraft
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: aircraft_seat_configurations
+            baseColumnNames: aircraft_id
+            referencedTableName: aircrafts
+            referencedColumnNames: id
+            constraintName: fk_aircraft_seat_configurations_aircraft
+      rollback:
+        - dropForeignKeyConstraint:
+            baseTableName: aircraft_seat_configurations
+            constraintName: fk_aircraft_seat_configurations_aircraft
+
+  - changeSet:
+      id: create-aircraft-seats-table
+      author: flight-management-team
+      comment: "Create aircraft_seats table if not exists"
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - not:
+            - tableExists:
+                tableName: aircraft_seats
+      changes:
+        - createTable:
+            tableName: aircraft_seats
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: aircraft_configuration_id
+                  type: BIGINT
+                  constraints:
+                    nullable: false
+              - column:
+                  name: seat_number
+                  type: VARCHAR(5)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: row_number
+                  type: INT
+              - column:
+                  name: seat_letter
+                  type: VARCHAR(1)
+              - column:
+                  name: seat_class
+                  type: VARCHAR(20)
+              - column:
+                  name: seat_type
+                  type: VARCHAR(20)
+              - column:
+                  name: has_extra_legroom
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+              - column:
+                  name: is_emergency_exit
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+              - column:
+                  name: is_blocked
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+              - column:
+                  name: created_at
+                  type: TIMESTAMP
+                  defaultValueComputed: CURRENT_TIMESTAMP
+              - column:
+                  name: updated_at
+                  type: TIMESTAMP
+                  defaultValueComputed: CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      rollback:
+        - dropTable:
+            tableName: aircraft_seats
+
+  - changeSet:
+      id: add-aircraft-seats-constraints
+      author: flight-management-team
+      comment: "Add constraints for aircraft_seats table"
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - tableExists:
+            tableName: aircraft_seats
+        - tableExists:
+            tableName: aircraft_seat_configurations
+        - not:
+            - foreignKeyConstraintExists:
+                foreignKeyName: fk_aircraft_seats_configuration
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: aircraft_seats
+            baseColumnNames: aircraft_configuration_id
+            referencedTableName: aircraft_seat_configurations
+            referencedColumnNames: id
+            constraintName: fk_aircraft_seats_configuration
+        - addUniqueConstraint:
+            tableName: aircraft_seats
+            columnNames: aircraft_configuration_id, seat_number
+            constraintName: unique_seat
+      rollback:
+        - dropForeignKeyConstraint:
+            baseTableName: aircraft_seats
+            constraintName: fk_aircraft_seats_configuration
+        - dropUniqueConstraint:
+            tableName: aircraft_seats
+            constraintName: unique_seat
