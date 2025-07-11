@@ -3,7 +3,7 @@ spring:
     name: reference-manager-service
 
   datasource:
-    url: jdbc:mysql://localhost:3306/reference_db?createDatabaseIfNotExist=true
+    url: jdbc:mysql://localhost:3308/reference_db?createDatabaseIfNotExist=true
     username: root
     password: root
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -26,7 +26,7 @@ spring:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
       properties:
-        spring.json.type.mapping: event:com.flightmanagement.referencemanager.event.ReferenceEvent
+        spring.json.type.mapping: event:com.flightmanagement.referencemanagerservice.event.ReferenceEvent
 
 server:
   port: 8081
