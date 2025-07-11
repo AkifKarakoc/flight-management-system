@@ -17,3 +17,5 @@ public interface AircraftMapper {
     @Mapping(target = "airline", ignore = true)
     void updateEntity(@MappingTarget Aircraft aircraft, AircraftRequest request);
 }
+
+// Note: The AirlineMapper is assumed to be defined elsewhere in the project, providing the necessary mappings for the Airline entity.

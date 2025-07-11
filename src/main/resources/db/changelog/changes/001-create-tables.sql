@@ -98,6 +98,7 @@ CREATE TABLE gates (
                        gate_type VARCHAR(20),
                        active BOOLEAN DEFAULT TRUE,
                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                        FOREIGN KEY (airport_id) REFERENCES airports(id),
                        UNIQUE KEY unique_gate (airport_id, gate_number)
 );
