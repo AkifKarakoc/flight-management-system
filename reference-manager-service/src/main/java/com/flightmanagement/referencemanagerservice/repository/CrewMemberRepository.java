@@ -15,4 +15,6 @@ public interface CrewMemberRepository extends JpaRepository<CrewMember, Long> {
     List<CrewMember> findByBaseAirportId(Long baseAirportId);
     List<CrewMember> findByCrewType(CrewType crewType);
     boolean existsByEmployeeNumber(String employeeNumber);
+    long countByAirlineId(Long airlineId);
+    long countByBaseAirportId(Long baseAirportId);
 }

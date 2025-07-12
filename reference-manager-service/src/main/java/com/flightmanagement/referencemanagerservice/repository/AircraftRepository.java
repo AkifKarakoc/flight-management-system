@@ -13,4 +13,5 @@ public interface AircraftRepository extends JpaRepository<Aircraft, Long> {
     List<Aircraft> findByAirlineId(Long airlineId);
     List<Aircraft> findByAircraftType(String aircraftType);
     boolean existsByRegistrationNumber(String registrationNumber);
+    long countByAirlineId(Long airlineId);
 }

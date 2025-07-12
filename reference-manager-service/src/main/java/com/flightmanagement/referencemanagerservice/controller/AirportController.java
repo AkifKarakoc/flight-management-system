@@ -2,6 +2,7 @@ package com.flightmanagement.referencemanagerservice.controller;
 
 import com.flightmanagement.referencemanagerservice.dto.request.AirportRequest;
 import com.flightmanagement.referencemanagerservice.dto.response.AirportResponse;
+import com.flightmanagement.referencemanagerservice.dto.response.DeletionCheckResult;
 import com.flightmanagement.referencemanagerservice.service.AirportService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -51,6 +52,19 @@ public class AirportController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> deleteAirport(@PathVariable Long id) {
         airportService.deleteAirport(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{id}/deletion-check")
+    public ResponseEntity<DeletionCheckResult> checkAirportDeletion(@PathVariable Long id) {
+        DeletionCheckResult result = airportService.checkAirportDeletion(id);
+        return ResponseEntity.ok(result);
+    }
+
+    @DeleteMapping("/{id}/force")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> forceDeleteAirport(@PathVariable Long id) {
+        airportService.forceDeleteAirport(id);
         return ResponseEntity.noContent().build();
     }
 }

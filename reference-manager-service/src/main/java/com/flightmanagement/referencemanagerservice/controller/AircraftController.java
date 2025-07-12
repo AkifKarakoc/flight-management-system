@@ -2,6 +2,7 @@ package com.flightmanagement.referencemanagerservice.controller;
 
 import com.flightmanagement.referencemanagerservice.dto.request.AircraftRequest;
 import com.flightmanagement.referencemanagerservice.dto.response.AircraftResponse;
+import com.flightmanagement.referencemanagerservice.dto.response.DeletionCheckResult;
 import com.flightmanagement.referencemanagerservice.service.AircraftService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -51,6 +52,19 @@ public class AircraftController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> deleteAircraft(@PathVariable Long id) {
         aircraftService.deleteAircraft(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{id}/deletion-check")
+    public ResponseEntity<DeletionCheckResult> checkAircraftDeletion(@PathVariable Long id) {
+        DeletionCheckResult result = aircraftService.checkAircraftDeletion(id);
+        return ResponseEntity.ok(result);
+    }
+
+    @DeleteMapping("/{id}/force")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> forceDeleteAircraft(@PathVariable Long id) {
+        aircraftService.forceDeleteAircraft(id);
         return ResponseEntity.noContent().build();
     }
 }

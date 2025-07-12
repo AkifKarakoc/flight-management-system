@@ -2,11 +2,17 @@ package com.flightmanagement.referencemanagerservice.service;
 
 import com.flightmanagement.referencemanagerservice.dto.request.AirlineRequest;
 import com.flightmanagement.referencemanagerservice.dto.response.AirlineResponse;
+import com.flightmanagement.referencemanagerservice.dto.response.DeletionCheckResult;
 import com.flightmanagement.referencemanagerservice.entity.Airline;
+import com.flightmanagement.referencemanagerservice.entity.Aircraft;
+import com.flightmanagement.referencemanagerservice.entity.CrewMember;
 import com.flightmanagement.referencemanagerservice.exception.ResourceNotFoundException;
 import com.flightmanagement.referencemanagerservice.exception.DuplicateResourceException;
 import com.flightmanagement.referencemanagerservice.mapper.AirlineMapper;
 import com.flightmanagement.referencemanagerservice.repository.AirlineRepository;
+import com.flightmanagement.referencemanagerservice.repository.AircraftRepository;
+import com.flightmanagement.referencemanagerservice.repository.CrewMemberRepository;
+import com.flightmanagement.referencemanagerservice.validator.AirlineDeletionValidator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -21,8 +27,13 @@ import java.util.stream.Collectors;
 @Transactional
 public class AirlineService {
     private final AirlineRepository airlineRepository;
+    private final AircraftRepository aircraftRepository;
+    private final CrewMemberRepository crewMemberRepository;
     private final AirlineMapper airlineMapper;
     private final KafkaProducerService kafkaProducerService;
+    private final AirlineDeletionValidator deletionValidator;
+    private final AircraftService aircraftService;
+    private final CrewMemberService crewMemberService;
 
     public List<AirlineResponse> getAllAirlines() {
         log.debug("Fetching all airlines");
@@ -91,15 +102,52 @@ public class AirlineService {
         return airlineMapper.toResponse(airline);
     }
 
+    public DeletionCheckResult checkAirlineDeletion(Long id) {
+        log.debug("Checking deletion dependencies for airline with id: {}", id);
+
+        // Airline var mı kontrol et
+        airlineRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Airline not found with id: " + id));
+
+        return deletionValidator.checkDependencies(id);
+    }
+
     public void deleteAirline(Long id) {
         log.debug("Deleting airline with id: {}", id);
 
         Airline airline = airlineRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Airline not found with id: " + id));
 
+        // Dependency validation
+        deletionValidator.validateDeletion(id);
+
         airlineRepository.delete(airline);
 
         // Kafka event publish
         kafkaProducerService.sendAirlineEvent("AIRLINE_DELETED", airline);
+    }
+
+    @Transactional
+    public void forceDeleteAirline(Long id) {
+        log.debug("Force deleting airline with id: {}", id);
+
+        Airline airline = airlineRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Airline not found with id: " + id));
+
+        // İlişkili kayıtları önce sil
+        List<Aircraft> aircrafts = aircraftRepository.findByAirlineId(id);
+        for (Aircraft aircraft : aircrafts) {
+            aircraftService.forceDeleteAircraft(aircraft.getId());
+        }
+
+        List<CrewMember> crewMembers = crewMemberRepository.findByAirlineId(id);
+        for (CrewMember crew : crewMembers) {
+            crewMemberService.deleteCrewMember(crew.getId());
+        }
+
+        airlineRepository.delete(airline);
+
+        // Kafka event publish
+        kafkaProducerService.sendAirlineEvent("AIRLINE_FORCE_DELETED", airline);
     }
 }

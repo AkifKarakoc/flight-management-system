@@ -11,4 +11,5 @@ import java.util.Optional;
 public interface GateRepository extends JpaRepository<Gate, Long> {
     List<Gate> findByAirportId(Long airportId);
     Optional<Gate> findByAirportIdAndGateNumber(Long airportId, String gateNumber);
+    long countByAirportId(Long airportId);
 }
