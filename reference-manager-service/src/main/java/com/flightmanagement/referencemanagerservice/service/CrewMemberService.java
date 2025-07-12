@@ -2,6 +2,7 @@ package com.flightmanagement.referencemanagerservice.service;
 
 import com.flightmanagement.referencemanagerservice.dto.request.CrewMemberRequest;
 import com.flightmanagement.referencemanagerservice.dto.response.CrewMemberResponse;
+import com.flightmanagement.referencemanagerservice.dto.response.DeletionCheckResult;
 import com.flightmanagement.referencemanagerservice.entity.Airline;
 import com.flightmanagement.referencemanagerservice.entity.Airport;
 import com.flightmanagement.referencemanagerservice.entity.CrewMember;
@@ -16,6 +17,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -112,5 +114,19 @@ public class CrewMemberService {
         crewMemberRepository.delete(crewMember);
 
         kafkaProducerService.sendCrewMemberEvent("CREW_MEMBER_DELETED", crewMember);
+    }
+
+    public DeletionCheckResult checkCrewMemberDeletion(Long id) {
+        log.debug("Checking deletion dependencies for crew member with id: {}", id);
+
+        crewMemberRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Crew member not found with id: " + id));
+
+        // Crew member için şimdilik dependency yok, gelecekte flight kontrolü eklenebilir
+        return DeletionCheckResult.builder()
+                .canDelete(true)
+                .reason("No dependencies found")
+                .dependentEntities(new HashMap<>())
+                .build();
     }
 }

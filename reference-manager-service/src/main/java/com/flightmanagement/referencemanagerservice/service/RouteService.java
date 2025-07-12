@@ -1,6 +1,7 @@
 package com.flightmanagement.referencemanagerservice.service;
 
 import com.flightmanagement.referencemanagerservice.dto.request.RouteRequest;
+import com.flightmanagement.referencemanagerservice.dto.response.DeletionCheckResult;
 import com.flightmanagement.referencemanagerservice.dto.response.RouteResponse;
 import com.flightmanagement.referencemanagerservice.entity.Airport;
 import com.flightmanagement.referencemanagerservice.entity.Route;
@@ -9,6 +10,7 @@ import com.flightmanagement.referencemanagerservice.exception.BusinessException;
 import com.flightmanagement.referencemanagerservice.mapper.RouteMapper;
 import com.flightmanagement.referencemanagerservice.repository.AirportRepository;
 import com.flightmanagement.referencemanagerservice.repository.RouteRepository;
+import com.flightmanagement.referencemanagerservice.validator.RouteDeletionValidator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -26,6 +28,7 @@ public class RouteService {
     private final AirportRepository airportRepository;
     private final RouteMapper routeMapper;
     private final KafkaProducerService kafkaProducerService;
+    private final RouteDeletionValidator deletionValidator;
 
     public List<RouteResponse> getAllRoutes() {
         log.debug("Fetching all routes");
@@ -39,6 +42,15 @@ public class RouteService {
         Route route = routeRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Route not found with id: " + id));
         return routeMapper.toResponse(route);
+    }
+
+    public DeletionCheckResult checkRouteDeletion(Long id) {
+        log.debug("Checking deletion dependencies for route with id: {}", id);
+
+        routeRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Route not found with id: " + id));
+
+        return deletionValidator.checkDependencies(id);
     }
 
     public RouteResponse createRoute(RouteRequest request) {
@@ -114,6 +126,9 @@ public class RouteService {
 
         Route route = routeRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Route not found with id: " + id));
+
+        // Dependency validation
+        deletionValidator.validateDeletion(id);
 
         routeRepository.delete(route);
 

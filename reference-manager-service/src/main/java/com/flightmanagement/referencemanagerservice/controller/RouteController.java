@@ -1,6 +1,7 @@
 package com.flightmanagement.referencemanagerservice.controller;
 
 import com.flightmanagement.referencemanagerservice.dto.request.RouteRequest;
+import com.flightmanagement.referencemanagerservice.dto.response.DeletionCheckResult;
 import com.flightmanagement.referencemanagerservice.dto.response.RouteResponse;
 import com.flightmanagement.referencemanagerservice.service.RouteService;
 import jakarta.validation.Valid;
@@ -27,6 +28,12 @@ public class RouteController {
     @GetMapping("/{id}")
     public ResponseEntity<RouteResponse> getRouteById(@PathVariable Long id) {
         return ResponseEntity.ok(routeService.getRouteById(id));
+    }
+
+    @GetMapping("/{id}/deletion-check")
+    public ResponseEntity<DeletionCheckResult> checkRouteDeletion(@PathVariable Long id) {
+        DeletionCheckResult result = routeService.checkRouteDeletion(id);
+        return ResponseEntity.ok(result);
     }
 
     @PostMapping
