@@ -8,6 +8,8 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -19,13 +21,22 @@ public class KafkaProducerService {
     private static final String TOPIC = "reference.events";
 
     public void sendAirlineEvent(String eventType, Airline airline) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("id", airline.getId());
+        payload.put("iataCode", airline.getIataCode());
+        payload.put("icaoCode", airline.getIcaoCode());
+        payload.put("name", airline.getName());
+        payload.put("country", airline.getCountry());
+        payload.put("type", airline.getType());
+        payload.put("active", airline.getActive());
+
         ReferenceEvent event = ReferenceEvent.builder()
                 .eventId(UUID.randomUUID().toString())
                 .eventType(eventType)
                 .eventTime(LocalDateTime.now())
                 .entityType("AIRLINE")
                 .entityId(airline.getId().toString())
-                .payload(airline)
+                .payload(payload)
                 .version("1.0")
                 .build();
 
@@ -34,13 +45,23 @@ public class KafkaProducerService {
     }
 
     public void sendAirportEvent(String eventType, Airport airport) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("id", airport.getId());
+        payload.put("iataCode", airport.getIataCode());
+        payload.put("icaoCode", airport.getIcaoCode());
+        payload.put("name", airport.getName());
+        payload.put("city", airport.getCity());
+        payload.put("country", airport.getCountry());
+        payload.put("type", airport.getType());
+        payload.put("active", airport.getActive());
+
         ReferenceEvent event = ReferenceEvent.builder()
                 .eventId(UUID.randomUUID().toString())
                 .eventType(eventType)
                 .eventTime(LocalDateTime.now())
                 .entityType("AIRPORT")
                 .entityId(airport.getId().toString())
-                .payload(airport)
+                .payload(payload)
                 .version("1.0")
                 .build();
 
@@ -49,13 +70,31 @@ public class KafkaProducerService {
     }
 
     public void sendAircraftEvent(String eventType, Aircraft aircraft) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("id", aircraft.getId());
+        payload.put("registrationNumber", aircraft.getRegistrationNumber());
+        payload.put("aircraftType", aircraft.getAircraftType());
+        payload.put("manufacturer", aircraft.getManufacturer());
+        payload.put("model", aircraft.getModel());
+        payload.put("seatCapacity", aircraft.getSeatCapacity());
+        payload.put("status", aircraft.getStatus());
+
+        // Airline bilgisi için sadece ID ve IATA code gönder
+        if (aircraft.getAirline() != null) {
+            Map<String, Object> airlineInfo = new HashMap<>();
+            airlineInfo.put("id", aircraft.getAirline().getId());
+            airlineInfo.put("iataCode", aircraft.getAirline().getIataCode());
+            airlineInfo.put("name", aircraft.getAirline().getName());
+            payload.put("airline", airlineInfo);
+        }
+
         ReferenceEvent event = ReferenceEvent.builder()
                 .eventId(UUID.randomUUID().toString())
                 .eventType(eventType)
                 .eventTime(LocalDateTime.now())
                 .entityType("AIRCRAFT")
                 .entityId(aircraft.getId().toString())
-                .payload(aircraft)
+                .payload(payload)
                 .version("1.0")
                 .build();
 
@@ -64,13 +103,37 @@ public class KafkaProducerService {
     }
 
     public void sendRouteEvent(String eventType, Route route) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("id", route.getId());
+        payload.put("distance", route.getDistance());
+        payload.put("estimatedFlightTime", route.getEstimatedFlightTime());
+        payload.put("routeType", route.getRouteType());
+        payload.put("active", route.getActive());
+
+        // Airport bilgileri için sadece temel bilgiler
+        if (route.getOriginAirport() != null) {
+            Map<String, Object> originInfo = new HashMap<>();
+            originInfo.put("id", route.getOriginAirport().getId());
+            originInfo.put("iataCode", route.getOriginAirport().getIataCode());
+            originInfo.put("name", route.getOriginAirport().getName());
+            payload.put("originAirport", originInfo);
+        }
+
+        if (route.getDestinationAirport() != null) {
+            Map<String, Object> destInfo = new HashMap<>();
+            destInfo.put("id", route.getDestinationAirport().getId());
+            destInfo.put("iataCode", route.getDestinationAirport().getIataCode());
+            destInfo.put("name", route.getDestinationAirport().getName());
+            payload.put("destinationAirport", destInfo);
+        }
+
         ReferenceEvent event = ReferenceEvent.builder()
                 .eventId(UUID.randomUUID().toString())
                 .eventType(eventType)
                 .eventTime(LocalDateTime.now())
                 .entityType("ROUTE")
                 .entityId(route.getId().toString())
-                .payload(route)
+                .payload(payload)
                 .version("1.0")
                 .build();
 
@@ -79,13 +142,39 @@ public class KafkaProducerService {
     }
 
     public void sendCrewMemberEvent(String eventType, CrewMember crewMember) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("id", crewMember.getId());
+        payload.put("firstName", crewMember.getFirstName());
+        payload.put("lastName", crewMember.getLastName());
+        payload.put("employeeNumber", crewMember.getEmployeeNumber());
+        payload.put("crewType", crewMember.getCrewType());
+        payload.put("status", crewMember.getStatus());
+
+        // Airline bilgisi
+        if (crewMember.getAirline() != null) {
+            Map<String, Object> airlineInfo = new HashMap<>();
+            airlineInfo.put("id", crewMember.getAirline().getId());
+            airlineInfo.put("iataCode", crewMember.getAirline().getIataCode());
+            airlineInfo.put("name", crewMember.getAirline().getName());
+            payload.put("airline", airlineInfo);
+        }
+
+        // Base Airport bilgisi
+        if (crewMember.getBaseAirport() != null) {
+            Map<String, Object> airportInfo = new HashMap<>();
+            airportInfo.put("id", crewMember.getBaseAirport().getId());
+            airportInfo.put("iataCode", crewMember.getBaseAirport().getIataCode());
+            airportInfo.put("name", crewMember.getBaseAirport().getName());
+            payload.put("baseAirport", airportInfo);
+        }
+
         ReferenceEvent event = ReferenceEvent.builder()
                 .eventId(UUID.randomUUID().toString())
                 .eventType(eventType)
                 .eventTime(LocalDateTime.now())
                 .entityType("CREW_MEMBER")
                 .entityId(crewMember.getId().toString())
-                .payload(crewMember)
+                .payload(payload)
                 .version("1.0")
                 .build();
 
