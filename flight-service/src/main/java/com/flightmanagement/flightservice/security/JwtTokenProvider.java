@@ -62,8 +62,6 @@ public class JwtTokenProvider {
         String username = claims.getSubject();
         String roles = claims.get("roles", String.class);
 
-        log.debug("JWT Token - Username: {}, Roles: {}", username, roles);
-
         Collection<? extends GrantedAuthority> authorities = Arrays.stream(roles.split(","))
                 .map(SimpleGrantedAuthority::new)
                 .collect(Collectors.toList());
