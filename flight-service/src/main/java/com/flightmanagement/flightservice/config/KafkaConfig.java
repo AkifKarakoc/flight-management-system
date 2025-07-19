@@ -25,13 +25,17 @@ public class KafkaConfig {
     @Value("${spring.kafka.consumer.group-id}")
     private String groupId;
 
-    // Producer Configuration
+    // Producer Configuration with Type Headers
     @Bean
     public ProducerFactory<String, FlightEvent> flightEventProducerFactory() {
         Map<String, Object> configs = new HashMap<>();
         configs.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         configs.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
         configs.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
+
+        // Type header'ları ekle
+        configs.put(JsonSerializer.ADD_TYPE_INFO_HEADERS, false); // Manual type control
+
         return new DefaultKafkaProducerFactory<>(configs);
     }
 

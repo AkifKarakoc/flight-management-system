@@ -135,11 +135,14 @@ public class FlightArchiveService {
 
             archive.setFlightId(getLongValue(payload, "id"));
             archive.setFlightNumber(getStringValue(payload, "flightNumber"));
-            archive.setFlightDate(getLocalDateValue(payload, "flightDate"));
-            archive.setScheduledDeparture(getLocalDateTimeValue(payload, "scheduledDeparture"));
-            archive.setScheduledArrival(getLocalDateTimeValue(payload, "scheduledArrival"));
-            archive.setActualDeparture(getLocalDateTimeValue(payload, "actualDeparture"));
-            archive.setActualArrival(getLocalDateTimeValue(payload, "actualArrival"));
+
+            // FIX: Array formatındaki date'i handle et
+            archive.setFlightDate(parseFlightDate(payload.get("flightDate")));
+            archive.setScheduledDeparture(parseFlightDateTime(payload.get("scheduledDeparture")));
+            archive.setScheduledArrival(parseFlightDateTime(payload.get("scheduledArrival")));
+            archive.setActualDeparture(parseFlightDateTime(payload.get("actualDeparture")));
+            archive.setActualArrival(parseFlightDateTime(payload.get("actualArrival")));
+
             archive.setStatus(getStringValue(payload, "status"));
             archive.setFlightType(getStringValue(payload, "type"));
             archive.setPassengerCount(getIntegerValue(payload, "passengerCount"));
@@ -182,7 +185,54 @@ public class FlightArchiveService {
             }
         }
 
+        archive.setArchivedAt(LocalDateTime.now());
         return archive;
+    }
+
+    private LocalDate parseFlightDate(Object dateObj) {
+        if (dateObj == null) return null;
+
+        try {
+            if (dateObj instanceof List) {
+                List<Integer> dateList = (List<Integer>) dateObj;
+                if (dateList.size() >= 3) {
+                    return LocalDate.of(dateList.get(0), dateList.get(1), dateList.get(2));
+                }
+            } else if (dateObj instanceof String) {
+                return LocalDate.parse((String) dateObj);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to parse flight date: {}", dateObj, e);
+        }
+
+        return null;
+    }
+
+    private LocalDateTime parseFlightDateTime(Object dateTimeObj) {
+        if (dateTimeObj == null) return null;
+
+        try {
+            if (dateTimeObj instanceof List) {
+                List<Integer> dateTimeList = (List<Integer>) dateTimeObj;
+                if (dateTimeList.size() >= 5) {
+                    return LocalDateTime.of(
+                            dateTimeList.get(0), // year
+                            dateTimeList.get(1), // month
+                            dateTimeList.get(2), // day
+                            dateTimeList.get(3), // hour
+                            dateTimeList.get(4)  // minute
+                    );
+                } else if (dateTimeList.size() >= 3) {
+                    return LocalDate.of(dateTimeList.get(0), dateTimeList.get(1), dateTimeList.get(2)).atStartOfDay();
+                }
+            } else if (dateTimeObj instanceof String) {
+                return LocalDateTime.parse((String) dateTimeObj);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to parse flight datetime: {}", dateTimeObj, e);
+        }
+
+        return null;
     }
 
     // Helper methods for safe type conversion

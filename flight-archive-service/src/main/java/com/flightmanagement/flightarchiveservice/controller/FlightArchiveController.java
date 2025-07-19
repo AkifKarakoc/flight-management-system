@@ -2,6 +2,7 @@ package com.flightmanagement.flightarchiveservice.controller;
 
 import com.flightmanagement.flightarchiveservice.dto.response.FlightArchiveResponse;
 import com.flightmanagement.flightarchiveservice.dto.response.FlightStatsResponse;
+import com.flightmanagement.flightarchiveservice.dto.response.PagedResponse;
 import com.flightmanagement.flightarchiveservice.service.FlightArchiveService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -30,13 +31,25 @@ public class FlightArchiveController {
     }
 
     @GetMapping("/flights")
-    public ResponseEntity<Page<FlightArchiveResponse>> getFlightsByDateRange(
+    public ResponseEntity<PagedResponse<FlightArchiveResponse>> getFlightsByDateRange(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
             Pageable pageable) {
 
-        Page<FlightArchiveResponse> flights = flightArchiveService.getFlightsByDateRange(startDate, endDate, pageable);
-        return ResponseEntity.ok(flights);
+        Page<FlightArchiveResponse> page = flightArchiveService.getFlightsByDateRange(startDate, endDate, pageable);
+
+        PagedResponse<FlightArchiveResponse> response = new PagedResponse<>();
+        response.setContent(page.getContent());
+        response.setPageNumber(page.getNumber());
+        response.setPageSize(page.getSize());
+        response.setTotalElements(page.getTotalElements());
+        response.setTotalPages(page.getTotalPages());
+        response.setFirst(page.isFirst());
+        response.setLast(page.isLast());
+        response.setEmpty(page.isEmpty());
+        response.setNumberOfElements(page.getNumberOfElements());
+
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/flights/airline/{airlineId}")

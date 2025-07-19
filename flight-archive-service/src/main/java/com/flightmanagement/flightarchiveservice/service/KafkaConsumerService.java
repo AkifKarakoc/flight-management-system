@@ -1,6 +1,5 @@
 package com.flightmanagement.flightarchiveservice.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flightmanagement.flightarchiveservice.event.FlightEvent;
 import com.flightmanagement.flightarchiveservice.event.ReferenceEvent;
 import lombok.RequiredArgsConstructor;
@@ -12,97 +11,59 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
 
-import java.util.Map;
-
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class KafkaConsumerService {
 
     private final FlightArchiveService flightArchiveService;
-    private final ObjectMapper objectMapper;
 
-    @KafkaListener(topics = "flight.events", groupId = "flight-archive-service-group")
-    public void handleFlightEvent(@Payload Object eventPayload,
+    @KafkaListener(
+            topics = "flight.events",
+            groupId = "flight-archive-service-group",
+            containerFactory = "flightEventKafkaListenerContainerFactory"
+    )
+    public void handleFlightEvent(@Payload FlightEvent flightEvent,
                                   @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
                                   @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,
                                   @Header(KafkaHeaders.OFFSET) long offset,
                                   Acknowledgment acknowledgment) {
 
-        log.info("Received event from topic: {}, partition: {}, offset: {}", topic, partition, offset);
-        log.debug("Event payload type: {}", eventPayload.getClass().getName());
-        log.debug("Event payload: {}", eventPayload);
+        log.info("Received flight event from topic: {}, partition: {}, offset: {}", topic, partition, offset);
+        log.debug("Flight event ID: {}, Type: {}, Entity ID: {}",
+                flightEvent.getEventId(), flightEvent.getEventType(), flightEvent.getEntityId());
 
         try {
-            FlightEvent event = convertToFlightEvent(eventPayload);
-            if (event != null) {
-                flightArchiveService.archiveFlightEvent(event);
-                log.info("Flight event processed successfully: {}", event.getEventId());
-            } else {
-                log.warn("Failed to convert payload to FlightEvent: {}", eventPayload);
-            }
-
+            flightArchiveService.archiveFlightEvent(flightEvent);
+            log.info("Flight event processed successfully: {} - {}",
+                    flightEvent.getEventType(), flightEvent.getEventId());
             acknowledgment.acknowledge();
         } catch (Exception e) {
-            log.error("Failed to process flight event. Payload: {}", eventPayload, e);
-            acknowledgment.acknowledge(); // Skip invalid messages
+            log.error("Failed to process flight event: {}", flightEvent.getEventId(), e);
+            acknowledgment.acknowledge(); // Skip invalid messages to prevent infinite retry
         }
     }
 
-    @KafkaListener(topics = "reference.events", groupId = "flight-archive-service-group")
-    public void handleReferenceEvent(@Payload Object eventPayload,
+    @KafkaListener(
+            topics = "reference.events",
+            groupId = "flight-archive-service-group-reference",
+            containerFactory = "referenceEventKafkaListenerContainerFactory"
+    )
+    public void handleReferenceEvent(@Payload ReferenceEvent referenceEvent,
                                      @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
                                      Acknowledgment acknowledgment) {
 
-        log.debug("Received reference event from topic: {}", topic);
+        log.debug("Received reference event from topic: {}, Type: {}, Entity: {}",
+                topic, referenceEvent.getEventType(), referenceEvent.getEntityType());
 
         try {
-            ReferenceEvent event = convertToReferenceEvent(eventPayload);
-            if (event != null) {
-                log.info("Reference event processed: {} - {}", event.getEntityType(), event.getEventType());
-            }
+            // Reference event'leri şimdilik sadece log'layalım, ileride processing eklenebilir
+            log.info("Reference event processed: {} - {} - ID: {}",
+                    referenceEvent.getEntityType(), referenceEvent.getEventType(), referenceEvent.getEntityId());
             acknowledgment.acknowledge();
         } catch (Exception e) {
-            log.error("Failed to process reference event. Payload: {}", eventPayload, e);
+            log.error("Failed to process reference event: {}", referenceEvent.getEventId(), e);
             acknowledgment.acknowledge();
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    private FlightEvent convertToFlightEvent(Object payload) {
-        try {
-            if (payload instanceof FlightEvent) {
-                return (FlightEvent) payload;
-            } else if (payload instanceof Map) {
-                return objectMapper.convertValue(payload, FlightEvent.class);
-            } else if (payload instanceof String) {
-                return objectMapper.readValue((String) payload, FlightEvent.class);
-            } else {
-                log.warn("Unknown payload type for FlightEvent: {}", payload.getClass());
-                return null;
-            }
-        } catch (Exception e) {
-            log.error("Error converting to FlightEvent", e);
-            return null;
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    private ReferenceEvent convertToReferenceEvent(Object payload) {
-        try {
-            if (payload instanceof ReferenceEvent) {
-                return (ReferenceEvent) payload;
-            } else if (payload instanceof Map) {
-                return objectMapper.convertValue(payload, ReferenceEvent.class);
-            } else if (payload instanceof String) {
-                return objectMapper.readValue((String) payload, ReferenceEvent.class);
-            } else {
-                log.warn("Unknown payload type for ReferenceEvent: {}", payload.getClass());
-                return null;
-            }
-        } catch (Exception e) {
-            log.error("Error converting to ReferenceEvent", e);
-            return null;
         }
     }
 }
