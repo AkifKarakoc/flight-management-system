@@ -23,6 +23,26 @@ services:
       retries: 10
       start_period: 40s
 
+  # PostgreSQL Database for Flight Archive Service
+  postgres:
+    image: postgres:15
+    container_name: postgres-archive
+    environment:
+      POSTGRES_DB: flight_archive_db
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: 123456
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d flight_archive_db"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
   # Redis
   redis:
     image: redis:7-alpine
@@ -79,6 +99,7 @@ services:
 
 volumes:
   mysql_data:
+  postgres_data:
   redis_data:
 
 networks:
