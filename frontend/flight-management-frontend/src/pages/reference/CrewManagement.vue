@@ -635,82 +635,99 @@
                 </div>
 
                 <div class="detail-section">
-                  <h4>Sertifikalar</h4>
-                  <div class="detail-item" v-if="viewingCrewMember.licenseExpiry">
-                    <span class="label">Lisans Geçerlilik:</span>
-                    <el-tag :type="getCertificateStatus(viewingCrewMember.licenseExpiry)">
-                      {{ formatDate(viewingCrewMember.licenseExpiry) }}
-                    </el-tag>
+                  <h4>Yeterlilikler</h4>
+                  <div class="detail-item" v-if="viewingCrewMember.qualifiedAircraftTypes?.length">
+                    <span class="label">Uçak Tipleri:</span>
+                    <div class="tags-container">
+                      <el-tag
+                        v-for="type in viewingCrewMember.qualifiedAircraftTypes"
+                        :key="type"
+                        size="small"
+                        class="aircraft-tag"
+                      >
+                        {{ type }}
+                      </el-tag>
+                    </div>
                   </div>
-                  <div class="detail-item" v-if="viewingCrewMember.medicalCertificateExpiry">
-                    <span class="label">Sağlık Sertifikası:</span>
-                    <el-tag :type="getCertificateStatus(viewingCrewMember.medicalCertificateExpiry)">
-                      {{ formatDate(viewingCrewMember.medicalCertificateExpiry) }}
-                    </el-tag>
+                  <div class="detail-item" v-if="viewingCrewMember.languages?.length">
+                    <span class="label">Diller:</span>
+                    <span>{{ viewingCrewMember.languages.join(', ') }}</span>
                   </div>
-                </div>
-              </div>
-
-              <div v-if="viewingCrewMember.qualifiedAircraftTypes?.length" class="detail-section full-width">
-                <h4>Yetkin Olunan Uçak Tipleri</h4>
-                <div class="aircraft-types-list">
-                  <el-tag
-                    v-for="type in viewingCrewMember.qualifiedAircraftTypes"
-                    :key="type"
-                    class="aircraft-tag"
-                  >
-                    {{ type }}
-                  </el-tag>
-                </div>
-              </div>
-
-              <div v-if="viewingCrewMember.languages?.length" class="detail-section full-width">
-                <h4>Dil Yetkinlikleri</h4>
-                <div class="languages-list">
-                  <el-tag
-                    v-for="language in viewingCrewMember.languages"
-                    :key="language"
-                    class="language-tag"
-                  >
-                    {{ language }}
-                  </el-tag>
+                  <div class="detail-item" v-if="viewingCrewMember.specializations?.length">
+                    <span class="label">Uzmanlıklar:</span>
+                    <div class="tags-container">
+                      <el-tag
+                        v-for="spec in viewingCrewMember.specializations"
+                        :key="spec"
+                        size="small"
+                        type="success"
+                      >
+                        {{ spec }}
+                      </el-tag>
+                    </div>
+                  </div>
                 </div>
               </div>
             </el-tab-pane>
 
-            <el-tab-pane label="Notlar" name="notes">
-              <div class="detail-section full-width">
-                <div v-if="viewingCrewMember.notes" class="notes-content">
-                  <p>{{ viewingCrewMember.notes }}</p>
+            <el-tab-pane label="Sertifikalar" name="certificates">
+              <div class="detail-grid">
+                <div class="detail-section">
+                  <h4>Lisanslar & Sertifikalar</h4>
+                  <div class="detail-item" v-if="viewingCrewMember.licenseExpiry">
+                    <span class="label">Lisans Geçerlilik:</span>
+                    <div class="certificate-status">
+                      <el-tag :type="getCertificateStatus(viewingCrewMember.licenseExpiry)">
+                        {{ formatDate(viewingCrewMember.licenseExpiry) }}
+                      </el-tag>
+                      <span class="days-left">
+                        ({{ getDaysUntilExpiry(viewingCrewMember.licenseExpiry) }} gün kaldı)
+                      </span>
+                    </div>
+                  </div>
+                  <div class="detail-item" v-if="viewingCrewMember.medicalCertificateExpiry">
+                    <span class="label">Sağlık Sertifikası:</span>
+                    <div class="certificate-status">
+                      <el-tag :type="getCertificateStatus(viewingCrewMember.medicalCertificateExpiry)">
+                        {{ formatDate(viewingCrewMember.medicalCertificateExpiry) }}
+                      </el-tag>
+                      <span class="days-left">
+                        ({{ getDaysUntilExpiry(viewingCrewMember.medicalCertificateExpiry) }} gün kaldı)
+                      </span>
+                    </div>
+                  </div>
+                  <div class="detail-item" v-if="viewingCrewMember.passportExpiry">
+                    <span class="label">Pasaport Geçerlilik:</span>
+                    <div class="certificate-status">
+                      <el-tag :type="getCertificateStatus(viewingCrewMember.passportExpiry)">
+                        {{ formatDate(viewingCrewMember.passportExpiry) }}
+                      </el-tag>
+                      <span class="days-left">
+                        ({{ getDaysUntilExpiry(viewingCrewMember.passportExpiry) }} gün kaldı)
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <div v-else class="no-notes">
-                  <el-empty description="Henüz not eklenmemiş" />
+
+                <div class="detail-section">
+                  <h4>Eğitimler</h4>
+                  <div class="detail-item" v-if="viewingCrewMember.lastTrainingDate">
+                    <span class="label">Son Eğitim:</span>
+                    <span>{{ formatDate(viewingCrewMember.lastTrainingDate) }}</span>
+                  </div>
+                  <div class="detail-item" v-if="viewingCrewMember.nextTrainingDate">
+                    <span class="label">Sonraki Eğitim:</span>
+                    <span>{{ formatDate(viewingCrewMember.nextTrainingDate) }}</span>
+                  </div>
                 </div>
               </div>
             </el-tab-pane>
           </el-tabs>
         </div>
 
-        <div class="detail-actions">
-          <el-button
-            type="primary"
-            :icon="Document"
-            @click="viewFlightHistory(viewingCrewMember)"
-          >
-            Uçuş Geçmişi
-          </el-button>
-          <el-button
-            :icon="Calendar"
-            @click="viewSchedule(viewingCrewMember)"
-          >
-            Görev Programı
-          </el-button>
-          <el-button
-            :icon="Reading"
-            @click="viewTrainingRecords(viewingCrewMember)"
-          >
-            Eğitim Kayıtları
-          </el-button>
+        <div class="detail-section full-width" v-if="viewingCrewMember.notes">
+          <h4>Notlar</h4>
+          <p>{{ viewingCrewMember.notes }}</p>
         </div>
       </div>
     </el-dialog>
@@ -731,24 +748,24 @@ import {
   Reading,
   Delete,
   Refresh,
-  Download,
   Upload,
+  Download,
   Search,
   Filter,
   View,
   Edit,
+  Document,
+  Ticket,
   MoreFilled,
   CopyDocument,
   Calendar,
-  UserFilled,
-  CircleCheckFilled,
-  TrendCharts,
-  Document,
-  Ticket,
   Clock,
   ChatDotRound,
   Message,
-  Phone
+  Phone,
+  UserFilled,
+  CircleCheckFilled,
+  TrendCharts
 } from '@element-plus/icons-vue'
 import { useReferenceStore } from '@/stores/reference'
 import { useAppStore } from '@/stores/app'
@@ -821,13 +838,13 @@ const availableNationalities = computed(() => {
 })
 
 const availableAircraftTypes = computed(() => {
-  const typesSet = new Set()
+  const typeSet = new Set()
   crewMembers.value.forEach(crew => {
-    if (crew.qualifiedAircraftTypes?.length) {
-      crew.qualifiedAircraftTypes.forEach(type => typesSet.add(type))
+    if (crew.qualifiedAircraftTypes) {
+      crew.qualifiedAircraftTypes.forEach(type => typeSet.add(type))
     }
   })
-  return Array.from(typesSet)
+  return Array.from(typeSet)
 })
 
 const filteredCrewMembers = computed(() => {
@@ -841,7 +858,7 @@ const filteredCrewMembers = computed(() => {
       crew.lastName?.toLowerCase().includes(query) ||
       crew.employeeId?.toLowerCase().includes(query) ||
       crew.licenseNumber?.toLowerCase().includes(query) ||
-      crew.email?.toLowerCase().includes(query)
+      getAirlineName(crew.airlineId)?.toLowerCase().includes(query)
     )
   }
 
@@ -855,7 +872,7 @@ const filteredCrewMembers = computed(() => {
     result = result.filter(crew => crew.airlineId === filterAirline.value)
   }
 
-  // Employment status filter
+  // Status filter
   if (filterStatus.value) {
     result = result.filter(crew => crew.employmentStatus === filterStatus.value)
   }
@@ -875,19 +892,17 @@ const filteredCrewMembers = computed(() => {
   // Certificate status filter
   if (filterCertificateStatus.value) {
     result = result.filter(crew => {
-      const licenseStatus = getCertificateStatus(crew.licenseExpiry)
-      const medicalStatus = getCertificateStatus(crew.medicalCertificateExpiry)
-      
-      switch (filterCertificateStatus.value) {
-        case 'valid':
-          return licenseStatus === 'success' && medicalStatus === 'success'
-        case 'expiring':
-          return licenseStatus === 'warning' || medicalStatus === 'warning'
-        case 'expired':
-          return licenseStatus === 'danger' || medicalStatus === 'danger'
-        default:
-          return true
+      const licenseStatus = getCertificateStatusValue(crew.licenseExpiry)
+      const medicalStatus = getCertificateStatusValue(crew.medicalCertificateExpiry)
+
+      if (filterCertificateStatus.value === 'valid') {
+        return licenseStatus === 'success' && medicalStatus === 'success'
+      } else if (filterCertificateStatus.value === 'expiring') {
+        return licenseStatus === 'warning' || medicalStatus === 'warning'
+      } else if (filterCertificateStatus.value === 'expired') {
+        return licenseStatus === 'danger' || medicalStatus === 'danger'
       }
+      return true
     })
   }
 
@@ -900,13 +915,8 @@ const filteredCrewMembers = computed(() => {
 
   // Sort
   result.sort((a, b) => {
-    let aVal = a[sortField.value] || ''
-    let bVal = b[sortField.value] || ''
-
-    if (sortField.value === 'firstName' || sortField.value === 'lastName') {
-      aVal = aVal.toLowerCase()
-      bVal = bVal.toLowerCase()
-    }
+    const aVal = a[sortField.value] || ''
+    const bVal = b[sortField.value] || ''
 
     if (sortOrder.value === 'ascending') {
       return aVal > bVal ? 1 : -1
@@ -928,8 +938,8 @@ const paginatedCrewMembers = computed(() => {
 
 // Statistics computed
 const pilotsCount = computed(() => {
-  return crewMembers.value.filter(c => 
-    ['CAPTAIN', 'FIRST_OFFICER', 'FLIGHT_ENGINEER'].includes(c.role)
+  return crewMembers.value.filter(c =>
+    c.role === 'CAPTAIN' || c.role === 'FIRST_OFFICER' || c.role === 'FLIGHT_ENGINEER'
   ).length
 })
 
@@ -945,19 +955,22 @@ const averageExperience = computed(() => {
   const crewWithExperience = crewMembers.value.filter(c => c.experienceYears)
   if (crewWithExperience.length === 0) return 0
 
-  const totalExperience = crewWithExperience.reduce((sum, crew) => sum + crew.experienceYears, 0)
+  const totalExperience = crewWithExperience.reduce((total, crew) => {
+    return total + (crew.experienceYears || 0)
+  }, 0)
+
   return totalExperience / crewWithExperience.length
 })
 
 // Methods
+function getAirlineName(airlineId) {
+  const airline = airlines.value.find(a => a.id === airlineId)
+  return airline ? airline.name : 'Bilinmeyen'
+}
+
 function getAirlineCode(airlineId) {
   const airline = airlines.value.find(a => a.id === airlineId)
   return airline ? airline.code : 'N/A'
-}
-
-function getAirlineName(airlineId) {
-  const airline = airlines.value.find(a => a.id === airlineId)
-  return airline ? airline.name : 'Bilinmeyen Havayolu'
 }
 
 function getCountryName(code) {
@@ -975,13 +988,13 @@ function getRoleText(role) {
 }
 
 function getRoleTagType(role) {
-  const tagTypes = {
+  const types = {
     'CAPTAIN': 'danger',
-    'FIRST_OFFICER': 'primary',
-    'FLIGHT_ENGINEER': 'warning',
+    'FIRST_OFFICER': 'warning',
+    'FLIGHT_ENGINEER': 'info',
     'CABIN_CREW': 'success'
   }
-  return tagTypes[role] || 'default'
+  return types[role] || 'default'
 }
 
 function getEmploymentStatusText(status) {
@@ -996,35 +1009,51 @@ function getEmploymentStatusText(status) {
 }
 
 function getEmploymentStatusTagType(status) {
-  const tagTypes = {
+  const types = {
     'ACTIVE': 'success',
     'ON_LEAVE': 'warning',
     'SUSPENDED': 'danger',
     'RETIRED': 'info',
     'RESIGNED': 'info'
   }
-  return tagTypes[status] || 'default'
-}
-
-function formatDate(date) {
-  if (!date) return '-'
-  return dayjs(date).format('DD.MM.YYYY')
+  return types[status] || 'default'
 }
 
 function getCertificateStatus(expiryDate) {
   if (!expiryDate) return 'info'
-  
-  const now = dayjs()
-  const expiry = dayjs(expiryDate)
-  const daysUntilExpiry = expiry.diff(now, 'day')
-  
-  if (daysUntilExpiry < 0) {
-    return 'danger' // Expired
-  } else if (daysUntilExpiry <= 30) {
-    return 'warning' // Expiring soon
-  } else {
-    return 'success' // Valid
-  }
+
+  const today = new Date()
+  const expiry = new Date(expiryDate)
+  const daysUntilExpiry = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24))
+
+  if (daysUntilExpiry < 0) return 'danger'  // Expired
+  if (daysUntilExpiry <= 30) return 'warning'  // Expiring soon
+  return 'success'  // Valid
+}
+
+function getCertificateStatusValue(expiryDate) {
+  if (!expiryDate) return 'info'
+
+  const today = new Date()
+  const expiry = new Date(expiryDate)
+  const daysUntilExpiry = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24))
+
+  if (daysUntilExpiry < 0) return 'danger'
+  if (daysUntilExpiry <= 30) return 'warning'
+  return 'success'
+}
+
+function getDaysUntilExpiry(expiryDate) {
+  if (!expiryDate) return 0
+
+  const today = new Date()
+  const expiry = new Date(expiryDate)
+  return Math.ceil((expiry - today) / (1000 * 60 * 60 * 24))
+}
+
+function formatDate(dateString) {
+  if (!dateString) return '-'
+  return dayjs(dateString).format('DD.MM.YYYY')
 }
 
 async function loadCrewMembers() {
@@ -1032,7 +1061,7 @@ async function loadCrewMembers() {
   try {
     await referenceStore.fetchCrewMembers(true)
   } catch (error) {
-    ElMessage.error('Mürettebat üyeleri yüklenirken hata oluştu')
+    ElMessage.error('Mürettebat yüklenirken hata oluştu')
   } finally {
     loading.value = false
   }
@@ -1043,10 +1072,7 @@ function handleCreate() {
   currentCrewMember.value = {
     active: true,
     employmentStatus: 'ACTIVE',
-    role: 'CABIN_CREW',
-    nationality: 'TR',
-    languages: ['Türkçe'],
-    qualifiedAircraftTypes: []
+    nationality: 'TR'
   }
   dialogVisible.value = true
 }
@@ -1059,8 +1085,8 @@ function handleEdit(crewMember) {
 
 function handleView(crewMember) {
   viewingCrewMember.value = crewMember
-  activeTab.value = 'personal'
   viewDialogVisible.value = true
+  activeTab.value = 'personal'
 }
 
 async function handleDelete(crewMember) {
@@ -1229,73 +1255,51 @@ function handleRowAction(command, crewMember) {
         id: undefined,
         employeeId: '',
         licenseNumber: '',
-        email: '',
-        phone: '',
-        firstName: `${crewMember.firstName} (Kopya)`
+        active: true
       }
       dialogVisible.value = true
       break
     case 'schedule':
-      viewSchedule(crewMember)
+      router.push({
+        name: 'Schedules',
+        query: { crewMember: crewMember.id }
+      })
       break
     case 'training':
-      viewTrainingRecords(crewMember)
+      router.push({
+        name: 'Training',
+        query: { crewMember: crewMember.id }
+      })
       break
     case 'leave':
-      grantLeave(crewMember)
+      updateEmploymentStatus(crewMember, 'ON_LEAVE')
       break
+  }
+}
+
+async function updateEmploymentStatus(crewMember, status) {
+  try {
+    await referenceStore.updateCrewMember(crewMember.id, { employmentStatus: status })
+    ElMessage.success('İstihdam durumu güncellendi')
+    await loadCrewMembers()
+  } catch (error) {
+    ElMessage.error('İstihdam durumu güncellenirken hata oluştu')
   }
 }
 
 function viewFlightHistory(crewMember) {
   router.push({
-    name: 'FlightHistory',
-    query: { crewMember: crewMember.id }
+    name: 'Flights',
+    query: { crewMember: crewMember.id, view: 'history' }
   })
-}
-
-function viewSchedule(crewMember) {
-  router.push({
-    name: 'CrewSchedule',
-    query: { crewMember: crewMember.id }
-  })
-}
-
-function viewTrainingRecords(crewMember) {
-  router.push({
-    name: 'TrainingRecords',
-    query: { crewMember: crewMember.id }
-  })
-}
-
-async function grantLeave(crewMember) {
-  try {
-    await ElMessageBox.confirm(
-      `${crewMember.firstName} ${crewMember.lastName} isimli mürettebat üyesini izne çıkarmak istediğinizden emin misiniz?`,
-      'İzin Ver',
-      {
-        confirmButtonText: 'İzin Ver',
-        cancelButtonText: 'İptal',
-        type: 'warning'
-      }
-    )
-
-    await referenceStore.updateCrewMember(crewMember.id, { employmentStatus: 'ON_LEAVE' })
-    ElMessage.success('Mürettebat üyesi izne çıkarıldı')
-    await loadCrewMembers()
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('İzin verme işlemi sırasında hata oluştu')
-    }
-  }
 }
 
 function sendEmail(email) {
-  window.location.href = `mailto:${email}`
+  window.open(`mailto:${email}`)
 }
 
 function callPhone(phone) {
-  window.location.href = `tel:${phone}`
+  window.open(`tel:${phone}`)
 }
 
 function handleSizeChange(size) {
@@ -1423,12 +1427,12 @@ watch(() => router.currentRoute.value.query, (query) => {
           font-size: 24px;
 
           &.pilots {
-            background: linear-gradient(135deg, #f56c6c, #ff7875);
+            background: linear-gradient(135deg, #f56c6c, #f78989);
             color: white;
           }
 
           &.cabin {
-            background: linear-gradient(135deg, #409eff, #66b1ff);
+            background: linear-gradient(135deg, #e6a23c, #ebb563);
             color: white;
           }
 
@@ -1438,7 +1442,7 @@ watch(() => router.currentRoute.value.query, (query) => {
           }
 
           &.experience {
-            background: linear-gradient(135deg, #e6a23c, #ebb563);
+            background: linear-gradient(135deg, #409eff, #66b1ff);
             color: white;
           }
         }
@@ -1454,44 +1458,7 @@ watch(() => router.currentRoute.value.query, (query) => {
           .stat-label {
             font-size: 0.875rem;
             color: #606266;
-            margin-top: 0.25rem;
-          }
-        }
-      }
-    }
-  }
-
-  .table-container {
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-
-    .data-table {
-      .employee-info {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-
-        .avatar-section {
-          flex-shrink: 0;
-        }
-
-        .info-section {
-          flex: 1;
-
-          .name {
-            font-weight: 600;
-            color: #303133;
             margin-bottom: 0.25rem;
-          }
-
-          .employee-id, .license {
-            display: flex;
-            align-items: center;
-            gap: 0.25rem;
-            font-size: 0.875rem;
-            color: #909399;
-            margin-bottom: 0.125rem;
 
             .el-icon {
               font-size: 0.75rem;
@@ -1501,53 +1468,70 @@ watch(() => router.currentRoute.value.query, (query) => {
       }
 
       .role-airline {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.5rem;
+
         .role {
-          margin-bottom: 0.5rem;
+          .el-tag {
+            font-size: 0.75rem;
+            font-weight: 600;
+          }
         }
 
         .airline {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 0.25rem;
+
           .airline-tag {
-            background-color: #f0f9ff;
-            border-color: #409eff;
-            color: #409eff;
-            margin-bottom: 0.25rem;
+            font-size: 0.75rem;
+            font-weight: 600;
           }
 
           .airline-name {
-            font-size: 0.75rem;
-            color: #909399;
+            font-size: 0.875rem;
+            color: #606266;
+            text-align: center;
           }
         }
       }
 
       .experience-hours {
-        .experience, .hours {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.25rem;
+
+        .experience,
+        .hours {
           display: flex;
           align-items: center;
-          justify-content: center;
           gap: 0.25rem;
-          margin-bottom: 0.25rem;
           font-size: 0.875rem;
 
           .el-icon {
-            color: #909399;
             font-size: 0.75rem;
+            color: #909399;
           }
         }
       }
 
       .qualifications {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+
         .aircraft-types {
           display: flex;
           flex-wrap: wrap;
           gap: 0.25rem;
-          margin-bottom: 0.5rem;
 
           .aircraft-tag {
             font-size: 0.75rem;
-            background-color: #f5f7fa;
-            border-color: #909399;
-            color: #606266;
+            font-weight: 600;
           }
         }
 
@@ -1555,11 +1539,11 @@ watch(() => router.currentRoute.value.query, (query) => {
           display: flex;
           align-items: center;
           gap: 0.25rem;
-          font-size: 0.75rem;
+          font-size: 0.875rem;
           color: #909399;
 
           .el-icon {
-            font-size: 0.875rem;
+            font-size: 0.75rem;
           }
         }
       }
@@ -1567,20 +1551,27 @@ watch(() => router.currentRoute.value.query, (query) => {
       .certificates {
         display: flex;
         flex-direction: column;
+        align-items: center;
         gap: 0.25rem;
+
+        .license-status,
+        .medical-status {
+          .el-tag {
+            font-size: 0.75rem;
+          }
+        }
       }
 
       .contact-actions {
         display: flex;
-        gap: 0.25rem;
         justify-content: center;
+        gap: 0.5rem;
       }
 
       .action-buttons {
         display: flex;
-        gap: 0.25rem;
+        gap: 0.5rem;
         justify-content: center;
-        flex-wrap: wrap;
       }
     }
 
@@ -1600,6 +1591,7 @@ watch(() => router.currentRoute.value.query, (query) => {
     .airline-code {
       font-weight: 600;
       color: #409eff;
+      min-width: 40px;
     }
   }
 
@@ -1615,17 +1607,24 @@ watch(() => router.currentRoute.value.query, (query) => {
         align-items: center;
         gap: 1rem;
 
+        .avatar-section {
+          flex-shrink: 0;
+        }
+
         .title-info {
           h3 {
-            margin: 0 0 0.5rem 0;
-            color: #303133;
+            margin: 0;
             font-size: 1.25rem;
+            font-weight: 600;
+            color: #303133;
           }
 
           .subtitle {
             display: flex;
             align-items: center;
-            gap: 0.5rem;
+            gap: 0.75rem;
+            margin-top: 0.5rem;
+            font-size: 0.875rem;
             color: #606266;
           }
         }
@@ -1635,87 +1634,87 @@ watch(() => router.currentRoute.value.query, (query) => {
         display: flex;
         flex-direction: column;
         gap: 0.5rem;
-        align-items: flex-end;
       }
     }
 
     .detail-tabs {
+      margin-top: 1rem;
+
       .detail-grid {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 2rem;
-        margin-bottom: 1.5rem;
-      }
 
-      .detail-section {
-        &.full-width {
-          grid-column: 1 / -1;
-        }
-
-        h4 {
-          margin: 0 0 1rem 0;
-          color: #606266;
-          font-size: 1rem;
-          border-bottom: 1px solid #ebeef5;
-          padding-bottom: 0.5rem;
-        }
-
-        .detail-item {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
-          margin-bottom: 0.75rem;
-
-          .label {
-            font-weight: 500;
-            color: #606266;
-            min-width: 120px;
-            margin-right: 1rem;
+        .detail-section {
+          h4 {
+            margin: 0 0 1rem 0;
+            font-size: 1rem;
+            font-weight: 600;
+            color: #303133;
+            border-bottom: 1px solid #ebeef5;
+            padding-bottom: 0.5rem;
           }
 
-          .link {
-            color: #409eff;
-            text-decoration: none;
+          .detail-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 0.75rem;
+            font-size: 0.875rem;
 
-            &:hover {
-              text-decoration: underline;
+            .label {
+              font-weight: 500;
+              color: #606266;
+              min-width: 120px;
+            }
+
+            .link {
+              color: #409eff;
+              text-decoration: none;
+
+              &:hover {
+                text-decoration: underline;
+              }
+            }
+
+            .tags-container {
+              display: flex;
+              flex-wrap: wrap;
+              gap: 0.25rem;
+              max-width: 200px;
+            }
+
+            .certificate-status {
+              display: flex;
+              flex-direction: column;
+              align-items: flex-end;
+              gap: 0.25rem;
+
+              .days-left {
+                font-size: 0.75rem;
+                color: #909399;
+              }
             }
           }
-        }
-
-        .aircraft-types-list, .languages-list {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 0.5rem;
-
-          .aircraft-tag, .language-tag {
-            background-color: #f0f9ff;
-            border-color: #409eff;
-            color: #409eff;
-          }
-        }
-
-        .notes-content {
-          p {
-            margin: 0;
-            line-height: 1.6;
-            color: #303133;
-          }
-        }
-
-        .no-notes {
-          text-align: center;
-          padding: 2rem 0;
         }
       }
     }
 
-    .detail-actions {
-      display: flex;
-      gap: 1rem;
-      padding-top: 1.5rem;
-      border-top: 1px solid #ebeef5;
-      justify-content: center;
+    .detail-section.full-width {
+      margin-top: 1rem;
+
+      h4 {
+        margin: 0 0 0.5rem 0;
+        font-size: 1rem;
+        font-weight: 600;
+        color: #303133;
+      }
+
+      p {
+        margin: 0;
+        line-height: 1.6;
+        color: #606266;
+      }
     }
   }
 }
@@ -1748,17 +1747,18 @@ watch(() => router.currentRoute.value.query, (query) => {
         .filters {
           justify-content: center;
           flex-wrap: wrap;
+        }
+      }
 
-          .filter-select {
-            width: 120px;
-          }
+      .advanced-filters {
+        .advanced-filters-grid {
+          grid-template-columns: 1fr;
         }
       }
     }
 
     .stats-cards {
       grid-template-columns: repeat(2, 1fr);
-      gap: 0.75rem;
     }
 
     .table-container {
@@ -1766,42 +1766,23 @@ watch(() => router.currentRoute.value.query, (query) => {
         :deep(.el-table__body-wrapper) {
           overflow-x: auto;
         }
-
-        .employee-info {
-          flex-direction: column;
-          align-items: center;
-          text-align: center;
-          gap: 0.5rem;
-        }
-
-        .action-buttons {
-          flex-direction: column;
-          gap: 0.25rem;
-
-          .el-button {
-            padding: 0.25rem;
-            min-width: auto;
-          }
-        }
       }
     }
 
     .crew-details {
       .detail-header {
         flex-direction: column;
-        align-items: stretch;
+        align-items: center;
+        text-align: center;
         gap: 1rem;
 
         .crew-title {
           flex-direction: column;
-          align-items: center;
           text-align: center;
         }
 
         .status-badges {
           flex-direction: row;
-          align-items: center;
-          justify-content: center;
         }
       }
 
@@ -1809,14 +1790,6 @@ watch(() => router.currentRoute.value.query, (query) => {
         .detail-grid {
           grid-template-columns: 1fr;
           gap: 1rem;
-        }
-      }
-
-      .detail-actions {
-        flex-direction: column;
-
-        .el-button {
-          width: 100%;
         }
       }
     }
@@ -1829,6 +1802,18 @@ watch(() => router.currentRoute.value.query, (query) => {
 
   &:hover {
     background-color: #f5f7fa;
+  }
+}
+
+// Loading state
+:deep(.el-loading-mask) {
+  border-radius: 8px;
+}
+
+// Switch styling
+:deep(.el-switch) {
+  &.is-checked .el-switch__core {
+    background-color: #67c23a;
   }
 }
 
@@ -1849,40 +1834,24 @@ watch(() => router.currentRoute.value.query, (query) => {
     border-color: #e6a23c;
   }
 
-  &.el-tag--info {
-    background-color: #909399;
-    border-color: #909399;
-  }
-
   &.el-tag--danger {
     background-color: #f56c6c;
     border-color: #f56c6c;
   }
+
+  &.el-tag--info {
+    background-color: #909399;
+    border-color: #909399;
+  }
 }
 
-// Button hover effects
+// Button group styling
 .action-buttons {
   :deep(.el-button) {
     &:hover {
       transform: translateY(-1px);
     }
-
-    &.el-button--success:hover {
-      background-color: #5daf34;
-    }
   }
-}
-
-// Switch styling
-:deep(.el-switch) {
-  &.is-checked .el-switch__core {
-    background-color: #67c23a;
-  }
-}
-
-// Loading state
-:deep(.el-loading-mask) {
-  border-radius: 8px;
 }
 
 // Dialog animations
@@ -1907,15 +1876,171 @@ watch(() => router.currentRoute.value.query, (query) => {
   }
 }
 
-// Contact buttons
-.contact-actions {
-  .el-button {
-    border: none;
-    background: transparent;
+// Tabs styling
+:deep(.el-tabs) {
+  .el-tabs__header {
+    margin-bottom: 1rem;
+  }
+
+  .el-tabs__nav-wrap {
+    &::after {
+      background-color: #ebeef5;
+    }
+  }
+
+  .el-tabs__active-bar {
+    background-color: #409eff;
+  }
+
+  .el-tabs__item {
+    &.is-active {
+      color: #409eff;
+    }
 
     &:hover {
-      background-color: #f5f7fa;
+      color: #409eff;
     }
   }
 }
-</style>
+
+// Card hover effects
+:deep(.el-card) {
+  transition: all 0.3s ease;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+}
+
+// Avatar styling
+:deep(.el-avatar) {
+  background-color: #409eff;
+  color: white;
+  font-weight: 600;
+}
+
+// Tooltip styling
+:deep(.el-tooltip__popper) {
+  font-size: 0.875rem;
+}
+
+// Form item styling in advanced filters
+:deep(.el-form-item) {
+  margin-bottom: 0;
+
+  .el-form-item__label {
+    font-size: 0.875rem;
+    color: #606266;
+    font-weight: 500;
+  }
+}
+
+// Select dropdown styling
+:deep(.el-select-dropdown__item) {
+  padding: 12px 20px;
+  line-height: 1.4;
+}
+
+// Collapse transition styling
+:deep(.el-collapse-transition) {
+  transition: all 0.3s ease;
+}
+
+// Certificate status specific styling
+.certificates {
+  .el-tooltip {
+    display: block;
+    margin-bottom: 0.25rem;
+  }
+}
+
+// Tags in qualification section
+.qualifications {
+  .aircraft-tag {
+    background-color: #e1f3d8;
+    border-color: #67c23a;
+    color: #67c23a;
+  }
+}
+
+// Contact actions styling
+.contact-actions {
+  .el-button {
+    padding: 4px 6px;
+    min-height: auto;
+  }
+}
+
+// Employee info section styling
+.employee-info {
+  .el-avatar {
+    border: 2px solid #f0f0f0;
+  }
+}
+
+// Role tag colors
+:deep(.el-tag) {
+  &.role-captain {
+    background-color: #fef0f0;
+    border-color: #f56c6c;
+    color: #f56c6c;
+  }
+
+  &.role-first-officer {
+    background-color: #fdf6ec;
+    border-color: #e6a23c;
+    color: #e6a23c;
+  }
+
+  &.role-engineer {
+    background-color: #f4f4f5;
+    border-color: #909399;
+    color: #909399;
+  }
+
+  &.role-cabin {
+    background-color: #f0f9ff;
+    border-color: #409eff;
+    color: #409eff;
+  }
+}
+</style>top: 0.25rem;
+}
+}
+}
+}
+}
+
+.table-container {
+background: white;
+border-radius: 8px;
+box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+
+.data-table {
+.employee-info {
+display: flex;
+align-items: center;
+gap: 0.75rem;
+
+.avatar-section {
+flex-shrink: 0;
+}
+
+.info-section {
+flex: 1;
+
+.name {
+font-weight: 600;
+color: #303133;
+margin-bottom: 0.25rem;
+}
+
+.employee-id,
+.license {
+display: flex;
+align-items: center;
+gap: 0.25rem;
+font-size: 0.875rem;
+color: #909399;
+margin-
