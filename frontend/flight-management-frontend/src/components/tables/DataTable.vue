@@ -1,56 +1,78 @@
 <template>
   <div class="data-table">
-    <!-- Table Toolbar -->
-    <div class="table-toolbar">
+    <!-- Table Header -->
+    <div v-if="showToolbar" class="table-toolbar">
       <div class="toolbar-left">
-        <el-input
-          v-if="searchable"
-          v-model="searchQuery"
-          placeholder="Ara..."
-          :prefix-icon="Search"
-          clearable
-          style="width: 300px"
-          @input="handleSearch"
-        />
+        <slot name="toolbar-left">
+          <h3 v-if="title" class="table-title">{{ title }}</h3>
+        </slot>
       </div>
 
       <div class="toolbar-right">
-        <el-button
-          v-if="showRefresh"
-          :icon="Refresh"
-          @click="$emit('refresh')"
-          :loading="loading"
-        >
-          Yenile
-        </el-button>
+        <slot name="toolbar-right">
+          <!-- Search -->
+          <el-input
+            v-if="searchable"
+            v-model="searchQuery"
+            placeholder="Ara..."
+            :prefix-icon="Search"
+            size="small"
+            style="width: 200px; margin-right: 12px;"
+            clearable
+          />
 
-        <el-button
-          v-if="showCreate"
-          type="primary"
-          :icon="Plus"
-          @click="$emit('create')"
-        >
-          {{ createText }}
-        </el-button>
+          <!-- Refresh Button -->
+          <el-button
+            v-if="refreshable"
+            :icon="Refresh"
+            size="small"
+            @click="handleRefresh"
+            :loading="loading"
+          >
+            Yenile
+          </el-button>
+
+          <!-- Add Button -->
+          <el-button
+            v-if="showAddButton"
+            type="primary"
+            :icon="Plus"
+            size="small"
+            @click="handleAdd"
+          >
+            {{ addButtonText }}
+          </el-button>
+        </slot>
       </div>
     </div>
 
     <!-- Table -->
     <el-table
+      ref="tableRef"
       :data="filteredData"
       v-loading="loading"
-      stripe
-      highlight-current-row
-      style="width: 100%"
+      :stripe="stripe"
+      :border="border"
+      :size="size"
+      :height="height"
+      :max-height="maxHeight"
+      :show-header="showHeader"
+      :highlight-current-row="highlightCurrentRow"
+      :row-key="rowKey"
+      :tree-props="treeProps"
+      :default-sort="defaultSort"
       @selection-change="handleSelectionChange"
       @sort-change="handleSortChange"
+      @row-click="handleRowClick"
+      @row-dblclick="handleRowDblclick"
+      class="custom-table"
     >
       <!-- Selection Column -->
       <el-table-column
         v-if="selectable"
         type="selection"
         width="55"
-        align="center"
+        fixed="left"
       />
 
       <!-- Index Column -->
@@ -59,7 +81,7 @@
         type="index"
         label="#"
         width="60"
-        align="center"
+        fixed="left"
       />
 
       <!-- Dynamic Columns -->
@@ -70,108 +92,144 @@
         :label="column.label"
         :width="column.width"
         :min-width="column.minWidth"
+        :fixed="column.fixed"
         :sortable="column.sortable"
-        :align="column.align || 'left'"
+        :sort-method="column.sortMethod"
+        :formatter="column.formatter"
         :show-overflow-tooltip="column.showOverflowTooltip !== false"
+        :align="column.align || 'left'"
+        :header-align="column.headerAlign || column.align || 'left'"
       >
-        <template #default="scope" v-if="column.slot">
-          <slot :name="column.slot" :row="scope.row" :index="scope.$index" />
+        <template v-if="column.slot" #default="scope">
+          <slot :name="column.slot" :row="scope.row" :column="column" :$index="scope.$index" />
         </template>
 
-        <template #default="scope" v-else-if="column.formatter">
-          <span>{{ column.formatter(scope.row[column.prop], scope.row) }}</span>
-        </template>
-
-        <template #default="scope" v-else-if="column.type === 'tag'">
+        <template v-else-if="column.type === 'tag'" #default="scope">
           <el-tag
-            :type="getTagType(scope.row[column.prop], column.tagMap)"
-            size="small"
+            :type="getTagType(scope.row[column.prop], column)"
+            :size="column.tagSize || 'small'"
+            :effect="column.tagEffect || 'light'"
           >
-            {{ getTagText(scope.row[column.prop], column.tagMap) }}
+            {{ getTagText(scope.row[column.prop], column) }}
           </el-tag>
         </template>
 
-        <template #default="scope" v-else-if="column.type === 'switch'">
+        <template v-else-if="column.type === 'switch'" #default="scope">
           <el-switch
             v-model="scope.row[column.prop]"
-            @change="(val) => handleSwitchChange(scope.row, column.prop, val)"
-            :disabled="column.disabled && column.disabled(scope.row)"
+            :disabled="column.disabled"
+            @change="(value) => handleSwitchChange(scope.row, column.prop, value)"
           />
         </template>
 
-        <template #default="scope" v-else-if="column.type === 'image'">
-          <el-avatar
+        <template v-else-if="column.type === 'image'" #default="scope">
+          <el-image
             :src="scope.row[column.prop]"
-            :size="column.size || 32"
-            :icon="UserFilled"
+            :style="{ width: column.imageWidth || '40px', height: column.imageHeight || '40px' }"
+            fit="cover"
+            :preview-src-list="[scope.row[column.prop]]"
+          />
+        </template>
+
+        <template v-else-if="column.type === 'link'" #default="scope">
+          <el-link
+            :type="column.linkType || 'primary'"
+            :href="column.linkHref ? column.linkHref(scope.row) : undefined"
+            :target="column.linkTarget || '_blank'"
+            @click="column.linkClick ? column.linkClick(scope.row) : undefined"
+          >
+            {{ scope.row[column.prop] }}
+          </el-link>
+        </template>
+
+        <template v-else-if="column.type === 'progress'" #default="scope">
+          <el-progress
+            :percentage="scope.row[column.prop]"
+            :status="getProgressStatus(scope.row[column.prop], column)"
+            :stroke-width="column.progressStrokeWidth || 6"
+            :show-text="column.showProgressText !== false"
           />
         </template>
       </el-table-column>
 
       <!-- Actions Column -->
       <el-table-column
-        v-if="showActions"
+        v-if="actions && actions.length > 0"
         label="İşlemler"
         :width="actionsWidth"
-        align="center"
         fixed="right"
+        align="center"
       >
         <template #default="scope">
-          <div class="action-buttons">
-            <el-tooltip content="Görüntüle" v-if="actions.includes('view')">
+          <div class="table-actions">
+            <template v-for="action in getVisibleActions(scope.row)" :key="action.key">
               <el-button
-                size="small"
-                :icon="View"
-                @click="$emit('view', scope.row)"
-              />
-            </el-tooltip>
+                v-if="action.type === 'button'"
+                :type="action.buttonType || 'primary'"
+                :size="action.size || 'small'"
+                :icon="action.icon"
+                :disabled="action.disabled && action.disabled(scope.row)"
+                :loading="action.loading && action.loading(scope.row)"
+                :text="action.text"
+                :link="action.link"
+                @click="handleAction(action, scope.row, scope.$index)"
+              >
+                {{ action.label }}
+              </el-button>
 
-            <el-tooltip content="Düzenle" v-if="actions.includes('edit')">
-              <el-button
-                size="small"
-                type="primary"
-                :icon="Edit"
-                @click="$emit('edit', scope.row)"
-              />
-            </el-tooltip>
-
-            <el-tooltip content="Sil" v-if="actions.includes('delete')">
-              <el-button
-                size="small"
-                type="danger"
-                :icon="Delete"
-                @click="handleDelete(scope.row)"
-              />
-            </el-tooltip>
-
-            <!-- Custom Actions -->
-            <template v-if="customActions && customActions.length > 0">
-              <el-tooltip
-                v-for="action in customActions"
-                :key="action.key"
-                :content="action.tooltip"
+              <el-dropdown
+                v-else-if="action.type === 'dropdown'"
+                @command="(command) => handleAction(action, scope.row, scope.$index, command)"
               >
                 <el-button
-                  size="small"
-                  :type="action.type || 'default'"
+                  :type="action.buttonType || 'primary'"
+                  :size="action.size || 'small'"
                   :icon="action.icon"
-                  @click="$emit('custom-action', action.key, scope.row)"
-                />
-              </el-tooltip>
+                  text
+                >
+                  {{ action.label }}
+                  <el-icon class="el-icon--right"><arrow-down /></el-icon>
+                </el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item
+                      v-for="item in action.items"
+                      :key="item.key"
+                      :command="item.key"
+                      :disabled="item.disabled && item.disabled(scope.row)"
+                    >
+                      <el-icon v-if="item.icon">
+                        <component :is="item.icon" />
+                      </el-icon>
+                      {{ item.label }}
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
             </template>
           </div>
         </template>
       </el-table-column>
+
+      <!-- Empty State -->
+      <template #empty>
+        <div class="table-empty">
+          <slot name="empty">
+            <el-empty :description="emptyText" :image-size="80" />
+          </slot>
+        </div>
+      </template>
     </el-table>
 
     <!-- Pagination -->
-    <div class="table-pagination" v-if="showPagination && total > 0">
+    <div v-if="showPagination" class="table-pagination">
       <el-pagination
         v-model:current-page="currentPage"
         v-model:page-size="pageSize"
         :page-sizes="pageSizes"
         :total="total"
-        layout="total, sizes, prev, pager, next, jumper"
+        :layout="paginationLayout"
+        :background="true"
         @size-change="handleSizeChange"
         @current-change="handleCurrentChange"
       />
@@ -181,29 +239,59 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
-import { ElMessageBox } from 'element-plus'
-import {
-  Search, Refresh, Plus, View, Edit, Delete, UserFilled
-} from '@element-plus/icons-vue'
-import { debounce } from '@/utils/helpers'
+import { Search, Refresh, Plus, ArrowDown } from '@element-plus/icons-vue'
 
 const props = defineProps({
+  // Data
   data: {
     type: Array,
     default: () => []
   },
   columns: {
     type: Array,
-    required: true
+    default: () => []
   },
   loading: {
     type: Boolean,
     default: false
   },
-  searchable: {
+
+  // Table appearance
+  title: {
+    type: String,
+    default: ''
+  },
+  stripe: {
     type: Boolean,
     default: true
   },
+  border: {
+    type: Boolean,
+    default: false
+  },
+  size: {
+    type: String,
+    default: 'default',
+    validator: value => ['large', 'default', 'small'].includes(value)
+  },
+  height: {
+    type: [String, Number],
+    default: ''
+  },
+  maxHeight: {
+    type: [String, Number],
+    default: ''
+  },
+  showHeader: {
+    type: Boolean,
+    default: true
+  },
+  highlightCurrentRow: {
+    type: Boolean,
+    default: false
+  },
+
+  // Selection
   selectable: {
     type: Boolean,
     default: false
@@ -212,15 +300,47 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
-  showActions: {
+  rowKey: {
+    type: [String, Function],
+    default: ''
+  },
+
+  // Tree table
+  treeProps: {
+    type: Object,
+    default: () => ({})
+  },
+
+  // Sorting
+  defaultSort: {
+    type: Object,
+    default: () => ({})
+  },
+
+  // Toolbar
+  showToolbar: {
     type: Boolean,
     default: true
   },
-  actions: {
-    type: Array,
-    default: () => ['edit', 'delete']
+  searchable: {
+    type: Boolean,
+    default: true
   },
-  customActions: {
+  refreshable: {
+    type: Boolean,
+    default: true
+  },
+  showAddButton: {
+    type: Boolean,
+    default: false
+  },
+  addButtonText: {
+    type: String,
+    default: 'Ekle'
+  },
+
+  // Actions
+  actions: {
     type: Array,
     default: () => []
   },
@@ -228,18 +348,8 @@ const props = defineProps({
     type: [String, Number],
     default: 150
   },
-  showCreate: {
-    type: Boolean,
-    default: true
-  },
-  createText: {
-    type: String,
-    default: 'Yeni Ekle'
-  },
-  showRefresh: {
-    type: Boolean,
-    default: true
-  },
+
+  // Pagination
   showPagination: {
     type: Boolean,
     default: true
@@ -252,49 +362,82 @@ const props = defineProps({
     type: Array,
     default: () => [10, 20, 50, 100]
   },
-  total: {
-    type: Number,
-    default: 0
+  paginationLayout: {
+    type: String,
+    default: 'total, sizes, prev, pager, next, jumper'
+  },
+
+  // Empty state
+  emptyText: {
+    type: String,
+    default: 'Veri bulunamadı'
   }
 })
 
 const emit = defineEmits([
-  'create', 'edit', 'delete', 'view', 'refresh',
-  'custom-action', 'selection-change', 'search',
-  'size-change', 'current-change', 'sort-change',
-  'switch-change'
+  'refresh',
+  'add',
+  'selection-change',
+  'sort-change',
+  'row-click',
+  'row-dblclick',
+  'action',
+  'switch-change',
+  'size-change',
+  'current-change'
 ])
 
+const tableRef = ref(null)
 const searchQuery = ref('')
 const currentPage = ref(1)
-const selectedRows = ref([])
+const total = computed(() => props.data.length)
 
-// Computed
+// Filtered data based on search
 const filteredData = computed(() => {
-  if (!searchQuery.value) return props.data
+  if (!searchQuery.value) {
+    return props.data
+  }
 
   const query = searchQuery.value.toLowerCase()
   return props.data.filter(row => {
-    return props.columns.some(column => {
-      const value = row[column.prop]
+    return Object.values(row).some(value => {
       if (value === null || value === undefined) return false
       return String(value).toLowerCase().includes(query)
     })
   })
 })
 
-// Methods
-const handleSearch = debounce((query) => {
-  emit('search', query)
-}, 300)
+// Action handlers
+const handleRefresh = () => {
+  emit('refresh')
+}
+
+const handleAdd = () => {
+  emit('add')
+}
 
 const handleSelectionChange = (selection) => {
-  selectedRows.value = selection
   emit('selection-change', selection)
 }
 
 const handleSortChange = (sort) => {
   emit('sort-change', sort)
+}
+
+const handleRowClick = (row, column, event) => {
+  emit('row-click', row, column, event)
+}
+
+const handleRowDblclick = (row, column, event) => {
+  emit('row-dblclick', row, column, event)
+}
+
+const handleAction = (action, row, index, command = null) => {
+  emit('action', { action: action.key, row, index, command })
+}
+
+const handleSwitchChange = (row, prop, value) => {
+  emit('switch-change', { row, prop, value })
 }
 
 const handleSizeChange = (size) => {
@@ -305,38 +448,53 @@ const handleCurrentChange = (page) => {
   emit('current-change', page)
 }
 
-const handleDelete = async (row) => {
-  try {
-    await ElMessageBox.confirm(
-      'Bu kaydı silmek istediğinizden emin misiniz?',
-      'Onay',
-      {
-        confirmButtonText: 'Evet',
-        cancelButtonText: 'Hayır',
-        type: 'warning'
-      }
-    )
-    emit('delete', row)
-  } catch (error) {
-    // User cancelled
+// Helper functions
+const getVisibleActions = (row) => {
+  return props.actions.filter(action => {
+    if (action.visible && typeof action.visible === 'function') {
+      return action.visible(row)
+    }
+    return action.visible !== false
+  })
+}
+
+const getTagType = (value, column) => {
+  if (column.tagTypeMap && column.tagTypeMap[value]) {
+    return column.tagTypeMap[value]
   }
+  return 'primary'
 }
 
-const handleSwitchChange = (row, prop, value) => {
-  emit('switch-change', { row, prop, value })
+const getTagText = (value, column) => {
+  if (column.tagTextMap && column.tagTextMap[value]) {
+    return column.tagTextMap[value]
+  }
+  return value
 }
 
-const getTagType = (value, tagMap) => {
-  return tagMap && tagMap[value] ? tagMap[value].type : 'info'
+const getProgressStatus = (value, column) => {
+  if (column.progressStatusMap) {
+    for (const [threshold, status] of Object.entries(column.progressStatusMap)) {
+      if (value <= parseInt(threshold)) {
+        return status
+      }
+    }
+  }
+  return undefined
 }
 
-const getTagText = (value, tagMap) => {
-  return tagMap && tagMap[value] ? tagMap[value].text : value
-}
-
-// Watch for external page changes
-watch(() => props.pageSize, (newSize) => {
+// Watch for search query changes to reset pagination
+watch(searchQuery, () => {
   currentPage.value = 1
+})
+
+// Expose table methods
+defineExpose({
+  clearSelection: () => tableRef.value?.clearSelection(),
+  toggleRowSelection: (row, selected) => tableRef.value?.toggleRowSelection(row, selected),
+  toggleAllSelection: () => tableRef.value?.toggleAllSelection(),
+  setCurrentRow: (row) => tableRef.value?.setCurrentRow(row),
+  sort: (prop, order) => tableRef.value?.sort(prop, order)
 })
 </script>
 
@@ -344,7 +502,6 @@ watch(() => props.pageSize, (newSize) => {
 .data-table {
   background: white;
   border-radius: 8px;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
   overflow: hidden;
 }
 
@@ -358,9 +515,14 @@ watch(() => props.pageSize, (newSize) => {
 }
 
 .toolbar-left {
-  display: flex;
-  align-items: center;
-  gap: 16px;
+  flex: 1;
+}
+
+.table-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
 }
 
 .toolbar-right {
@@ -369,54 +531,42 @@ watch(() => props.pageSize, (newSize) => {
   gap: 8px;
 }
 
-.action-buttons {
+.custom-table {
+  --el-table-border-color: #ebeef5;
+  --el-table-header-bg-color: #f8f9fa;
+}
+
+.table-actions {
   display: flex;
   gap: 4px;
   justify-content: center;
 }
 
+.table-empty {
+  padding: 40px 20px;
+}
+
 .table-pagination {
   padding: 16px 24px;
   display: flex;
-  justify-content: center;
+  justify-content: flex-end;
   border-top: 1px solid #ebeef5;
   background: #fafafa;
-}
-
-:deep(.el-table) {
-  border-radius: 0;
-}
-
-:deep(.el-table__header) {
-  th {
-    background-color: #f8f9fa;
-    color: #606266;
-    font-weight: 600;
-  }
-}
-
-:deep(.el-table__row) {
-  transition: background-color 0.2s;
-}
-
-:deep(.el-table__row:hover) {
-  background-color: #f5f7fa;
 }
 
 @media (max-width: 768px) {
   .table-toolbar {
     flex-direction: column;
-    gap: 16px;
+    gap: 12px;
     align-items: stretch;
   }
 
-  .toolbar-left,
   .toolbar-right {
-    justify-content: center;
+    justify-content: flex-end;
   }
 
-  .action-buttons {
-    flex-wrap: wrap;
+  .table-pagination {
+    justify-content: center;
   }
 }
 </style>
