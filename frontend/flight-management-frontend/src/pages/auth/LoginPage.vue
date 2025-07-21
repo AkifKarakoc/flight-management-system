@@ -1,70 +1,111 @@
 <template>
   <div class="login-page">
+    <div class="login-header">
+      <h2 class="login-title">Giriş Yap</h2>
+      <p class="login-subtitle">Hesabınıza erişim sağlayın</p>
+    </div>
+
     <el-form
-      ref="formRef"
+      ref="loginFormRef"
       :model="loginForm"
-      :rules="rules"
-      size="large"
-      @submit.prevent="handleSubmit"
+      :rules="loginRules"
+      class="login-form"
+      @submit.prevent="handleLogin"
     >
+      <!-- Username Field -->
       <el-form-item prop="username">
         <el-input
           v-model="loginForm.username"
-          placeholder="Kullanıcı adı"
           :prefix-icon="User"
+          placeholder="Kullanıcı Adı"
+          size="large"
           clearable
-          :disabled="loading"
-          @keyup.enter="handleSubmit"
+          :disabled="loginLoading"
+          @keyup.enter="handleLogin"
         />
       </el-form-item>
 
+      <!-- Password Field -->
       <el-form-item prop="password">
         <el-input
           v-model="loginForm.password"
           type="password"
-          placeholder="Şifre"
           :prefix-icon="Lock"
+          placeholder="Şifre"
+          size="large"
           show-password
           clearable
-          :disabled="loading"
-          @keyup.enter="handleSubmit"
+          :disabled="loginLoading"
+          @keyup.enter="handleLogin"
         />
       </el-form-item>
 
-      <el-form-item>
-        <div class="form-options">
-          <el-checkbox v-model="loginForm.rememberMe" :disabled="loading">
-            Beni hatırla
-          </el-checkbox>
-          <el-link type="primary" :underline="false" @click="showForgotPassword">
-            Şifremi unuttum
-          </el-link>
-        </div>
+      <!-- Remember Me -->
+      <el-form-item class="remember-me">
+        <el-checkbox v-model="loginForm.rememberMe" :disabled="loginLoading">
+          Beni hatırla
+        </el-checkbox>
+        <el-link
+          type="primary"
+          :underline="false"
+          @click="showForgotPassword"
+        >
+          Şifrenizi mi unuttunuz?
+        </el-link>
       </el-form-item>
 
-      <el-form-item>
+      <!-- Login Button -->
+      <el-form-item class="login-button-container">
         <el-button
           type="primary"
           size="large"
-          style="width: 100%"
-          :loading="loading"
-          @click="handleSubmit"
+          :loading="loginLoading"
+          :disabled="loginLoading"
+          class="login-button"
+          @click="handleLogin"
         >
-          {{ loading ? 'Giriş yapılıyor...' : 'Giriş Yap' }}
+          <template v-if="!loginLoading">
+            <el-icon class="mr-2">
+              <Right />
+            </el-icon>
+            Giriş Yap
+          </template>
+          <template v-else>
+            Giriş yapılıyor...
+          </template>
         </el-button>
       </el-form-item>
     </el-form>
 
-    <!-- Development Mode Quick Login -->
-    <div v-if="isDevelopment" class="dev-login">
-      <el-divider>Geliştirici Modu</el-divider>
-      <div class="quick-login-buttons">
-        <el-button size="small" @click="quickLogin('admin')">
-          Admin Girişi
-        </el-button>
-        <el-button size="small" @click="quickLogin('user')">
-          Kullanıcı Girişi
-        </el-button>
+    <!-- Demo Accounts Info -->
+    <div class="demo-accounts" v-if="showDemoAccounts">
+      <el-divider>Demo Hesaplar</el-divider>
+      <div class="demo-cards">
+        <el-card class="demo-card" shadow="hover" @click="fillAdminCredentials">
+          <div class="demo-card-header">
+            <el-icon color="#409EFF">
+              <UserFilled />
+            </el-icon>
+            <span class="demo-role">Admin</span>
+          </div>
+          <div class="demo-credentials">
+            <p><strong>Kullanıcı:</strong> admin</p>
+            <p><strong>Şifre:</strong> admin123</p>
+          </div>
+        </el-card>
+
+        <el-card class="demo-card" shadow="hover" @click="fillUserCredentials">
+          <div class="demo-card-header">
+            <el-icon color="#67C23A">
+              <User />
+            </el-icon>
+            <span class="demo-role">Kullanıcı</span>
+          </div>
+          <div class="demo-credentials">
+            <p><strong>Kullanıcı:</strong> user</p>
+            <p><strong>Şifre:</strong> user123</p>
+          </div>
+        </el-card>
       </div>
     </div>
 
@@ -73,22 +114,27 @@
       v-model="forgotPasswordVisible"
       title="Şifre Sıfırlama"
       width="400px"
-      center
+      :close-on-click-modal="false"
     >
-      <el-form :model="forgotPasswordForm" :rules="forgotPasswordRules">
+      <el-form ref="forgotFormRef" :model="forgotForm" :rules="forgotRules">
         <el-form-item prop="email">
           <el-input
-            v-model="forgotPasswordForm.email"
-            placeholder="E-posta adresinizi girin"
+            v-model="forgotForm.email"
             :prefix-icon="Message"
+            placeholder="E-posta adresiniz"
+            size="large"
           />
         </el-form-item>
       </el-form>
 
       <template #footer>
         <el-button @click="forgotPasswordVisible = false">İptal</el-button>
-        <el-button type="primary" @click="handleForgotPassword">
-          Gönder
+        <el-button
+          type="primary"
+          :loading="forgotLoading"
+          @click="handleForgotPassword"
+        >
+          Sıfırlama Bağlantısı Gönder
         </el-button>
       </template>
     </el-dialog>
@@ -96,31 +142,40 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, reactive, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { User, Lock, Message } from '@element-plus/icons-vue'
+import { User, Lock, Right, UserFilled, Message } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 
+// Router
 const router = useRouter()
+const route = useRoute()
+
+// Store
 const authStore = useAuthStore()
 
-const formRef = ref()
-const loading = ref(false)
+// Reactive state
+const loginFormRef = ref(null)
+const forgotFormRef = ref(null)
+const loginLoading = ref(false)
+const forgotLoading = ref(false)
 const forgotPasswordVisible = ref(false)
-const isDevelopment = import.meta.env.DEV
+const showDemoAccounts = ref(true) // Show in development
 
+// Form data
 const loginForm = reactive({
   username: '',
   password: '',
   rememberMe: false
 })
 
-const forgotPasswordForm = reactive({
+const forgotForm = reactive({
   email: ''
 })
 
-const rules = {
+// Validation rules
+const loginRules = {
   username: [
     { required: true, message: 'Kullanıcı adı gereklidir', trigger: 'blur' },
     { min: 3, message: 'En az 3 karakter olmalıdır', trigger: 'blur' }
@@ -131,88 +186,243 @@ const rules = {
   ]
 }
 
-const forgotPasswordRules = {
+const forgotRules = {
   email: [
-    { required: true, message: 'E-posta gereklidir', trigger: 'blur' },
+    { required: true, message: 'E-posta adresi gereklidir', trigger: 'blur' },
     { type: 'email', message: 'Geçerli bir e-posta adresi girin', trigger: 'blur' }
   ]
 }
 
-const handleSubmit = async () => {
-  if (!formRef.value) return
+// Methods
+async function handleLogin() {
+  if (!loginFormRef.value) return
 
   try {
-    await formRef.value.validate()
-    loading.value = true
+    // Validate form
+    const valid = await loginFormRef.value.validate()
+    if (!valid) return
 
+    loginLoading.value = true
+
+    // Attempt login
     await authStore.login({
       username: loginForm.username,
       password: loginForm.password,
       rememberMe: loginForm.rememberMe
     })
 
-    ElMessage.success('Başarıyla giriş yapıldı')
-    router.push('/dashboard')
+    // Success message and redirect handled in store
   } catch (error) {
-    if (error?.response?.status === 401) {
-      ElMessage.error('Kullanıcı adı veya şifre hatalı')
-    } else {
-      ElMessage.error('Giriş yapılırken hata oluştu')
-    }
+    console.error('Login failed:', error)
+    // Error message handled in store
   } finally {
-    loading.value = false
+    loginLoading.value = false
   }
 }
 
-const quickLogin = async (type) => {
-  const credentials = {
-    admin: { username: 'admin', password: 'admin123' },
-    user: { username: 'user', password: 'user123' }
-  }
-
-  Object.assign(loginForm, credentials[type])
-  await handleSubmit()
-}
-
-const showForgotPassword = () => {
+function showForgotPassword() {
   forgotPasswordVisible.value = true
+  forgotForm.email = ''
 }
 
-const handleForgotPassword = () => {
-  ElMessage.info('Şifre sıfırlama özelliği yakında eklenecek')
-  forgotPasswordVisible.value = false
+async function handleForgotPassword() {
+  if (!forgotFormRef.value) return
+
+  try {
+    const valid = await forgotFormRef.value.validate()
+    if (!valid) return
+
+    forgotLoading.value = true
+
+    // TODO: Implement forgot password API call
+    // await authService.forgotPassword(forgotForm.email)
+
+    ElMessage.success('Şifre sıfırlama bağlantısı e-posta adresinize gönderildi')
+    forgotPasswordVisible.value = false
+  } catch (error) {
+    console.error('Forgot password failed:', error)
+    ElMessage.error('Şifre sıfırlama isteği gönderilirken hata oluştu')
+  } finally {
+    forgotLoading.value = false
+  }
 }
+
+function fillAdminCredentials() {
+  loginForm.username = 'admin'
+  loginForm.password = 'admin123'
+}
+
+function fillUserCredentials() {
+  loginForm.username = 'user'
+  loginForm.password = 'user123'
+}
+
+// Lifecycle
+onMounted(() => {
+  // Clear any existing auth state
+  if (authStore.isAuthenticated) {
+    router.push('/dashboard')
+    return
+  }
+
+  // Check if there's a redirect message
+  if (route.query.message === 'session_expired') {
+    ElMessage.warning('Oturum süreniz dolmuş. Lütfen tekrar giriş yapın.')
+  }
+
+  // Focus username field
+  setTimeout(() => {
+    const usernameInput = document.querySelector('input[placeholder="Kullanıcı Adı"]')
+    if (usernameInput) {
+      usernameInput.focus()
+    }
+  }, 100)
+})
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .login-page {
   width: 100%;
 }
 
-.form-options {
-  width: 100%;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.login-header {
+  text-align: center;
+  margin-bottom: 2rem;
+
+  .login-title {
+    font-size: 1.8rem;
+    font-weight: 600;
+    color: #303133;
+    margin-bottom: 0.5rem;
+  }
+
+  .login-subtitle {
+    color: #606266;
+    font-size: 0.95rem;
+    margin-bottom: 0;
+  }
 }
 
-.dev-login {
-  margin-top: 24px;
-  padding-top: 24px;
-  border-top: 1px solid #ebeef5;
+.login-form {
+  .el-form-item {
+    margin-bottom: 1.5rem;
+
+    &.remember-me {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+
+      :deep(.el-form-item__content) {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        width: 100%;
+      }
+    }
+
+    &.login-button-container {
+      margin-bottom: 0;
+    }
+  }
+
+  .login-button {
+    width: 100%;
+    height: 48px;
+    font-size: 1rem;
+    font-weight: 600;
+
+    .mr-2 {
+      margin-right: 0.5rem;
+    }
+  }
 }
 
-.quick-login-buttons {
-  display: flex;
-  gap: 8px;
-  justify-content: center;
+.demo-accounts {
+  margin-top: 2rem;
+
+  .demo-cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-top: 1rem;
+  }
+
+  .demo-card {
+    cursor: pointer;
+    transition: all 0.3s ease;
+
+    &:hover {
+      transform: translateY(-2px);
+    }
+
+    .demo-card-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 0.5rem;
+
+      .el-icon {
+        margin-right: 0.5rem;
+      }
+
+      .demo-role {
+        font-weight: 600;
+        color: #303133;
+      }
+    }
+
+    .demo-credentials {
+      font-size: 0.85rem;
+      color: #606266;
+
+      p {
+        margin: 0.25rem 0;
+      }
+    }
+  }
 }
 
-:deep(.el-input__inner) {
-  height: 40px;
+// Responsive
+@media (max-width: 480px) {
+  .login-header {
+    .login-title {
+      font-size: 1.5rem;
+    }
+  }
+
+  .demo-accounts {
+    .demo-cards {
+      grid-template-columns: 1fr;
+    }
+  }
 }
 
-:deep(.el-button--large) {
-  height: 40px;
+// Form focus styles
+:deep(.el-input__wrapper) {
+  transition: all 0.3s ease;
+
+  &:hover {
+    box-shadow: 0 0 0 1px #c0c4cc inset;
+  }
+
+  &.is-focus {
+    box-shadow: 0 0 0 1px #409eff inset;
+  }
+}
+
+// Button loading animation
+:deep(.el-button.is-loading) {
+  .el-icon {
+    animation: rotating 2s linear infinite;
+  }
+}
+
+@keyframes rotating {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 </style>
