@@ -1,0 +1,96 @@
+@import './variables.scss';
+
+// Global styles
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color: #2c3e50;
+  background-color: #f5f7fa;
+}
+
+// Layout utilities
+.flex {
+  display: flex;
+}
+
+.flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.flex-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.text-right {
+  text-align: right;
+}
+
+// Spacing utilities
+.mt-sm { margin-top: $spacing-sm; }
+.mt-md { margin-top: $spacing-md; }
+.mt-lg { margin-top: $spacing-lg; }
+.mb-sm { margin-bottom: $spacing-sm; }
+.mb-md { margin-bottom: $spacing-md; }
+.mb-lg { margin-bottom: $spacing-lg; }
+.p-sm { padding: $spacing-sm; }
+.p-md { padding: $spacing-md; }
+.p-lg { padding: $spacing-lg; }
+
+// Card styles
+.app-card {
+  background: white;
+  border-radius: 8px;
+  box-shadow: $box-shadow-base;
+  padding: $spacing-lg;
+  margin-bottom: $spacing-md;
+}
+
+// Form styles
+.form-section {
+  margin-bottom: $spacing-lg;
+
+  .section-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: $spacing-md;
+    color: #303133;
+    border-bottom: 2px solid #e4e7ed;
+    padding-bottom: $spacing-sm;
+  }
+}
+
+// Table styles
+.app-table {
+  .el-table {
+    border-radius: 8px;
+    overflow: hidden;
+  }
+}
+
+// Responsive utilities
+@media (max-width: $breakpoint-mobile) {
+  .hide-mobile {
+    display: none !important;
+  }
+}
+
+@media (max-width: $breakpoint-tablet) {
+  .hide-tablet {
+    display: none !important;
+  }
+}
