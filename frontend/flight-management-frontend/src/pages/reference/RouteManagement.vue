@@ -1739,6 +1739,16 @@ watch(() => router.currentRoute.value.query, (query) => {
   }
 }
 
+// Animation
+@keyframes fly {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(10px);
+  }
+}
+
 // Responsive
 @media (max-width: 768px) {
   .route-management {
@@ -1830,773 +1840,129 @@ watch(() => router.currentRoute.value.query, (query) => {
           height: 100px;
 
           &::before {
-            top: <template>
-  <div class="route-management">
-            <!-- Page Header -->
-            <div class="page-header">
-      <div class="header-content">
-        <div class="page-title">
-          <el-icon size="24"><Connection /></el-icon>
-          <h1>Rota Yönetimi</h1>
-          <el-tag :type="routes.length > 0 ? 'success' : 'info'">
-          {{ routes.length }} Rota
-          </el-tag>
-        </div>
-
-        <div class="header-actions">
-          <el-button
-            type="primary"
-          :icon="Plus"
-          @click="handleCreate"
-          :loading="loading"
-          >
-          Yeni Rota
-          </el-button>
-
-          <el-dropdown @command="handleBulkAction" :disabled="selectedRows.length === 0">
-          <el-button :disabled="selectedRows.length === 0">
-          Toplu İşlemler
-          <el-icon class="el-icon--right"><ArrowDown /></el-icon>
-          </el-button>
-          <template #dropdown>
-          <el-dropdown-menu>
-          <el-dropdown-item command="activate" :icon="Check">
-          Seçilenleri Aktifleştir
-          </el-dropdown-item>
-          <el-dropdown-item command="deactivate" :icon="Close">
-          Seçilenleri Pasifleştir
-          </el-dropdown-item>
-          <el-dropdown-item command="popular" :icon="Star">
-          Popüler İşaretle
-          </el-dropdown-item>
-          <el-dropdown-item command="calculate" :icon="Calculator">
-          Mesafe/Süre Hesapla
-          </el-dropdown-item>
-          <el-dropdown-item command="delete" :icon="Delete" divided>
-          Seçilenleri Sil
-          </el-dropdown-item>
-          </el-dropdown-menu>
-          </template>
-          </el-dropdown>
-
-          <el-button :icon="Refresh" @click="handleRefresh" :loading="loading">
-          Yenile
-          </el-button>
-
-          <el-button :icon="Download" @click="handleExport">
-          Dışa Aktar
-          </el-button>
-          </div>
-          </div>
-
-          <!-- Search and Filters -->
-          <div class="search-filters">
-          <div class="search-bar">
-          <el-input
-          v-model="searchQuery"
-          placeholder="Rota ara... (kod, havaalanı, şehir)"
-          :prefix-icon="Search"
-          clearable
-          @input="handleSearch"
-          @clear="handleSearchClear"
-          class="search-input"
-          />
-          </div>
-
-          <div class="filters">
-          <el-select
-          v-model="filterOriginCountry"
-          placeholder="Kalkış Ülkesi"
-          clearable
-          @change="handleFilter"
-          class="filter-select"
-          >
-          <el-option
-          v-for="country in availableCountries"
-          :key="country.code"
-          :label="country.name"
-          :value="country.code"
-          >
-          <span class="country-option">
-          <span class="country-flag">{{ country.flag }}</span>
-          <span>{{ country.name }}</span>
-          </span>
-          </el-option>
-          </el-select>
-
-          <el-select
-          v-model="filterRouteType"
-          placeholder="Rota Tipi"
-          clearable
-          @change="handleFilter"
-          class="filter-select"
-          >
-          <el-option label="İç Hat" value="DOMESTIC" />
-          <el-option label="Uluslararası" value="INTERNATIONAL" />
-          <el-option label="Kıta İçi" value="CONTINENTAL" />
-          <el-option label="Kıtalar Arası" value="INTERCONTINENTAL" />
-          </el-select>
-
-          <el-select
-          v-model="filterStatus"
-          placeholder="Durum"
-          clearable
-          @change="handleFilter"
-          class="filter-select"
-          >
-          <el-option label="Aktif" value="active" />
-          <el-option label="Pasif" value="inactive" />
-          <el-option label="Popüler" value="popular" />
-          <el-option label="Sezonluk" value="seasonal" />
-          </el-select>
-
-          <el-button :icon="Filter" @click="toggleAdvancedFilters">
-          {{ showAdvancedFilters ? 'Basit' : 'Gelişmiş' }} Filtre
-          </el-button>
-        </div>
-      </div>
-
-          <!-- Advanced Filters -->
-          <el-collapse-transition>
-        <div v-show="showAdvancedFilters" class="advanced-filters">
-          <el-card shadow="never">
-            <div class="advanced-filters-grid">
-              <el-form-item label="Min. Mesafe (km)">
-                <el-input-number
-            v-model="filterMinDistance"
-          :min="0"
-          placeholder="Minimum mesafe"
-          @change="handleFilter"
-          />
-          </el-form-item>
-
-          <el-form-item label="Max. Mesafe (km)">
-          <el-input-number
-          v-model="filterMaxDistance"
-          :min="0"
-          placeholder="Maksimum mesafe"
-          @change="handleFilter"
-          />
-          </el-form-item>
-
-          <el-form-item label="İşleten Havayolu">
-          <el-select
-          v-model="filterOperatingAirline"
-          placeholder="Havayolu seçin"
-          clearable
-          filterable
-          @change="handleFilter"
-          >
-          <el-option
-          v-for="airline in airlines"
-          :key="airline.id"
-          :label="airline.name"
-          :value="airline.id"
-          />
-          </el-select>
-          </el-form-item>
-
-          <el-form-item>
-          <el-button @click="clearFilters">Filtreleri Temizle</el-button>
-          </el-form-item>
-          </div>
-          </el-card>
-          </div>
-          </el-collapse-transition>
-          </div>
-
-          <!-- Statistics Cards -->
-          <div class="stats-cards">
-          <el-card class="stat-card">
-          <div class="stat-content">
-          <div class="stat-icon active">
-          <el-icon><CircleCheckFilled /></el-icon>
-          </div>
-          <div class="stat-info">
-          <div class="stat-number">{{ activeRoutesCount }}</div>
-          <div class="stat-label">Aktif Rota</div>
-          </div>
-          </div>
-          </el-card>
-
-          <el-card class="stat-card">
-          <div class="stat-content">
-          <div class="stat-icon popular">
-          <el-icon><Star /></el-icon>
-          </div>
-          <div class="stat-info">
-          <div class="stat-number">{{ popularRoutesCount }}</div>
-          <div class="stat-label">Popüler Rota</div>
-          </div>
-          </div>
-          </el-card>
-
-          <el-card class="stat-card">
-          <div class="stat-content">
-          <div class="stat-icon total">
-          <el-icon><DataAnalysis /></el-icon>
-          </div>
-          <div class="stat-info">
-          <div class="stat-number">{{ totalDistance.toLocaleString() }}</div>
-          <div class="stat-label">Toplam Mesafe (km)</div>
-          </div>
-          </div>
-          </el-card>
-
-          <el-card class="stat-card">
-          <div class="stat-content">
-          <div class="stat-icon average">
-          <el-icon><TrendCharts /></el-icon>
-          </div>
-          <div class="stat-info">
-          <div class="stat-number">{{ averageDistance.toFixed(0) }}</div>
-          <div class="stat-label">Ortalama Mesafe (km)</div>
-          </div>
-          </div>
-          </el-card>
-          </div>
-
-          <!-- Data Table -->
-          <div class="table-container">
-          <el-table
-          ref="tableRef"
-          v-loading="loading"
-          :data="paginatedRoutes"
-          @selection-change="handleSelectionChange"
-          @sort-change="handleSortChange"
-          row-key="id"
-          class="data-table"
-          empty-text="Rota bulunamadı"
-          :default-sort="{ prop: 'routeCode', order: 'ascending' }"
-          >
-          <!-- Selection Column -->
-          <el-table-column type="selection" width="55" fixed="left" />
-
-          <!-- Index Column -->
-          <el-table-column type="index" label="#" width="60" />
-
-          <!-- Route Code Column -->
-          <el-table-column
-          prop="routeCode"
-          label="Rota Kodu"
-          width="120"
-          sortable
-          fixed="left"
-          >
-          <template #default="{ row }">
-          <el-tag type="primary" size="large">
-          {{ row.routeCode }}
-          </el-tag>
-          </template>
-          </el-table-column>
-
-          <!-- Route Info Column -->
-          <el-table-column label="Rota Bilgileri" min-width="300">
-          <template #default="{ row }">
-          <div class="route-info">
-          <div class="route-path">
-          <div class="airport origin">
-          <div class="airport-code">{{ getAirportCode(row.originAirportId, 'iata') }}</div>
-          <div class="airport-name">{{ getAirportName(row.originAirportId) }}</div>
-          <div class="airport-city">{{ getAirportCity(row.originAirportId) }}</div>
-          </div>
-
-          <div class="route-arrow">
-          <el-icon><Right /></el-icon>
-          </div>
-
-          <div class="airport destination">
-          <div class="airport-code">{{ getAirportCode(row.destinationAirportId, 'iata') }}</div>
-          <div class="airport-name">{{ getAirportName(row.destinationAirportId) }}</div>
-          <div class="airport-city">{{ getAirportCity(row.destinationAirportId) }}</div>
-          </div>
-          </div>
-
-          <div class="route-type">
-          <el-tag :type="getRouteTypeTagType(row.routeType)" size="small">
-          {{ getRouteTypeText(row.routeType) }}
-          </el-tag>
-          </div>
-          </div>
-          </template>
-          </el-table-column>
-
-          <!-- Distance & Duration Column -->
-          <el-table-column label="Mesafe & Süre" width="150" align="center">
-          <template #default="{ row }">
-          <div class="distance-duration">
-          <div v-if="row.distance" class="distance">
-          <el-icon><Odometer /></el-icon>
-          <span>{{ row.distance?.toLocaleString() }} km</span>
-              </div>
-              <div v-if="row.estimatedFlightTime" class="duration">
-                <el-icon><Clock /></el-icon>
-                <span>{{ row.estimatedFlightTime }}</span>
-          </div>
-          <div v-if="!row.distance && !row.estimatedFlightTime" class="no-data">
-          <el-button
-          type="primary"
-          size="small"
-          text
-          @click="calculateRouteMetrics(row)"
-          >
-          Hesapla
-          </el-button>
-          </div>
-          </div>
-          </template>
-          </el-table-column>
-
-          <!-- Operating Airlines Column -->
-          <el-table-column label="İşleten Havayolları" width="180">
-          <template #default="{ row }">
-          <div v-if="row.operatingAirlines?.length > 0" class="operating-airlines">
-          <el-tag
-          v-for="airlineId in row.operatingAirlines.slice(0, 3)"
-          :key="airlineId"
-          size="small"
-          class="airline-tag"
-          >
-          {{ getAirlineCode(airlineId) }}
-          </el-tag>
-          <el-tag
-          v-if="row.operatingAirlines.length > 3"
-          size="small"
-          type="info"
-          >
-          +{{ row.operatingAirlines.length - 3 }}
-          </el-tag>
-          </div>
-          <span v-else class="no-data">-</span>
-          </template>
-          </el-table-column>
-
-          <!-- Route Properties Column -->
-          <el-table-column label="Özellikler" width="120" align="center">
-          <template #default="{ row }">
-          <div class="route-properties">
-          <el-tooltip v-if="row.popularRoute" content="Popüler Rota" placement="top">
-          <el-icon class="property-icon popular"><Star /></el-icon>
-          </el-tooltip>
-          <el-tooltip v-if="row.seasonalRoute" content="Sezonluk Rota" placement="top">
-          <el-icon class="property-icon seasonal"><Sunny /></el-icon>
-          </el-tooltip>
-          <el-tooltip v-if="row.routeType === 'INTERNATIONAL'" content="Uluslararası" placement="top">
-          <el-icon class="property-icon international"><Flag /></el-icon>
-          </el-tooltip>
-          </div>
-          </template>
-          </el-table-column>
-
-          <!-- Status Column -->
-          <el-table-column prop="active" label="Durum" width="100" align="center">
-          <template #default="{ row }">
-          <el-switch
-          v-model="row.active"
-          @change="handleStatusChange(row)"
-          :loading="row.statusLoading"
-          active-text="Aktif"
-          inactive-text="Pasif"
-          />
-          </template>
-          </el-table-column>
-
-          <!-- Actions Column -->
-          <el-table-column label="İşlemler" width="200" fixed="right">
-          <template #default="{ row }">
-          <div class="action-buttons">
-          <el-tooltip content="Görüntüle" placement="top">
-          <el-button
-          :icon="View"
-          size="small"
-          @click="handleView(row)"
-          />
-          </el-tooltip>
-
-          <el-tooltip content="Düzenle" placement="top">
-          <el-button
-          :icon="Edit"
-          size="small"
-          type="primary"
-          @click="handleEdit(row)"
-          />
-          </el-tooltip>
-
-          <el-tooltip content="Haritada Göster" placement="top">
-          <el-button
-          :icon="Position"
-          size="small"
-          type="success"
-          @click="showOnMap(row)"
-          />
-          </el-tooltip>
-
-          <el-tooltip content="Sil" placement="top">
-          <el-button
-          :icon="Delete"
-          size="small"
-          type="danger"
-          @click="handleDelete(row)"
-          />
-          </el-tooltip>
-
-          <el-dropdown @command="(command) => handleRowAction(command, row)">
-          <el-button :icon="MoreFilled" size="small" />
-          <template #dropdown>
-          <el-dropdown-menu>
-          <el-dropdown-item command="duplicate" :icon="CopyDocument">
-          Kopyala
-          </el-dropdown-item>
-          <el-dropdown-item command="reverse" :icon="RefreshRight">
-          Ters Rota Oluştur
-          </el-dropdown-item>
-          <el-dropdown-item command="flights" :icon="Promotion">
-          Uçuşları Görüntüle
-          </el-dropdown-item>
-          <el-dropdown-item command="calculate" :icon="Calculator">
-          Hesapla
-          </el-dropdown-item>
-          </el-dropdown-menu>
-          </template>
-          </el-dropdown>
-          </div>
-          </template>
-          </el-table-column>
-          </el-table>
-
-          <!-- Pagination -->
-          <div class="pagination-container">
-          <el-pagination
-          v-model:current-page="currentPage"
-          v-model:page-size="pageSize"
-          :page-sizes="[10, 20, 50, 100]"
-          :total="totalRoutes"
-          layout="total, sizes, prev, pager, next, jumper"
-          @size-change="handleSizeChange"
-          @current-change="handlePageChange"
-          />
-          </div>
-          </div>
-
-          <!-- Create/Edit Dialog -->
-          <el-dialog
-          v-model="dialogVisible"
-          :title="dialogMode === 'create' ? 'Yeni Rota Ekle' : 'Rota Düzenle'"
-          width="900px"
-          :close-on-click-modal="false"
-          :close-on-press-escape="false"
-          @close="handleDialogClose"
-          >
-          <RouteForm
-          v-model="currentRoute"
-          :is-editing="dialogMode === 'edit'"
-          :submitting="submitting"
-          @submit="handleFormSubmit"
-          @cancel="handleDialogClose"
-          />
-          </el-dialog>
-
-          <!-- View Dialog -->
-          <el-dialog
-          v-model="viewDialogVisible"
-          title="Rota Detayları"
-          width="800px"
-          >
-          <div v-if="viewingRoute" class="route-details">
-          <div class="detail-header">
-          <div class="route-title">
-          <h3>{{ viewingRoute.routeCode }}</h3>
-          <div class="route-subtitle">
-          <span>{{ getAirportName(viewingRoute.originAirportId) }}</span>
-          <el-icon><Right /></el-icon>
-          <span>{{ getAirportName(viewingRoute.destinationAirportId) }}</span>
-          </div>
-          </div>
-          <div class="status-badges">
-          <el-tag :type="getRouteTypeTagType(viewingRoute.routeType)">
-          {{ getRouteTypeText(viewingRoute.routeType) }}
-          </el-tag>
-          <el-tag :type="viewingRoute.active ? 'success' : 'danger'">
-          {{ viewingRoute.active ? 'Aktif' : 'Pasif' }}
-          </el-tag>
-          </div>
-          </div>
-
-          <el-divider />
-
-          <!-- Route Visualization -->
-          <div class="route-visualization">
-          <div class="route-visual">
-          <div class="airport origin">
-          <div class="airport-code">{{ getAirportCode(viewingRoute.originAirportId, 'iata') }}</div>
-          <div class="airport-name">{{ getAirportName(viewingRoute.originAirportId) }}</div>
-          <div class="airport-city">{{ getAirportCity(viewingRoute.originAirportId) }}</div>
-          </div>
-
-          <div class="route-line">
-          <div class="plane-icon">✈️</div>
-          <div class="route-info">
-          <div v-if="viewingRoute.distance" class="distance">{{ viewingRoute.distance }} km</div>
-                <div v-if="viewingRoute.estimatedFlightTime" class="duration">{{ viewingRoute.estimatedFlightTime }}</div>
-          </div>
-          </div>
-
-          <div class="airport destination">
-          <div class="airport-code">{{ getAirportCode(viewingRoute.destinationAirportId, 'iata') }}</div>
-          <div class="airport-name">{{ getAirportName(viewingRoute.destinationAirportId) }}</div>
-          <div class="airport-city">{{ getAirportCity(viewingRoute.destinationAirportId) }}</div>
-          </div>
-          </div>
-          </div>
-
-          <el-divider />
-
-          <div class="detail-grid">
-          <div class="detail-section">
-          <h4>Rota Bilgileri</h4>
-          <div class="detail-item">
-          <span class="label">Rota Kodu:</span>
-          <el-tag type="primary">{{ viewingRoute.routeCode }}</el-tag>
-          </div>
-          <div class="detail-item">
-          <span class="label">Rota Tipi:</span>
-          <el-tag :type="getRouteTypeTagType(viewingRoute.routeType)">
-          {{ getRouteTypeText(viewingRoute.routeType) }}
-          </el-tag>
-          </div>
-          <div class="detail-item" v-if="viewingRoute.distance">
-          <span class="label">Mesafe:</span>
-          <span>{{ viewingRoute.distance?.toLocaleString() }} km</span>
-            </div>
-            <div class="detail-item" v-if="viewingRoute.estimatedFlightTime">
-              <span class="label">Tahmini Uçuş Süresi:</span>
-              <span>{{ viewingRoute.estimatedFlightTime }}</span>
-          </div>
-          </div>
-
-          <div class="detail-section">
-          <h4>Özellikler</h4>
-          <div class="detail-item">
-          <span class="label">Popüler Rota:</span>
-          <el-tag :type="viewingRoute.popularRoute ? 'success' : 'info'">
-          {{ viewingRoute.popularRoute ? 'Evet' : 'Hayır' }}
-          </el-tag>
-          </div>
-          <div class="detail-item">
-          <span class="label">Sezonluk Rota:</span>
-          <el-tag :type="viewingRoute.seasonalRoute ? 'warning' : 'info'">
-          {{ viewingRoute.seasonalRoute ? 'Evet' : 'Hayır' }}
-          </el-tag>
-          </div>
-          <div class="detail-item" v-if="viewingRoute.seasonalRoute && viewingRoute.season?.length">
-          <span class="label">Sezonlar:</span>
-          <div class="seasons">
-          <el-tag
-          v-for="season in viewingRoute.season"
-          :key="season"
-          size="small"
-          class="season-tag"
-          >
-          {{ getSeasonText(season) }}
-          </el-tag>
-          </div>
-          </div>
-          </div>
-          </div>
-
-          <div v-if="viewingRoute.operatingAirlines?.length" class="detail-section full-width">
-          <h4>İşleten Havayolları</h4>
-          <div class="operating-airlines-list">
-          <el-tag
-          v-for="airlineId in viewingRoute.operatingAirlines"
-          :key="airlineId"
-          class="airline-tag"
-          >
-          {{ getAirlineFullName(airlineId) }}
-          </el-tag>
-          </div>
-          </div>
-
-          <div class="detail-section full-width" v-if="viewingRoute.notes">
-          <h4>Notlar</h4>
-          <p>{{ viewingRoute.notes }}</p>
-          </div>
-
-          <div class="detail-actions">
-          <el-button
-          type="primary"
-          :icon="Position"
-          @click="showOnMap(viewingRoute)"
-          >
-          Haritada Göster
-          </el-button>
-          <el-button
-          :icon="Promotion"
-          @click="viewFlights(viewingRoute)"
-          >
-          Uçuşları Görüntüle
-          </el-button>
-          </div>
-          </div>
-          </el-dialog>
-
-          <!-- Map Dialog -->
-          <el-dialog
-          v-model="mapDialogVisible"
-          title="Rota Haritası"
-          width="900px"
-          >
-          <div class="map-container">
-          <div class="map-placeholder">
-          <el-icon size="48"><Position /></el-icon>
-          <h3>{{ selectedRouteForMap?.routeCode }}</h3>
-          <p>{{ getAirportCity(selectedRouteForMap?.originAirportId) }} → {{ getAirportCity(selectedRouteForMap?.destinationAirportId) }}</p>
-          <div class="map-actions">
-          <el-button type="primary" @click="openGoogleMaps">Google Maps'te Aç</el-button>
-          <el-button @click="openFlightRadar">FlightRadar24'te Aç</el-button>
-          </div>
-          </div>
-          </div>
-          </el-dialog>
-          </div>
-          </template>
-
-          <script setup>
-          import { ref, reactive, computed, onMounted, watch } from 'vue'
-          import { useRouter } from 'vue-router'
-          import { ElMessage, ElMessageBox } from 'element-plus'
-          import {
-            Connection,
-            Plus,
-            ArrowDown,
-            Check,
-            Close,
-            Star,
-            Calculator,
-            Delete,
-            Refresh,
-            Download,
-            Search,
-            Filter,
-            View,
-            Edit,
-            Position,
-            MoreFilled,
-            CopyDocument,
-            RefreshRight,
-            Promotion,
-            Right,
-            CircleCheckFilled,
-            DataAnalysis,
-            TrendCharts,
-            Odometer,
-            Clock,
-            Sunny,
-            Flag
-          } from '@element-plus/icons-vue'
-          import { useReferenceStore } from '@/stores/reference'
-          import { useAppStore } from '@/stores/app'
-          import RouteForm from '@/components/forms/RouteForm.vue'
-
-            // Stores
-          const referenceStore = useReferenceStore()
-          const appStore = useAppStore()
-          const router = useRouter()
-
-            // Reactive state
-          const loading = ref(false)
-          const submitting = ref(false)
-          const tableRef = ref(null)
-          const selectedRows = ref([])
-          const currentPage = ref(1)
-          const pageSize = ref(20)
-          const searchQuery = ref('')
-          const filterOriginCountry = ref('')
-          const filterRouteType = ref('')
-          const filterStatus = ref('')
-          const filterMinDistance = ref('')
-          const filterMaxDistance = ref('')
-          const filterOperatingAirline = ref('')
-          const showAdvancedFilters = ref(false)
-          const sortField = ref('routeCode')
-          const sortOrder = ref('ascending')
-
-            // Dialog state
-          const dialogVisible = ref(false)
-          const viewDialogVisible = ref(false)
-          const mapDialogVisible = ref(false)
-          const dialogMode = ref('create')
-          const currentRoute = ref({})
-          const viewingRoute = ref(null)
-          const selectedRouteForMap = ref(null)
-
-            // Countries mapping
-          const countries = {
-          'TR': { name: 'Türkiye', flag: '🇹🇷' },
-          'US': { name: 'ABD', flag: '🇺🇸' },
-          'GB': { name: 'İngiltere', flag: '🇬🇧' },
-          'DE': { name: 'Almanya', flag: '🇩🇪' },
-          'FR': { name: 'Fransa', flag: '🇫🇷' },
-          'IT': { name: 'İtalya', flag: '🇮🇹' },
-          'ES': { name: 'İspanya', flag: '🇪🇸' },
-          'NL': { name: 'Hollanda', flag: '🇳🇱' },
-          'AE': { name: 'BAE', flag: '🇦🇪' },
-          'QA': { name: 'Katar', flag: '🇶🇦' }
+            top: 0;
+            bottom: 0;
+            left: 50%;
+            right: auto;
+            width: 2px;
+            height: auto;
+            background: linear-gradient(180deg, #67c23a 0%, #409eff 50%, #f56c6c 100%);
           }
 
-            // Computed
-            const routes = computed(() => referenceStore.routes)
-            const airports = computed(() => referenceStore.airports)
-            const airlines = computed(() => referenceStore.airlines)
-
-            const availableCountries = computed(() => {
-            const countrySet = new Set()
-            routes.value.forEach(route => {
-            const originAirport = airports.value.find(a => a.id === route.originAirportId)
-            const destAirport = airports.value.find(a => a.id === route.destinationAirportId)
-            if (originAirport) countrySet.add(originAirport.country)
-            if (destAirport) countrySet.add(destAirport.country)
-          })
-
-          return Array.from(countrySet).map(code => ({
-          code,
-          name: countries[code]?.name || code,
-          flag: countries[code]?.flag || '🌍'
-          }))
-          })
-
-          const filteredRoutes = computed(() => {
-            let result = [...routes.value]
-
-              // Search filter
-            if (searchQuery.value) {
-            const query = searchQuery.value.toLowerCase()
-            result = result.filter(route =>
-      route.routeCode?.toLowerCase().includes(query) ||
-            getAirportCode(route.originAirportId, 'iata')?.toLowerCase().includes(query) ||
-            getAirportCode(route.destinationAirportId, 'iata')?.toLowerCase().includes(query) ||
-            getAirportName(route.originAirportId)?.toLowerCase().includes(query) ||
-            getAirportName(route.destinationAirportId)?.toLowerCase().includes(query) ||
-            getAirportCity(route.originAirportId)?.toLowerCase().includes(query) ||
-            getAirportCity(route.destinationAirportId)?.toLowerCase().includes(query)
-          )
+          .plane-icon {
+            transform: rotate(-90deg);
           }
+        }
+      }
 
-            // Origin country filter
-            if (filterOriginCountry.value) {
-            result = result.filter(route => {
-            const originAirport = airports.value.find(a => a.id === route.originAirportId)
-            return originAirport?.country === filterOriginCountry.value
-          })
-          }
+      .detail-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+      }
 
-            // Route type filter
-            if (filterRouteType.value) {
-            result = result.filter(route => route.routeType === filterRouteType.value)
-          }
+      .detail-actions {
+        flex-direction: column;
 
-            // Status filter
-            if (filterStatus.value) {
-            switch (filterStatus.value) {
-            case 'active':
-            result = result.filter(route => route.active)
+        .el-button {
+          width: 100%;
+        }
+      }
+    }
+
+    .map-container .map-placeholder {
+      .map-actions {
+        flex-direction: column;
+        width: 100%;
+
+        .el-button {
+          width: 100%;
+        }
+      }
+    }
+  }
+}
+
+// Table animations
+:deep(.el-table__row) {
+  transition: all 0.3s ease;
+
+  &:hover {
+    background-color: #f5f7fa;
+  }
+}
+
+// Tag styling
+:deep(.el-tag) {
+  &.el-tag--primary {
+    background-color: #409eff;
+    border-color: #409eff;
+  }
+
+  &.el-tag--success {
+    background-color: #67c23a;
+    border-color: #67c23a;
+  }
+
+  &.el-tag--warning {
+    background-color: #e6a23c;
+    border-color: #e6a23c;
+  }
+
+  &.el-tag--info {
+    background-color: #909399;
+    border-color: #909399;
+  }
+
+  &.el-tag--danger {
+    background-color: #f56c6c;
+    border-color: #f56c6c;
+  }
+}
+
+// Button hover effects
+.action-buttons {
+  :deep(.el-button) {
+    &:hover {
+      transform: translateY(-1px);
+    }
+
+    &.el-button--success:hover {
+      background-color: #5daf34;
+    }
+  }
+}
+
+// Switch styling
+:deep(.el-switch) {
+  &.is-checked .el-switch__core {
+    background-color: #67c23a;
+  }
+}
+
+// Loading state
+:deep(.el-loading-mask) {
+  border-radius: 8px;
+}
+
+// Dialog animations
+:deep(.el-dialog) {
+  .el-dialog__header {
+    border-bottom: 1px solid #ebeef5;
+    padding-bottom: 1rem;
+  }
+
+  .el-dialog__body {
+    padding-top: 1.5rem;
+  }
+}
+
+// Empty state
+:deep(.el-table__empty-block) {
+  padding: 4rem 0;
+
+  .el-table__empty-text {
+    color: #909399;
+    font-size: 1rem;
+  }
+}
+</style>

@@ -1160,635 +1160,410 @@ watch(() => router.currentRoute.value.query, (query) => {
       }
     }
   }
+}
 
-  .<template>
-<div class="aircraft-management">
-<!-- Page Header -->
-<div class="page-header">
-<div class="header-content">
-<div class="page-title">
-<el-icon size="24"><Promotion /></el-icon>
-<h1>Uçak Yönetimi</h1>
-<el-tag :type="aircrafts.length > 0 ? 'success' : 'info'">
-{{ aircrafts.length }} Uçak
-</el-tag>
-        </div>
+.table-container {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 
-        <div class="header-actions">
-          <el-button
-  type="primary"
-:icon="Plus"
-@click="handleCreate"
-:loading="loading"
->
-Yeni Uçak
-</el-button>
+  .data-table {
+    .registration-number {
+      display: flex;
+      justify-content: center;
 
-<el-dropdown @command="handleBulkAction" :disabled="selectedRows.length === 0">
-<el-button :disabled="selectedRows.length === 0">
-Toplu İşlemler
-<el-icon class="el-icon--right"><ArrowDown /></el-icon>
-</el-button>
-<template #dropdown>
-<el-dropdown-menu>
-<el-dropdown-item command="maintenance" :icon="Tools">
-Bakıma Al
-</el-dropdown-item>
-<el-dropdown-item command="active" :icon="Check">
-Aktifleştir
-</el-dropdown-item>
-<el-dropdown-item command="retire" :icon="Warning">
-Emekliye Ayır
-</el-dropdown-item>
-<el-dropdown-item command="delete" :icon="Delete" divided>
-Seçilenleri Sil
-</el-dropdown-item>
-</el-dropdown-menu>
-</template>
-</el-dropdown>
+      .el-tag {
+        font-weight: 600;
+        font-size: 0.875rem;
+      }
+    }
 
-<el-button :icon="Refresh" @click="handleRefresh" :loading="loading">
-Yenile
-</el-button>
+    .aircraft-info {
+      .aircraft-type {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 0.25rem;
 
-<el-button :icon="Download" @click="handleExport">
-Dışa Aktar
-</el-button>
-</div>
-</div>
+        .type-code {
+          font-weight: 600;
+          color: #409eff;
+        }
 
-<!-- Search and Filters -->
-<div class="search-filters">
-<div class="search-bar">
-<el-input
-v-model="searchQuery"
-placeholder="Uçak ara... (kayıt no, tip, havayolu)"
-:prefix-icon="Search"
-clearable
-@input="handleSearch"
-@clear="handleSearchClear"
-class="search-input"
-/>
-</div>
+        .model {
+          color: #606266;
+          font-size: 0.875rem;
+        }
+      }
 
-<div class="filters">
-<el-select
-v-model="filterAirline"
-placeholder="Havayolu"
-clearable
-filterable
-@change="handleFilter"
-class="filter-select"
->
-<el-option
-v-for="airline in availableAirlines"
-:key="airline.id"
-:label="airline.name"
-:value="airline.id"
->
-<span class="airline-option">
-<span class="airline-code">{{ airline.code }}</span>
-<span>{{ airline.name }}</span>
-</span>
-</el-option>
-</el-select>
+      .manufacturer,
+      .capacity {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        font-size: 0.875rem;
+        color: #909399;
+        margin-bottom: 0.25rem;
 
-<el-select
-v-model="filterType"
-placeholder="Uçak Tipi"
-clearable
-@change="handleFilter"
-class="filter-select"
->
-<el-option
-v-for="type in availableTypes"
-:key="type"
-:label="type"
-:value="type"
-/>
-</el-select>
+        .el-icon {
+          font-size: 0.75rem;
+        }
+      }
+    }
 
-<el-select
-v-model="filterStatus"
-placeholder="Durum"
-clearable
-@change="handleFilter"
-class="filter-select"
->
-<el-option label="Aktif" value="ACTIVE" />
-<el-option label="Bakımda" value="MAINTENANCE" />
-<el-option label="Hizmet Dışı" value="OUT_OF_SERVICE" />
-<el-option label="Emekli" value="RETIRED" />
-</el-select>
+    .airline-info {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.25rem;
 
-<el-button :icon="Filter" @click="toggleAdvancedFilters">
-{{ showAdvancedFilters ? 'Basit' : 'Gelişmiş' }} Filtre
-</el-button>
-        </div>
-      </div>
+      .airline-tag {
+        font-size: 0.75rem;
+        font-weight: 600;
+      }
 
-<!-- Advanced Filters -->
-<el-collapse-transition>
-        <div v-show="showAdvancedFilters" class="advanced-filters">
-          <el-card shadow="never">
-            <div class="advanced-filters-grid">
-              <el-form-item label="Üretici">
-                <el-select
-v-model="filterManufacturer"
-placeholder="Üretici"
-clearable
-@change="handleFilter"
-                >
-                  <el-option
-  v-for="manufacturer in availableManufacturers"
-:key="manufacturer"
-:label="manufacturer"
-:value="manufacturer"
-/>
-</el-select>
-</el-form-item>
+      .airline-name {
+        font-size: 0.875rem;
+        color: #606266;
+        text-align: center;
+      }
+    }
 
-<el-form-item label="Üretim Yılı">
-<el-date-picker
-v-model="filterYear"
-type="year"
-placeholder="Yıl seçin"
-@change="handleFilter"
-/>
-</el-form-item>
+    .age-hours {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.25rem;
 
-<el-form-item label="Min. Uçuş Saati">
-<el-input-number
-v-model="filterFlightHours"
-:min="0"
-placeholder="Saat"
-@change="handleFilter"
-/>
-</el-form-item>
+      .age,
+      .hours {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        font-size: 0.875rem;
 
-<el-form-item>
-<el-button @click="clearFilters">Filtreleri Temizle</el-button>
-</el-form-item>
-</div>
-</el-card>
-</div>
-</el-collapse-transition>
-</div>
+        .el-icon {
+          font-size: 0.75rem;
+          color: #909399;
+        }
+      }
+    }
 
-<!-- Statistics Cards -->
-<div class="stats-cards">
-<el-card class="stat-card">
-<div class="stat-content">
-<div class="stat-icon active">
-<el-icon><CircleCheckFilled /></el-icon>
-</div>
-<div class="stat-info">
-<div class="stat-number">{{ activeAircraftCount }}</div>
-<div class="stat-label">Aktif Uçak</div>
-</div>
-</div>
-</el-card>
+    .location {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+      font-size: 0.875rem;
 
-<el-card class="stat-card">
-<div class="stat-content">
-<div class="stat-icon maintenance">
-<el-icon><Tools /></el-icon>
-</div>
-<div class="stat-info">
-<div class="stat-number">{{ maintenanceAircraftCount }}</div>
-<div class="stat-label">Bakımda</div>
-</div>
-</div>
-</el-card>
+      .el-icon {
+        font-size: 0.75rem;
+        color: #909399;
+      }
+    }
 
-<el-card class="stat-card">
-<div class="stat-content">
-<div class="stat-icon total">
-<el-icon><DataAnalysis /></el-icon>
-</div>
-<div class="stat-info">
-<div class="stat-number">{{ totalFlightHours.toLocaleString() }}</div>
-<div class="stat-label">Toplam Uçuş Saati</div>
-</div>
-</div>
-</el-card>
+    .no-data {
+      color: #c0c4cc;
+      font-style: italic;
+    }
 
-<el-card class="stat-card">
-<div class="stat-content">
-<div class="stat-icon fleet">
-<el-icon><Promotion /></el-icon>
-</div>
-<div class="stat-info">
-<div class="stat-number">{{ averageAge.toFixed(1) }}</div>
-<div class="stat-label">Ortalama Yaş (Yıl)</div>
-</div>
-</div>
-</el-card>
-</div>
+    .action-buttons {
+      display: flex;
+      gap: 0.5rem;
+      justify-content: center;
+    }
+  }
 
-<!-- Data Table -->
-<div class="table-container">
-<el-table
-ref="tableRef"
-v-loading="loading"
-:data="paginatedAircrafts"
-@selection-change="handleSelectionChange"
-@sort-change="handleSortChange"
-row-key="id"
-class="data-table"
-empty-text="Uçak bulunamadı"
-:default-sort="{ prop: 'registrationNumber', order: 'ascending' }"
->
-<!-- Selection Column -->
-<el-table-column type="selection" width="55" fixed="left" />
+  .pagination-container {
+    padding: 1rem;
+    display: flex;
+    justify-content: center;
+    border-top: 1px solid #ebeef5;
+  }
+}
 
-<!-- Index Column -->
-<el-table-column type="index" label="#" width="60" />
+.airline-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 
-<!-- Registration Number Column -->
-<el-table-column
-prop="registrationNumber"
-label="Kayıt No"
-width="120"
-sortable
-fixed="left"
->
-<template #default="{ row }">
-<div class="registration-number">
-<el-tag type="primary" size="large">
-{{ row.registrationNumber }}
-</el-tag>
-</div>
-</template>
-</el-table-column>
+  .airline-code {
+    font-weight: 600;
+    color: #409eff;
+    min-width: 40px;
+  }
+}
 
-<!-- Aircraft Info Column -->
-<el-table-column label="Uçak Bilgileri" min-width="200" sortable="custom">
-<template #default="{ row }">
-<div class="aircraft-info">
-<div class="aircraft-type">
-<span class="type-code">{{ row.aircraftType }}</span>
-<span class="model">{{ row.model }}</span>
-</div>
-<div class="manufacturer">
-<el-icon><OfficeBuilding /></el-icon>
-<span>{{ row.manufacturer }}</span>
-</div>
-<div v-if="row.seatCount" class="capacity">
-<el-icon><User /></el-icon>
-<span>{{ row.seatCount }} Koltuk</span>
-              </div>
-            </div>
-          </template>
-        </el-table-column>
+.aircraft-details {
+  .detail-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1rem;
 
-<!-- Airline Column -->
-<el-table-column label="Havayolu" width="150">
-          <template #default="{ row }">
-            <div class="airline-info">
-              <el-tag class="airline-tag">{{ getAirlineCode(row.airlineId) }}</el-tag>
-<div class="airline-name">{{ getAirlineName(row.airlineId) }}</div>
-</div>
-</template>
-</el-table-column>
+    .aircraft-title {
+      h3 {
+        margin: 0;
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #303133;
+      }
 
-<!-- Age and Hours Column -->
-<el-table-column label="Yaş & Saat" width="120" align="center">
-<template #default="{ row }">
-<div class="age-hours">
-<div v-if="row.manufacturingDate" class="age">
-<el-icon><Calendar /></el-icon>
-<span>{{ calculateAge(row.manufacturingDate) }} yıl</span>
-              </div>
-              <div v-if="row.totalFlightHours" class="hours">
-                <el-icon><Clock /></el-icon>
-                <span>{{ row.totalFlightHours.toLocaleString() }}h</span>
-              </div>
-            </div>
-          </template>
-        </el-table-column>
+      .aircraft-subtitle {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-top: 0.5rem;
+        font-size: 0.875rem;
+        color: #606266;
+      }
+    }
 
-<!-- Status Column -->
-<el-table-column prop="maintenanceStatus" label="Durum" width="120" align="center">
-          <template #default="{ row }">
-<el-tag :type="getStatusTagType(row.maintenanceStatus)" size="small">
-{{ getStatusText(row.maintenanceStatus) }}
-</el-tag>
-</template>
-</el-table-column>
+    .status-badges {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+  }
 
-<!-- Location Column -->
-<el-table-column prop="currentLocation" label="Konum" width="150" show-overflow-tooltip>
-<template #default="{ row }">
-<div v-if="row.currentLocation" class="location">
-<el-icon><MapLocation /></el-icon>
-<span>{{ row.currentLocation }}</span>
-</div>
-<span v-else class="no-data">-</span>
-</template>
-</el-table-column>
+  .detail-tabs {
+    margin-top: 1rem;
 
-<!-- Active Status Column -->
-<el-table-column prop="active" label="Aktif" width="80" align="center">
-<template #default="{ row }">
-<el-switch
-v-model="row.active"
-@change="handleStatusChange(row)"
-:loading="row.statusLoading"
-/>
-</template>
-</el-table-column>
+    .detail-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
 
-<!-- Actions Column -->
-<el-table-column label="İşlemler" width="200" fixed="right">
-<template #default="{ row }">
-<div class="action-buttons">
-<el-tooltip content="Görüntüle" placement="top">
-<el-button
-:icon="View"
-size="small"
-@click="handleView(row)"
-/>
-</el-tooltip>
+      .detail-section {
+        h4 {
+          margin: 0 0 1rem 0;
+          font-size: 1rem;
+          font-weight: 600;
+          color: #303133;
+          border-bottom: 1px solid #ebeef5;
+          padding-bottom: 0.5rem;
+        }
 
-<el-tooltip content="Düzenle" placement="top">
-<el-button
-:icon="Edit"
-size="small"
-type="primary"
-@click="handleEdit(row)"
-/>
-</el-tooltip>
+        .detail-item {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 0.75rem;
+          font-size: 0.875rem;
 
-<el-tooltip content="Uçuş Geçmişi" placement="top">
-<el-button
-:icon="Document"
-size="small"
-type="success"
-@click="viewFlightHistory(row)"
-/>
-</el-tooltip>
+          .label {
+            font-weight: 500;
+            color: #606266;
+            min-width: 120px;
+          }
+        }
+      }
+    }
+  }
 
-<el-tooltip content="Sil" placement="top">
-<el-button
-:icon="Delete"
-size="small"
-type="danger"
-@click="handleDelete(row)"
-/>
-</el-tooltip>
+  .detail-section.full-width {
+    margin-top: 1rem;
 
-<el-dropdown @command="(command) => handleRowAction(command, row)">
-<el-button :icon="MoreFilled" size="small" />
-<template #dropdown>
-<el-dropdown-menu>
-<el-dropdown-item command="duplicate" :icon="CopyDocument">
-Kopyala
-</el-dropdown-item>
-<el-dropdown-item command="maintenance" :icon="Tools">
-Bakıma Al
-</el-dropdown-item>
-<el-dropdown-item command="schedule" :icon="Calendar">
-Uçuş Programı
-</el-dropdown-item>
-</el-dropdown-menu>
-</template>
-</el-dropdown>
-</div>
-</template>
-</el-table-column>
-</el-table>
+    h4 {
+      margin: 0 0 0.5rem 0;
+      font-size: 1rem;
+      font-weight: 600;
+      color: #303133;
+    }
 
-<!-- Pagination -->
-<div class="pagination-container">
-<el-pagination
-v-model:current-page="currentPage"
-v-model:page-size="pageSize"
-:page-sizes="[10, 20, 50, 100]"
-:total="totalAircrafts"
-layout="total, sizes, prev, pager, next, jumper"
-@size-change="handleSizeChange"
-@current-change="handlePageChange"
-/>
-</div>
-</div>
+    p {
+      margin: 0;
+      line-height: 1.6;
+      color: #606266;
+    }
+  }
+}
 
-<!-- Create/Edit Dialog -->
-<el-dialog
-v-model="dialogVisible"
-:title="dialogMode === 'create' ? 'Yeni Uçak Ekle' : 'Uçak Düzenle'"
-width="900px"
-:close-on-click-modal="false"
-:close-on-press-escape="false"
-@close="handleDialogClose"
->
-<AircraftForm
-v-model="currentAircraft"
-:is-editing="dialogMode === 'edit'"
-:submitting="submitting"
-@submit="handleFormSubmit"
-@cancel="handleDialogClose"
-/>
-</el-dialog>
+// Responsive
+@media (max-width: 768px) {
+  .aircraft-management {
+    padding: 1rem;
 
-<!-- View Dialog -->
-<el-dialog
-v-model="viewDialogVisible"
-title="Uçak Detayları"
-width="800px"
->
-<div v-if="viewingAircraft" class="aircraft-details">
-<div class="detail-header">
-<div class="aircraft-title">
-<h3>{{ viewingAircraft.registrationNumber }}</h3>
-<div class="aircraft-subtitle">
-<span>{{ viewingAircraft.manufacturer }} {{ viewingAircraft.model }}</span>
-<el-tag>{{ viewingAircraft.aircraftType }}</el-tag>
-</div>
-</div>
-<div class="status-badges">
-<el-tag :type="getStatusTagType(viewingAircraft.maintenanceStatus)">
-{{ getStatusText(viewingAircraft.maintenanceStatus) }}
-</el-tag>
-<el-tag :type="viewingAircraft.active ? 'success' : 'danger'">
-{{ viewingAircraft.active ? 'Aktif' : 'Pasif' }}
-</el-tag>
-</div>
-</div>
+    .page-header {
+      .header-content {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 1rem;
 
-<el-divider />
+        .page-title {
+          justify-content: center;
+        }
 
-<div class="detail-tabs">
-<el-tabs v-model="activeTab">
-<el-tab-pane label="Genel Bilgiler" name="general">
-<div class="detail-grid">
-<div class="detail-section">
-<h4>Uçak Bilgileri</h4>
-<div class="detail-item">
-<span class="label">Havayolu:</span>
-<span>{{ getAirlineName(viewingAircraft.airlineId) }}</span>
-</div>
-<div class="detail-item">
-<span class="label">Üretici:</span>
-<span>{{ viewingAircraft.manufacturer }}</span>
-</div>
-<div class="detail-item">
-<span class="label">Model:</span>
-<span>{{ viewingAircraft.model }}</span>
-</div>
-<div class="detail-item" v-if="viewingAircraft.seatCount">
-<span class="label">Koltuk Sayısı:</span>
-<span>{{ viewingAircraft.seatCount }}</span>
-</div>
-</div>
+        .header-actions {
+          justify-content: center;
+          flex-wrap: wrap;
+        }
+      }
 
-<div class="detail-section">
-<h4>Operasyonel Bilgiler</h4>
-<div class="detail-item" v-if="viewingAircraft.manufacturingDate">
-<span class="label">Üretim Tarihi:</span>
-<span>{{ formatDate(viewingAircraft.manufacturingDate) }}</span>
-</div>
-<div class="detail-item" v-if="viewingAircraft.serviceEntryDate">
-<span class="label">Hizmete Giriş:</span>
-<span>{{ formatDate(viewingAircraft.serviceEntryDate) }}</span>
-</div>
-<div class="detail-item" v-if="viewingAircraft.totalFlightHours">
-<span class="label">Toplam Uçuş Saati:</span>
-<span>{{ viewingAircraft.totalFlightHours.toLocaleString() }} saat</span>
-                  </div>
-                  <div class="detail-item" v-if="viewingAircraft.currentLocation">
-                    <span class="label">Mevcut Konum:</span>
-                    <span>{{ viewingAircraft.currentLocation }}</span>
-</div>
-</div>
-</div>
-</el-tab-pane>
+      .search-filters {
+        flex-direction: column;
+        align-items: stretch;
 
-<el-tab-pane label="Teknik Özellikler" name="technical">
-<div class="detail-grid">
-<div class="detail-section">
-<h4>Performans</h4>
-<div class="detail-item" v-if="viewingAircraft.maxRange">
-<span class="label">Maksimum Menzil:</span>
-<span>{{ viewingAircraft.maxRange?.toLocaleString() }} km</span>
-                  </div>
-                  <div class="detail-item" v-if="viewingAircraft.maxSpeed">
-                    <span class="label">Maksimum Hız:</span>
-                    <span>{{ viewingAircraft.maxSpeed?.toLocaleString() }} km/h</span>
-                  </div>
-                  <div class="detail-item" v-if="viewingAircraft.maxAltitude">
-                    <span class="label">Maksimum İrtifa:</span>
-                    <span>{{ viewingAircraft.maxAltitude?.toLocaleString() }} ft</span>
-                  </div>
-                  <div class="detail-item" v-if="viewingAircraft.engineType">
-                    <span class="label">Motor Tipi:</span>
-                    <span>{{ getEngineTypeText(viewingAircraft.engineType) }}</span>
-</div>
-</div>
+        .filters {
+          justify-content: center;
+          flex-wrap: wrap;
+        }
+      }
 
-<div class="detail-section">
-<h4>Kapasiteler</h4>
-<div class="detail-item" v-if="viewingAircraft.fuelCapacity">
-<span class="label">Yakıt Kapasitesi:</span>
-<span>{{ viewingAircraft.fuelCapacity?.toLocaleString() }} L</span>
-                  </div>
-                </div>
-              </div>
-            </el-tab-pane>
-          </el-tabs>
-        </div>
+      .advanced-filters {
+        .advanced-filters-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    }
 
-        <div class="detail-section full-width" v-if="viewingAircraft.notes">
-          <h4>Notlar</h4>
-          <p>{{ viewingAircraft.notes }}</p>
-</div>
-</div>
-</el-dialog>
-</div>
-</template>
+    .stats-cards {
+      grid-template-columns: repeat(2, 1fr);
+    }
 
-<script setup>
-import { ref, reactive, computed, onMounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import {
-  Promotion,
-  Plus,
-  ArrowDown,
-  Check,
-  Tools,
-  Warning,
-  Delete,
-  Refresh,
-  Download,
-  Search,
-  Filter,
-  View,
-  Edit,
-  Document,
-  MoreFilled,
-  CopyDocument,
-  Calendar,
-  CircleCheckFilled,
-  DataAnalysis,
-  OfficeBuilding,
-  User,
-  Clock,
-  MapLocation
-} from '@element-plus/icons-vue'
-import { useReferenceStore } from '@/stores/reference'
-import { useAppStore } from '@/stores/app'
-import AircraftForm from '@/components/forms/AircraftForm.vue'
-import dayjs from 'dayjs'
+    .table-container {
+      .data-table {
+        :deep(.el-table__body-wrapper) {
+          overflow-x: auto;
+        }
+      }
+    }
 
-  // Stores
-const referenceStore = useReferenceStore()
-const appStore = useAppStore()
-const router = useRouter()
+    .aircraft-details {
+      .detail-header {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        gap: 1rem;
 
-  // Reactive state
-const loading = ref(false)
-const submitting = ref(false)
-const tableRef = ref(null)
-const selectedRows = ref([])
-const currentPage = ref(1)
-const pageSize = ref(20)
-const searchQuery = ref('')
-const filterAirline = ref('')
-const filterType = ref('')
-const filterStatus = ref('')
-const filterManufacturer = ref('')
-const filterYear = ref('')
-const filterFlightHours = ref('')
-const showAdvancedFilters = ref(false)
-const sortField = ref('registrationNumber')
-const sortOrder = ref('ascending')
+        .status-badges {
+          flex-direction: row;
+        }
+      }
 
-  // Dialog state
-const dialogVisible = ref(false)
-const viewDialogVisible = ref(false)
-const dialogMode = ref('create')
-const currentAircraft = ref({})
-const viewingAircraft = ref(null)
-const activeTab = ref('general')
+      .detail-tabs {
+        .detail-grid {
+          grid-template-columns: 1fr;
+          gap: 1rem;
+        }
+      }
+    }
+  }
+}
 
-  // Computed
-const aircrafts = computed(() => referenceStore.aircrafts)
-const airlines = computed(() => referenceStore.airlines)
+// Table animations
+:deep(.el-table__row) {
+  transition: all 0.3s ease;
 
-const availableAirlines = computed(() => {
-  const airlineSet = new Set(aircrafts.value.map(a => a.airlineId))
-  return airlines.value.filter(airline => airlineSet.has(airline.id))
-})
+  &:hover {
+    background-color: #f5f7fa;
+  }
+}
 
-const availableTypes = computed(() => {
-  const typeSet = new Set(aircrafts.value.map(a => a.aircraftType).filter(Boolean))
-  return Array.from(typeSet)
-})
+// Loading state
+:deep(.el-loading-mask) {
+  border-radius: 8px;
+}
 
-const availableManufacturers = computed(() => {
-  const manufacturerSet = new Set(aircrafts.value.map(a => a.manufacturer).filter(Boolean))
-  return Array.from(manufacturerSet)
-})
+// Switch styling
+:deep(.el-switch) {
+  &.is-checked .el-switch__core {
+    background-color: #67c23a;
+  }
+}
 
-const filteredAircrafts = computed(() =>
+// Tag styling
+:deep(.el-tag) {
+  &.el-tag--primary {
+    background-color: #409eff;
+    border-color: #409eff;
+  }
+
+  &.el-tag--success {
+    background-color: #67c23a;
+    border-color: #67c23a;
+  }
+
+  &.el-tag--warning {
+    background-color: #e6a23c;
+    border-color: #e6a23c;
+  }
+
+  &.el-tag--danger {
+    background-color: #f56c6c;
+    border-color: #f56c6c;
+  }
+
+  &.el-tag--info {
+    background-color: #909399;
+    border-color: #909399;
+  }
+}
+
+// Button group styling
+.action-buttons {
+  :deep(.el-button) {
+    &:hover {
+      transform: translateY(-1px);
+    }
+  }
+}
+
+// Dialog animations
+:deep(.el-dialog) {
+  .el-dialog__header {
+    border-bottom: 1px solid #ebeef5;
+    padding-bottom: 1rem;
+  }
+
+  .el-dialog__body {
+    padding-top: 1.5rem;
+  }
+}
+
+// Empty state
+:deep(.el-table__empty-block) {
+  padding: 4rem 0;
+
+  .el-table__empty-text {
+    color: #909399;
+    font-size: 1rem;
+  }
+}
+
+// Tabs styling
+:deep(.el-tabs) {
+  .el-tabs__header {
+    margin-bottom: 1rem;
+  }
+
+  .el-tabs__nav-wrap {
+    &::after {
+      background-color: #ebeef5;
+    }
+  }
+
+  .el-tabs__active-bar {
+    background-color: #409eff;
+  }
+
+  .el-tabs__item {
+    &.is-active {
+      color: #409eff;
+    }
+
+    &:hover {
+      color: #409eff;
+    }
+  }
+}
+
+// Card hover effects
+:deep(.el-card) {
+  transition: all 0.3s ease;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+}
+</style>
