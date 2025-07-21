@@ -1,26 +1,111 @@
 <template>
-  <header class="app-header">
+  <div class="app-header">
+    <!-- Left Section -->
     <div class="header-left">
       <el-button
-        :icon="Expand"
-        circle
-        size="small"
-        @click="$emit('toggleSidebar')"
+        type="text"
+        :icon="collapsed ? Expand : Fold"
+        @click="$emit('toggle-sidebar')"
+        class="sidebar-toggle"
       />
+
+      <div class="logo-section">
+        <img src="/src/assets/images/logo.png" alt="Logo" class="logo" />
+        <span class="app-title">Uçuş Yönetim Sistemi</span>
+      </div>
     </div>
 
+    <!-- Center Section -->
+    <div class="header-center">
+      <el-input
+        v-model="searchQuery"
+        placeholder="Uçuş ara... (Ctrl+K)"
+        :prefix-icon="Search"
+        class="global-search"
+        @keyup.enter="handleSearch"
+        @focus="showSearchResults = true"
+        @blur="hideSearchResults"
+      >
+        <template #suffix>
+          <el-tag size="small" type="info">Ctrl+K</el-tag>
+        </template>
+      </el-input>
+
+      <!-- Search Results -->
+      <div v-if="showSearchResults && searchQuery" class="search-results">
+        <div v-if="searchResults.length === 0" class="search-empty">
+          <el-empty description="Sonuç bulunamadı" :image-size="60" />
+        </div>
+        <div v-else>
+          <div
+            v-for="result in searchResults"
+            :key="result.id"
+            class="search-item"
+            @click="selectSearchResult(result)"
+          >
+            <el-icon><component :is="result.icon" /></el-icon>
+            <div class="search-content">
+              <div class="search-title">{{ result.title }}</div>
+              <div class="search-subtitle">{{ result.subtitle }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Section -->
     <div class="header-right">
       <!-- Notifications -->
-      <el-badge :value="notificationCount" class="notification-badge">
-        <el-button :icon="Bell" circle size="small" @click="showNotifications" />
+      <el-badge :value="notificationCount" :hidden="notificationCount === 0" class="notification-badge">
+        <el-button
+          type="text"
+          :icon="Bell"
+          @click="showNotifications = true"
+          class="header-button"
+        />
       </el-badge>
 
+      <!-- Language Selector -->
+      <el-dropdown @command="handleLanguageChange" placement="bottom-end">
+        <el-button type="text" class="header-button">
+          <el-icon><Globe /></el-icon>
+          <span class="language-text">{{ currentLanguage.label }}</span>
+        </el-button>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item
+              v-for="lang in languages"
+              :key="lang.code"
+              :command="lang.code"
+              :class="{ active: currentLanguage.code === lang.code }"
+            >
+              <span class="language-flag">{{ lang.flag }}</span>
+              {{ lang.label }}
+            </el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
+
+      <!-- Theme Toggle -->
+      <el-button
+        type="text"
+        :icon="isDarkMode ? Sunny : Moon"
+        @click="toggleTheme"
+        class="header-button"
+      />
+
       <!-- User Menu -->
-      <el-dropdown @command="handleCommand">
+      <el-dropdown @command="handleUserMenuCommand" placement="bottom-end">
         <div class="user-info">
-          <el-avatar :size="32" :icon="UserFilled" />
-          <span class="username">{{ authStore.userName || 'Kullanıcı' }}</span>
-          <el-icon class="dropdown-icon"><ArrowDown /></el-icon>
+          <el-avatar
+            :src="user.avatar"
+            :size="32"
+            class="user-avatar"
+          >
+            {{ user.name?.charAt(0)?.toUpperCase() }}
+          </el-avatar>
+          <span class="user-name">{{ user.name }}</span>
+          <el-icon class="user-arrow"><ArrowDown /></el-icon>
         </div>
         <template #dropdown>
           <el-dropdown-menu>
@@ -43,159 +128,341 @@
 
     <!-- Notifications Drawer -->
     <el-drawer
-      v-model="notificationDrawer"
+      v-model="showNotifications"
       title="Bildirimler"
-      size="400px"
       direction="rtl"
+      size="350px"
     >
-      <div class="notifications-list">
-        <div v-if="notifications.length === 0" class="empty-notifications">
-          <el-empty description="Henüz bildirim yok" />
+      <div class="notifications-container">
+        <div v-if="notifications.length === 0" class="notifications-empty">
+          <el-empty description="Yeni bildirim yok" :image-size="80" />
         </div>
-        <div
-          v-else
-          v-for="notification in notifications"
-          :key="notification.id"
-          class="notification-item"
-          :class="{ unread: !notification.read }"
-        >
-          <div class="notification-content">
-            <div class="notification-title">{{ notification.title }}</div>
-            <div class="notification-message">{{ notification.message }}</div>
-            <div class="notification-time">{{ formatTime(notification.createdAt) }}</div>
+        <div v-else>
+          <div
+            v-for="notification in notifications"
+            :key="notification.id"
+            class="notification-item"
+            :class="{ unread: !notification.read }"
+            @click="markAsRead(notification)"
+          >
+            <div class="notification-icon" :class="notification.type">
+              <el-icon><component :is="getNotificationIcon(notification.type)" /></el-icon>
+            </div>
+            <div class="notification-content">
+              <div class="notification-title">{{ notification.title }}</div>
+              <div class="notification-message">{{ notification.message }}</div>
+              <div class="notification-time">{{ formatTime(notification.createdAt) }}</div>
+            </div>
           </div>
-          <el-button v-if="!notification.read" text @click="markAsRead(notification.id)">
-            Okundu olarak işaretle
-          </el-button>
         </div>
       </div>
     </el-drawer>
-  </header>
+  </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import {
-  Expand, Bell, ArrowDown, User, Setting, SwitchButton, UserFilled
-} from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
+import { useAppStore } from '@/stores/app'
+import { formatRelativeTime } from '@/utils/formatters'
+import {
+  Fold, Expand, Search, Bell, Globe, Sunny, Moon, User, Setting, SwitchButton,
+  ArrowDown, Position, InfoFilled, WarningFilled, SuccessFilled
+} from '@element-plus/icons-vue'
 
-defineProps({
-  sidebarCollapsed: {
+const props = defineProps({
+  collapsed: {
     type: Boolean,
     default: false
   }
 })
 
-defineEmits(['toggleSidebar'])
+const emit = defineEmits(['toggle-sidebar', 'logout'])
 
 const router = useRouter()
 const authStore = useAuthStore()
+const appStore = useAppStore()
 
-const notificationDrawer = ref(false)
+// Reactive state
+const searchQuery = ref('')
+const showSearchResults = ref(false)
+const showNotifications = ref(false)
+const searchResults = ref([])
+
+// Computed properties
+const user = computed(() => authStore.user || {
+  name: 'John Doe',
+  email: 'john@example.com',
+  avatar: ''
+})
+
+const isDarkMode = computed(() => appStore.theme === 'dark')
+
+const notificationCount = computed(() => {
+  return notifications.value.filter(n => !n.read).length
+})
+
+const currentLanguage = computed(() => {
+  return languages.value.find(lang => lang.code === appStore.language) || languages.value[0]
+})
+
+// Data
+const languages = ref([
+  { code: 'tr', label: 'Türkçe', flag: '🇹🇷' },
+  { code: 'en', label: 'English', flag: '🇺🇸' }
+])
+
 const notifications = ref([
   {
     id: 1,
+    type: 'info',
     title: 'Yeni Uçuş Eklendi',
-    message: 'TK123 numaralı uçuş sisteme eklendi.',
-    createdAt: new Date(),
+    message: 'TK1234 numaralı uçuş başarıyla eklendi.',
+    createdAt: new Date(Date.now() - 1000 * 60 * 5), // 5 minutes ago
     read: false
   },
   {
     id: 2,
-    title: 'Sistem Güncellemesi',
-    message: 'Sistem bakımı 22:00-06:00 arası yapılacak.',
-    createdAt: new Date(Date.now() - 3600000),
+    type: 'warning',
+    title: 'Uçuş Gecikmesi',
+    message: 'PC2105 numaralı uçuş 30 dakika gecikecek.',
+    createdAt: new Date(Date.now() - 1000 * 60 * 15), // 15 minutes ago
+    read: false
+  },
+  {
+    id: 3,
+    type: 'success',
+    title: 'Rapor Hazır',
+    message: 'Aylık uçuş raporu oluşturuldu.',
+    createdAt: new Date(Date.now() - 1000 * 60 * 60), // 1 hour ago
     read: true
   }
 ])
 
-const notificationCount = computed(() =>
-  notifications.value.filter(n => !n.read).length
-)
+// Methods
+const handleSearch = () => {
+  if (!searchQuery.value.trim()) return
 
-const showNotifications = () => {
-  notificationDrawer.value = true
+  // Mock search results
+  searchResults.value = [
+    {
+      id: 1,
+      title: 'TK1234',
+      subtitle: 'İstanbul → Ankara',
+      icon: 'Position',
+      type: 'flight',
+      path: '/flights/1'
+    },
+    {
+      id: 2,
+      title: 'Turkish Airlines',
+      subtitle: 'Havayolu Yönetimi',
+      icon: 'Ship',
+      type: 'airline',
+      path: '/airlines'
+    }
+  ].filter(item =>
+    item.title.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
+    item.subtitle.toLowerCase().includes(searchQuery.value.toLowerCase())
+  )
 }
 
-const markAsRead = (id) => {
-  const notification = notifications.value.find(n => n.id === id)
-  if (notification) {
-    notification.read = true
+const selectSearchResult = (result) => {
+  router.push(result.path)
+  searchQuery.value = ''
+  showSearchResults.value = false
+}
+
+const hideSearchResults = () => {
+  setTimeout(() => {
+    showSearchResults.value = false
+  }, 200)
+}
+
+const handleLanguageChange = (language) => {
+  appStore.setLanguage(language)
+}
+
+const toggleTheme = () => {
+  appStore.toggleTheme()
+}
+
+const handleUserMenuCommand = (command) => {
+  switch (command) {
+    case 'profile':
+      router.push('/profile')
+      break
+    case 'settings':
+      router.push('/settings')
+      break
+    case 'logout':
+      emit('logout')
+      break
   }
+}
+
+const markAsRead = (notification) => {
+  notification.read = true
+}
+
+const getNotificationIcon = (type) => {
+  const iconMap = {
+    info: InfoFilled,
+    warning: WarningFilled,
+    success: SuccessFilled,
+    error: WarningFilled
+  }
+  return iconMap[type] || InfoFilled
 }
 
 const formatTime = (date) => {
-  const now = new Date()
-  const diff = now - date
-  const minutes = Math.floor(diff / 60000)
-  const hours = Math.floor(minutes / 60)
-  const days = Math.floor(hours / 24)
-
-  if (days > 0) return `${days} gün önce`
-  if (hours > 0) return `${hours} saat önce`
-  if (minutes > 0) return `${minutes} dakika önce`
-  return 'Şimdi'
+  return formatRelativeTime(date)
 }
 
-const handleCommand = async (command) => {
-  switch (command) {
-    case 'profile':
-      ElMessage.info('Profil sayfası yakında eklenecek')
-      break
-    case 'settings':
-      ElMessage.info('Ayarlar sayfası yakında eklenecek')
-      break
-    case 'logout':
-      try {
-        await ElMessageBox.confirm('Çıkış yapmak istediğinizden emin misiniz?', 'Onay', {
-          confirmButtonText: 'Evet',
-          cancelButtonText: 'Hayır',
-          type: 'warning'
-        })
-
-        await authStore.logout()
-        ElMessage.success('Başarıyla çıkış yapıldı')
-        router.push('/login')
-      } catch (error) {
-        if (error !== 'cancel') {
-          ElMessage.error('Çıkış yapılırken hata oluştu')
-        }
-      }
-      break
+// Global search shortcut
+const handleKeydown = (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+    e.preventDefault()
+    document.querySelector('.global-search input')?.focus()
   }
 }
+
+// Lifecycle
+onMounted(() => {
+  document.addEventListener('keydown', handleKeydown)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('keydown', handleKeydown)
+})
 </script>
 
 <style scoped>
 .app-header {
-  height: 60px;
-  background: white;
-  border-bottom: 1px solid #e4e7ed;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  height: 100%;
   padding: 0 24px;
-  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.08);
-  position: sticky;
-  top: 0;
-  z-index: 999;
+  background: #fff;
 }
 
 .header-left {
   display: flex;
   align-items: center;
+  gap: 16px;
+}
+
+.sidebar-toggle {
+  font-size: 18px;
+  color: #606266;
+  padding: 8px;
+}
+
+.logo-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo {
+  height: 32px;
+  width: auto;
+}
+
+.app-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #303133;
+  white-space: nowrap;
+}
+
+.header-center {
+  flex: 1;
+  max-width: 400px;
+  margin: 0 24px;
+  position: relative;
+}
+
+.global-search {
+  width: 100%;
+}
+
+.search-results {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: white;
+  border: 1px solid #e4e7ed;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.search-empty {
+  padding: 20px;
+}
+
+.search-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #f5f7fa;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.search-item:hover {
+  background-color: #f5f7fa;
+}
+
+.search-item:last-child {
+  border-bottom: none;
+}
+
+.search-content {
+  margin-left: 12px;
+  flex: 1;
+}
+
+.search-title {
+  font-weight: 500;
+  color: #303133;
+  font-size: 14px;
+}
+
+.search-subtitle {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 2px;
 }
 
 .header-right {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 8px;
+}
+
+.header-button {
+  padding: 8px;
+  font-size: 16px;
+  color: #606266;
 }
 
 .notification-badge {
+  margin-right: 8px;
+}
+
+.language-text {
+  margin-left: 6px;
+  font-size: 14px;
+}
+
+.language-flag {
   margin-right: 8px;
 }
 
@@ -203,9 +470,9 @@ const handleCommand = async (command) => {
   display: flex;
   align-items: center;
   gap: 8px;
-  cursor: pointer;
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: 6px;
+  cursor: pointer;
   transition: background-color 0.2s;
 }
 
@@ -213,30 +480,46 @@ const handleCommand = async (command) => {
   background-color: #f5f7fa;
 }
 
-.username {
-  font-size: 14px;
-  color: #303133;
-  font-weight: 500;
+.user-avatar {
+  flex-shrink: 0;
 }
 
-.dropdown-icon {
+.user-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #303133;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-arrow {
   font-size: 12px;
   color: #909399;
 }
 
-.notifications-list {
+.notifications-container {
   height: 100%;
-  overflow-y: auto;
+}
+
+.notifications-empty {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 200px;
 }
 
 .notification-item {
+  display: flex;
   padding: 16px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid #f5f7fa;
+  cursor: pointer;
   transition: background-color 0.2s;
 }
 
 .notification-item:hover {
-  background-color: #f8f9fa;
+  background-color: #f5f7fa;
 }
 
 .notification-item.unread {
@@ -244,40 +527,86 @@ const handleCommand = async (command) => {
   border-left: 3px solid #409eff;
 }
 
+.notification-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 12px;
+  flex-shrink: 0;
+}
+
+.notification-icon.info {
+  background-color: #e1f3ff;
+  color: #409eff;
+}
+
+.notification-icon.warning {
+  background-color: #fdf6ec;
+  color: #e6a23c;
+}
+
+.notification-icon.success {
+  background-color: #f0f9ff;
+  color: #67c23a;
+}
+
+.notification-icon.error {
+  background-color: #fef0f0;
+  color: #f56c6c;
+}
+
 .notification-content {
-  margin-bottom: 8px;
+  flex: 1;
 }
 
 .notification-title {
-  font-weight: 600;
+  font-weight: 500;
   color: #303133;
+  font-size: 14px;
   margin-bottom: 4px;
 }
 
 .notification-message {
   color: #606266;
-  font-size: 14px;
-  margin-bottom: 8px;
+  font-size: 13px;
+  line-height: 1.4;
+  margin-bottom: 4px;
 }
 
 .notification-time {
-  font-size: 12px;
   color: #909399;
+  font-size: 12px;
 }
 
-.empty-notifications {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 200px;
-}
-
+/* Responsive design */
 @media (max-width: 768px) {
   .app-header {
     padding: 0 16px;
   }
 
-  .username {
+  .header-center {
+    margin: 0 16px;
+    max-width: 200px;
+  }
+
+  .app-title {
+    display: none;
+  }
+
+  .language-text {
+    display: none;
+  }
+
+  .user-name {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .header-center {
     display: none;
   }
 }
