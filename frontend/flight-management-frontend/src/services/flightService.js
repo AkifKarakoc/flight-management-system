@@ -6,330 +6,333 @@ class FlightService {
     this.baseURL = API_BASE_URLS.FLIGHT_SERVICE
   }
 
-  // Create a flight service API client with base URL
-  createClient() {
-    return {
-      get: (url, config = {}) => api.client.get(`${this.baseURL}${url}`, config),
-      post: (url, data, config = {}) => api.client.post(`${this.baseURL}${url}`, data, config),
-      put: (url, data, config = {}) => api.client.put(`${this.baseURL}${url}`, data, config),
-      delete: (url, config = {}) => api.client.delete(`${this.baseURL}${url}`, config),
-      patch: (url, data, config = {}) => api.client.patch(`${this.baseURL}${url}`, data, config)
+  // Get all flights with filtering and pagination
+  async getAll(params = {}) {
+    try {
+      const response = await api.client.get(`${this.baseURL}${API_ENDPOINTS.FLIGHTS}`, {
+        params: {
+          page: params.page || 0,
+          size: params.size || 20,
+          sort: params.sort || 'scheduledDeparture,desc',
+          search: params.search || '',
+          airlineId: params.airlineId || '',
+          originAirportId: params.originAirportId || '',
+          destinationAirportId: params.destinationAirportId || '',
+          flightDate: params.flightDate || '',
+          status: params.status || '',
+          type: params.type || '',
+          ...params.filters
+        }
+      })
+      return response.data
+    } catch (error) {
+      console.error('Error fetching flights:', error)
+      throw error
     }
   }
 
-  // Flight CRUD Operations
-  async getAllFlights(params = {}) {
-    const client = this.createClient()
-    return client.get(API_ENDPOINTS.FLIGHTS, { params })
+  // Get flight by ID
+  async getById(id) {
+    try {
+      const response = await api.client.get(`${this.baseURL}${API_ENDPOINTS.FLIGHTS}/${id}`)
+      return response.data
+    } catch (error) {
+      console.error('Error fetching flight:', error)
+      throw error
+    }
   }
 
-  async getFlightById(id) {
-    const client = this.createClient()
-    return client.get(`${API_ENDPOINTS.FLIGHTS}/${id}`)
+  // Create new flight
+  async create(flightData) {
+    try {
+      const response = await api.client.post(`${this.baseURL}${API_ENDPOINTS.FLIGHTS}`, flightData)
+      return response.data
+    } catch (error) {
+      console.error('Error creating flight:', error)
+      throw error
+    }
   }
 
-  async createFlight(flightData) {
-    const client = this.createClient()
-    return client.post(API_ENDPOINTS.FLIGHTS, flightData)
+  // Update existing flight
+  async update(id, flightData) {
+    try {
+      const response = await api.client.put(`${this.baseURL}${API_ENDPOINTS.FLIGHTS}/${id}`, flightData)
+      return response.data
+    } catch (error) {
+      console.error('Error updating flight:', error)
+      throw error
+    }
   }
 
-  async updateFlight(id, flightData) {
-    const client = this.createClient()
-    return client.put(`${API_ENDPOINTS.FLIGHTS}/${id}`, flightData)
+  // Delete flight
+  async delete(id) {
+    try {
+      await api.client.delete(`${this.baseURL}${API_ENDPOINTS.FLIGHTS}/${id}`)
+      return true
+    } catch (error) {
+      console.error('Error deleting flight:', error)
+      throw error
+    }
   }
 
-  async deleteFlight(id) {
-    const client = this.createClient()
-    return client.delete(`${API_ENDPOINTS.FLIGHTS}/${id}`)
-  }
+  // Bulk upload flights from CSV
+  async uploadCsv(file, options = {}) {
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
 
-  // Flight Search and Filtering
-  async getFlightsByDate(date, params = {}) {
-    const client = this.createClient()
-    return client.get(`${API_ENDPOINTS.FLIGHTS}/date/${date}`, { params })
-  }
-
-  async getFlightsByAirline(airlineId, params = {}) {
-    const client = this.createClient()
-    return client.get(`${API_ENDPOINTS.FLIGHTS}/airline/${airlineId}`, { params })
-  }
-
-  async getFlightsByAirport(airportId, params = {}) {
-    const client = this.createClient()
-    return client.get(`${API_ENDPOINTS.FLIGHTS}/airport/${airportId}`, { params })
-  }
-
-  async getFlightsByStatus(status, params = {}) {
-    const client = this.createClient()
-    return client.get(`${API_ENDPOINTS.FLIGHTS}/status/${status}`, { params })
-  }
-
-  async getDelayedFlights(minDelayMinutes = 30, params = {}) {
-    const client = this.createClient()
-    return client.get(`${API_ENDPOINTS.FLIGHTS}/delayed`, {
-      params: { minDelayMinutes, ...params }
-    })
-  }
-
-  async searchFlights(searchQuery, params = {}) {
-    const client = this.createClient()
-    return client.get(`${API_ENDPOINTS.FLIGHTS}/search`, {
-      params: { q: searchQuery, ...params }
-    })
-  }
-
-  // Flight Status Management
-  async updateFlightStatus(id, status, note = '') {
-    const client = this.createClient()
-    return client.put(`${API_ENDPOINTS.FLIGHTS}/${id}/status`, null, {
-      params: { status, note }
-    })
-  }
-
-  async updateActualDeparture(id, actualDeparture) {
-    const client = this.createClient()
-    return client.put(`${API_ENDPOINTS.FLIGHTS}/${id}/actual-departure`, {
-      actualDeparture
-    })
-  }
-
-  async updateActualArrival(id, actualArrival) {
-    const client = this.createClient()
-    return client.put(`${API_ENDPOINTS.FLIGHTS}/${id}/actual-arrival`, {
-      actualArrival
-    })
-  }
-
-  // Bulk Operations
-  async uploadFlights(csvFile, options = {}) {
-    const client = this.createClient()
-    const formData = new FormData()
-    formData.append('file', csvFile)
-
-    // Add options to form data
-    Object.keys(options).forEach(key => {
-      formData.append(key, options[key])
-    })
-
-    return client.post(API_ENDPOINTS.FLIGHT_UPLOAD, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
+      if (options.skipValidation) {
+        formData.append('skipValidation', 'true')
       }
-    })
-  }
-
-  async bulkUpdateStatus(flightIds, status, note = '') {
-    const client = this.createClient()
-    return client.put(`${API_ENDPOINTS.FLIGHTS}/bulk/status`, {
-      flightIds,
-      status,
-      note
-    })
-  }
-
-  async bulkDelete(flightIds) {
-    const client = this.createClient()
-    return client.delete(`${API_ENDPOINTS.FLIGHTS}/bulk`, {
-      data: { flightIds }
-    })
-  }
-
-  // Statistics and Reports
-  async getFlightStats(date = null) {
-    const client = this.createClient()
-    const url = date
-      ? `${API_ENDPOINTS.FLIGHT_STATS}/dashboard/${date}`
-      : `${API_ENDPOINTS.FLIGHT_STATS}/dashboard`
-    return client.get(url)
-  }
-
-  async getFlightCountByDate(date) {
-    const client = this.createClient()
-    return client.get(`${API_ENDPOINTS.FLIGHT_STATS}/count/date/${date}`)
-  }
-
-  async getFlightCountByAirline(airlineId, date = null) {
-    const client = this.createClient()
-    const url = date
-      ? `${API_ENDPOINTS.FLIGHT_STATS}/count/airline/${airlineId}/date/${date}`
-      : `${API_ENDPOINTS.FLIGHT_STATS}/count/airline/${airlineId}`
-    return client.get(url)
-  }
-
-  async getFlightCountByStatus(status, date = null) {
-    const client = this.createClient()
-    const url = date
-      ? `${API_ENDPOINTS.FLIGHT_STATS}/count/status/${status}/date/${date}`
-      : `${API_ENDPOINTS.FLIGHT_STATS}/count/status/${status}`
-    return client.get(url)
-  }
-
-  async getMonthlyStats(year, month) {
-    const client = this.createClient()
-    return client.get(`${API_ENDPOINTS.FLIGHT_STATS}/monthly/${year}/${month}`)
-  }
-
-  async getAirlinePerformance(startDate, endDate) {
-    const client = this.createClient()
-    return client.get(`${API_ENDPOINTS.FLIGHT_STATS}/airline-performance`, {
-      params: { startDate, endDate }
-    })
-  }
-
-  // Real-time Updates
-  async getRecentUpdates(limit = 10) {
-    const client = this.createClient()
-    return client.get(`${API_ENDPOINTS.FLIGHTS}/recent-updates`, {
-      params: { limit }
-    })
-  }
-
-  // Export Functions
-  async exportFlights(params = {}, format = 'csv') {
-    const client = this.createClient()
-    return client.get(`${API_ENDPOINTS.FLIGHTS}/export`, {
-      params: { ...params, format },
-      responseType: 'blob'
-    })
-  }
-
-  async exportFlightReport(startDate, endDate, format = 'pdf') {
-    const client = this.createClient()
-    return client.get(`${API_ENDPOINTS.FLIGHTS}/report/export`, {
-      params: { startDate, endDate, format },
-      responseType: 'blob'
-    })
-  }
-
-  // Validation Helper
-  async validateFlightData(flightData) {
-    const client = this.createClient()
-    return client.post(`${API_ENDPOINTS.FLIGHTS}/validate`, flightData)
-  }
-
-  // Archive Service Integration
-  async getArchivedFlights(params = {}) {
-    return api.client.get(`${API_BASE_URLS.ARCHIVE_SERVICE}${API_ENDPOINTS.ARCHIVE_FLIGHTS}`, {
-      params
-    })
-  }
-
-  async getRecentArchivedFlights(limit = 10) {
-    return api.client.get(`${API_BASE_URLS.ARCHIVE_SERVICE}${API_ENDPOINTS.ARCHIVE_FLIGHTS}/recent`, {
-      params: { limit }
-    })
-  }
-
-  // Helper Methods
-  formatFlightNumber(flightNumber) {
-    // Format: TK1234 -> TK 1234
-    return flightNumber.replace(/([A-Z]+)(\d+)/, '$1 $2')
-  }
-
-  calculateFlightDuration(departure, arrival) {
-    const departureTime = new Date(departure)
-    const arrivalTime = new Date(arrival)
-    const duration = arrivalTime - departureTime
-
-    const hours = Math.floor(duration / (1000 * 60 * 60))
-    const minutes = Math.floor((duration % (1000 * 60 * 60)) / (1000 * 60))
-
-    return {
-      totalMinutes: Math.floor(duration / (1000 * 60)),
-      hours,
-      minutes,
-      formatted: `${hours}s ${minutes}dk`
-    }
-  }
-
-  calculateDelay(scheduledTime, actualTime) {
-    if (!actualTime) return null
-
-    const scheduled = new Date(scheduledTime)
-    const actual = new Date(actualTime)
-    const delay = actual - scheduled
-
-    if (delay <= 0) return null
-
-    const minutes = Math.floor(delay / (1000 * 60))
-    const hours = Math.floor(minutes / 60)
-    const remainingMinutes = minutes % 60
-
-    return {
-      totalMinutes: minutes,
-      hours,
-      minutes: remainingMinutes,
-      formatted: hours > 0 ? `${hours}s ${remainingMinutes}dk` : `${minutes}dk`
-    }
-  }
-
-  getFlightStatusColor(status) {
-    const colors = {
-      'SCHEDULED': '#909399',
-      'BOARDING': '#E6A23C',
-      'DEPARTED': '#409EFF',
-      'IN_FLIGHT': '#409EFF',
-      'ARRIVED': '#67C23A',
-      'CANCELLED': '#F56C6C',
-      'DELAYED': '#E6A23C'
-    }
-    return colors[status] || '#909399'
-  }
-
-  getFlightStatusText(status) {
-    const texts = {
-      'SCHEDULED': 'Planlandı',
-      'BOARDING': 'Boarding',
-      'DEPARTED': 'Kalktı',
-      'IN_FLIGHT': 'Uçuşta',
-      'ARRIVED': 'Vardı',
-      'CANCELLED': 'İptal',
-      'DELAYED': 'Gecikmeli'
-    }
-    return texts[status] || status
-  }
-
-  getFlightTypeText(type) {
-    const types = {
-      'PASSENGER': 'Yolcu',
-      'CARGO': 'Kargo',
-      'DOMESTIC': 'İç Hat',
-      'INTERNATIONAL': 'Dış Hat'
-    }
-    return types[type] || type
-  }
-
-  // Real-time WebSocket connection helper
-  createWebSocketConnection(onMessage, onError = null) {
-    const wsUrl = `ws://localhost:8082/ws/flights`
-    const socket = new WebSocket(wsUrl)
-
-    socket.onopen = () => {
-      console.log('Flight WebSocket connected')
-    }
-
-    socket.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data)
-        onMessage(data)
-      } catch (error) {
-        console.error('WebSocket message parsing error:', error)
+      if (options.overwriteExisting) {
+        formData.append('overwriteExisting', 'true')
       }
-    }
 
-    socket.onerror = (error) => {
-      console.error('Flight WebSocket error:', error)
-      if (onError) onError(error)
+      const response = await api.client.post(
+        `${this.baseURL}${API_ENDPOINTS.FLIGHT_UPLOAD}`,
+        formData,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          },
+          timeout: 60000 // 60 seconds for file upload
+        }
+      )
+      return response.data
+    } catch (error) {
+      console.error('Error uploading CSV:', error)
+      throw error
     }
+  }
 
-    socket.onclose = () => {
-      console.log('Flight WebSocket disconnected')
+  // Get flight statistics
+  async getStats(params = {}) {
+    try {
+      const response = await api.client.get(`${this.baseURL}${API_ENDPOINTS.FLIGHT_STATS}`, {
+        params: {
+          startDate: params.startDate || '',
+          endDate: params.endDate || '',
+          airlineId: params.airlineId || '',
+          type: params.type || '',
+          groupBy: params.groupBy || 'day'
+        }
+      })
+      return response.data
+    } catch (error) {
+      console.error('Error fetching flight stats:', error)
+      throw error
     }
+  }
 
-    return socket
+  // Search flights
+  async search(query, filters = {}) {
+    try {
+      const response = await api.client.get(`${this.baseURL}${API_ENDPOINTS.FLIGHTS}/search`, {
+        params: {
+          q: query,
+          ...filters
+        }
+      })
+      return response.data
+    } catch (error) {
+      console.error('Error searching flights:', error)
+      throw error
+    }
+  }
+
+  // Get flights by airline
+  async getByAirline(airlineId, params = {}) {
+    try {
+      const response = await api.client.get(
+        `${this.baseURL}${API_ENDPOINTS.FLIGHTS}/airline/${airlineId}`,
+        { params }
+      )
+      return response.data
+    } catch (error) {
+      console.error('Error fetching flights by airline:', error)
+      throw error
+    }
+  }
+
+  // Get flights by route
+  async getByRoute(originAirportId, destinationAirportId, params = {}) {
+    try {
+      const response = await api.client.get(
+        `${this.baseURL}${API_ENDPOINTS.FLIGHTS}/route`,
+        {
+          params: {
+            originAirportId,
+            destinationAirportId,
+            ...params
+          }
+        }
+      )
+      return response.data
+    } catch (error) {
+      console.error('Error fetching flights by route:', error)
+      throw error
+    }
+  }
+
+  // Get flights by aircraft
+  async getByAircraft(aircraftId, params = {}) {
+    try {
+      const response = await api.client.get(
+        `${this.baseURL}${API_ENDPOINTS.FLIGHTS}/aircraft/${aircraftId}`,
+        { params }
+      )
+      return response.data
+    } catch (error) {
+      console.error('Error fetching flights by aircraft:', error)
+      throw error
+    }
+  }
+
+  // Get recent flights
+  async getRecent(limit = 10) {
+    try {
+      const response = await api.client.get(`${this.baseURL}${API_ENDPOINTS.FLIGHTS}/recent`, {
+        params: { limit }
+      })
+      return response.data
+    } catch (error) {
+      console.error('Error fetching recent flights:', error)
+      throw error
+    }
+  }
+
+  // Update flight status
+  async updateStatus(id, status, notes = '') {
+    try {
+      const response = await api.client.patch(
+        `${this.baseURL}${API_ENDPOINTS.FLIGHTS}/${id}/status`,
+        { status, notes }
+      )
+      return response.data
+    } catch (error) {
+      console.error('Error updating flight status:', error)
+      throw error
+    }
+  }
+
+  // Cancel flight
+  async cancel(id, reason = '') {
+    try {
+      const response = await api.client.patch(
+        `${this.baseURL}${API_ENDPOINTS.FLIGHTS}/${id}/cancel`,
+        { reason }
+      )
+      return response.data
+    } catch (error) {
+      console.error('Error cancelling flight:', error)
+      throw error
+    }
+  }
+
+  // Delay flight
+  async delay(id, newDepartureTime, reason = '') {
+    try {
+      const response = await api.client.patch(
+        `${this.baseURL}${API_ENDPOINTS.FLIGHTS}/${id}/delay`,
+        {
+          newDepartureTime,
+          reason
+        }
+      )
+      return response.data
+    } catch (error) {
+      console.error('Error delaying flight:', error)
+      throw error
+    }
+  }
+
+  // Get flight history/logs
+  async getHistory(id) {
+    try {
+      const response = await api.client.get(`${this.baseURL}${API_ENDPOINTS.FLIGHTS}/${id}/history`)
+      return response.data
+    } catch (error) {
+      console.error('Error fetching flight history:', error)
+      throw error
+    }
+  }
+
+  // Validate flight data
+  async validate(flightData) {
+    try {
+      const response = await api.client.post(
+        `${this.baseURL}${API_ENDPOINTS.FLIGHTS}/validate`,
+        flightData
+      )
+      return response.data
+    } catch (error) {
+      console.error('Error validating flight data:', error)
+      throw error
+    }
+  }
+
+  // Check flight conflicts
+  async checkConflicts(flightData) {
+    try {
+      const response = await api.client.post(
+        `${this.baseURL}${API_ENDPOINTS.FLIGHTS}/check-conflicts`,
+        flightData
+      )
+      return response.data
+    } catch (error) {
+      console.error('Error checking flight conflicts:', error)
+      throw error
+    }
+  }
+
+  // Get available time slots for aircraft
+  async getAvailableSlots(aircraftId, date) {
+    try {
+      const response = await api.client.get(
+        `${this.baseURL}${API_ENDPOINTS.FLIGHTS}/available-slots`,
+        {
+          params: { aircraftId, date }
+        }
+      )
+      return response.data
+    } catch (error) {
+      console.error('Error fetching available slots:', error)
+      throw error
+    }
+  }
+
+  // Export flights to CSV
+  async exportCsv(filters = {}) {
+    try {
+      const response = await api.client.get(
+        `${this.baseURL}${API_ENDPOINTS.FLIGHTS}/export`,
+        {
+          params: filters,
+          responseType: 'blob'
+        }
+      )
+      return response.data
+    } catch (error) {
+      console.error('Error exporting flights:', error)
+      throw error
+    }
+  }
+
+  // Get flight template for CSV upload
+  async getTemplate() {
+    try {
+      const response = await api.client.get(
+        `${this.baseURL}${API_ENDPOINTS.FLIGHTS}/template`,
+        { responseType: 'blob' }
+      )
+      return response.data
+    } catch (error) {
+      console.error('Error downloading template:', error)
+      throw error
+    }
   }
 }
 
-// Create singleton instance
+// Create and export singleton instance
 export const flightService = new FlightService()
 export default flightService
