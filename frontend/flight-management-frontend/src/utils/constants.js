@@ -84,8 +84,61 @@ export const PAGINATION = {
   PAGE_SIZES: [10, 20, 50, 100]
 }
 
-// Date Formats
+// Date Formats (devamı)
 export const DATE_FORMATS = {
   DATE: 'YYYY-MM-DD',
   DATETIME: 'YYYY-MM-DD HH:mm:ss',
-  DISPLAY_DATE:
+  DISPLAY_DATE: 'DD.MM.YYYY',
+  DISPLAY_DATETIME: 'DD.MM.YYYY HH:mm',
+  TIME: 'HH:mm'
+}
+
+// Validation Rules
+export const VALIDATION_RULES = {
+  FLIGHT_NUMBER: /^[A-Z]{2}[0-9]{1,4}$/,
+  ICAO_CODE: /^[A-Z]{4}$/,
+  IATA_CODE: /^[A-Z]{3}$/,
+  PHONE: /^[0-9]{10,15}$/,
+  EMAIL: /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+}
+
+// Error Messages
+export const ERROR_MESSAGES = {
+  REQUIRED: 'Bu alan zorunludur',
+  EMAIL_INVALID: 'Geçerli bir e-posta adresi girin',
+  PHONE_INVALID: 'Geçerli bir telefon numarası girin',
+  FLIGHT_NUMBER_INVALID: 'Uçuş numarası formatı: AA1234',
+  ICAO_INVALID: 'ICAO kodu 4 harften oluşmalıdır',
+  IATA_INVALID: 'IATA kodu 3 harften oluşmalıdır',
+  MIN_LENGTH: (min) => `En az ${min} karakter olmalıdır`,
+  MAX_LENGTH: (max) => `En fazla ${max} karakter olmalıdır`,
+  NUMBER_MIN: (min) => `En az ${min} olmalıdır`,
+  NUMBER_MAX: (max) => `En fazla ${max} olmalıdır`
+}
+
+// Success Messages
+export const SUCCESS_MESSAGES = {
+  CREATED: 'Başarıyla oluşturuldu',
+  UPDATED: 'Başarıyla güncellendi',
+  DELETED: 'Başarıyla silindi',
+  SAVED: 'Başarıyla kaydedildi',
+  LOGIN: 'Başarıyla giriş yapıldı',
+  LOGOUT: 'Başarıyla çıkış yapıldı'
+}
+
+// Chart Colors
+export const CHART_COLORS = {
+  PRIMARY: '#409eff',
+  SUCCESS: '#67c23a',
+  WARNING: '#e6a23c',
+  DANGER: '#f56c6c',
+  INFO: '#909399',
+  GRADIENT: ['#409eff', '#67c23a', '#e6a23c', '#f56c6c', '#909399']
+}
+
+// File Upload
+export const FILE_UPLOAD = {
+  MAX_SIZE: 10 * 1024 * 1024, // 10MB
+  ALLOWED_TYPES: ['.csv', '.xlsx', '.xls'],
+  IMAGE_TYPES: ['.jpg', '.jpeg', '.png', '.gif']
+}
