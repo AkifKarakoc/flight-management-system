@@ -190,46 +190,84 @@ public class FlightArchiveService {
     }
 
     private LocalDate parseFlightDate(Object dateObj) {
+        log.debug("Parsing flight date from object: {} (type: {})", dateObj, dateObj != null ? dateObj.getClass().getSimpleName() : "null");
+
         if (dateObj == null) return null;
 
         try {
             if (dateObj instanceof List) {
                 List<Integer> dateList = (List<Integer>) dateObj;
+                log.debug("Date list: {}", dateList);
                 if (dateList.size() >= 3) {
-                    return LocalDate.of(dateList.get(0), dateList.get(1), dateList.get(2));
+                    LocalDate result = LocalDate.of(dateList.get(0), dateList.get(1), dateList.get(2));
+                    log.info("Successfully parsed LocalDate: {}", result);
+                    return result;
                 }
             } else if (dateObj instanceof String) {
-                return LocalDate.parse((String) dateObj);
+                LocalDate result = LocalDate.parse((String) dateObj);
+                log.info("Parsed LocalDate from string: {}", result);
+                return result;
             }
+
+            log.warn("Unsupported date object type: {} - {}", dateObj.getClass(), dateObj);
         } catch (Exception e) {
-            log.warn("Failed to parse flight date: {}", dateObj, e);
+            log.error("Failed to parse flight date: {}", dateObj, e);
         }
 
         return null;
     }
 
     private LocalDateTime parseFlightDateTime(Object dateTimeObj) {
-        if (dateTimeObj == null) return null;
+        log.debug("Parsing flight datetime from object: {} (type: {})", dateTimeObj, dateTimeObj != null ? dateTimeObj.getClass().getSimpleName() : "null");
+
+        if (dateTimeObj == null) {
+            log.debug("DateTime object is null, returning null");
+            return null;
+        }
 
         try {
             if (dateTimeObj instanceof List) {
                 List<Integer> dateTimeList = (List<Integer>) dateTimeObj;
+                log.debug("DateTime list: {}", dateTimeList);
+
                 if (dateTimeList.size() >= 5) {
-                    return LocalDateTime.of(
+                    // Full datetime: [year, month, day, hour, minute]
+                    LocalDateTime result = LocalDateTime.of(
                             dateTimeList.get(0), // year
                             dateTimeList.get(1), // month
                             dateTimeList.get(2), // day
                             dateTimeList.get(3), // hour
                             dateTimeList.get(4)  // minute
                     );
+                    log.info("Successfully parsed LocalDateTime (5 elements): {}", result);
+                    return result;
+                } else if (dateTimeList.size() >= 6) {
+                    // Full datetime with seconds: [year, month, day, hour, minute, second]
+                    LocalDateTime result = LocalDateTime.of(
+                            dateTimeList.get(0), // year
+                            dateTimeList.get(1), // month
+                            dateTimeList.get(2), // day
+                            dateTimeList.get(3), // hour
+                            dateTimeList.get(4), // minute
+                            dateTimeList.get(5)  // second
+                    );
+                    log.info("Successfully parsed LocalDateTime (6 elements): {}", result);
+                    return result;
                 } else if (dateTimeList.size() >= 3) {
-                    return LocalDate.of(dateTimeList.get(0), dateTimeList.get(1), dateTimeList.get(2)).atStartOfDay();
+                    // Date only: [year, month, day] - convert to start of day
+                    LocalDateTime result = LocalDate.of(dateTimeList.get(0), dateTimeList.get(1), dateTimeList.get(2)).atStartOfDay();
+                    log.info("Parsed LocalDateTime from date (3 elements): {}", result);
+                    return result;
                 }
             } else if (dateTimeObj instanceof String) {
-                return LocalDateTime.parse((String) dateTimeObj);
+                LocalDateTime result = LocalDateTime.parse((String) dateTimeObj);
+                log.info("Parsed LocalDateTime from string: {}", result);
+                return result;
             }
+
+            log.warn("Unsupported datetime object type: {} - {}", dateTimeObj.getClass(), dateTimeObj);
         } catch (Exception e) {
-            log.warn("Failed to parse flight datetime: {}", dateTimeObj, e);
+            log.error("Failed to parse flight datetime: {}", dateTimeObj, e);
         }
 
         return null;
@@ -261,30 +299,6 @@ public class FlightArchiveService {
         Object value = map.get(key);
         if (value instanceof Boolean) {
             return (Boolean) value;
-        }
-        return null;
-    }
-
-    private LocalDate getLocalDateValue(Map<String, Object> map, String key) {
-        Object value = map.get(key);
-        if (value != null) {
-            try {
-                return LocalDate.parse(value.toString());
-            } catch (Exception e) {
-                log.warn("Failed to parse LocalDate: {}", value);
-            }
-        }
-        return null;
-    }
-
-    private LocalDateTime getLocalDateTimeValue(Map<String, Object> map, String key) {
-        Object value = map.get(key);
-        if (value != null) {
-            try {
-                return LocalDateTime.parse(value.toString());
-            } catch (Exception e) {
-                log.warn("Failed to parse LocalDateTime: {}", value);
-            }
         }
         return null;
     }

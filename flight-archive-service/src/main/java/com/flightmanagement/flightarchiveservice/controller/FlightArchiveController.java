@@ -86,4 +86,6 @@ public class FlightArchiveController {
         FlightStatsResponse stats = flightArchiveService.getFlightStatistics(date);
         return ResponseEntity.ok(stats);
     }
+
+
 }
