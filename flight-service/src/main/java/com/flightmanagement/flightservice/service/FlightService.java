@@ -15,10 +15,14 @@ import com.flightmanagement.flightservice.repository.FlightRepository;
 import com.flightmanagement.flightservice.validator.FlightValidator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.flightmanagement.flightservice.dto.response.stats.FlightChartDataDto;
+import com.flightmanagement.flightservice.dto.response.stats.FlightTypeDistributionDto;
+import java.time.temporal.ChronoUnit;
+import java.util.stream.Stream;
+import java.util.Map;
+import java.util.HashMap;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -36,6 +40,7 @@ public class FlightService {
     private final FlightValidator flightValidator;
     private final ReferenceDataService referenceDataService;
     private final KafkaProducerService kafkaProducerService;
+    private final WebSocketMessageService webSocketMessageService;
 
     public List<FlightResponse> getAllFlights() {
         log.debug("Fetching all flights");
@@ -104,6 +109,7 @@ public class FlightService {
 
         // Kafka event
         kafkaProducerService.sendFlightEvent("FLIGHT_CREATED", flight);
+        webSocketMessageService.sendFlightUpdate("CREATE", mapToResponse(flight), mapToResponse(flight).getId(), mapToResponse(flight).getFlightNumber());
 
         return mapToResponse(flight);
     }
@@ -134,6 +140,7 @@ public class FlightService {
 
         // Kafka event
         kafkaProducerService.sendFlightEvent("FLIGHT_UPDATED", flight);
+        webSocketMessageService.sendFlightUpdate("UPDATE", mapToResponse(flight), id, mapToResponse(flight).getFlightNumber());
 
         return mapToResponse(flight);
     }
@@ -148,6 +155,7 @@ public class FlightService {
 
         // Kafka event
         kafkaProducerService.sendFlightEvent("FLIGHT_DELETED", flight);
+        webSocketMessageService.sendFlightUpdate("DELETE", null, id, flight.getFlightNumber());
     }
 
     public FlightResponse updateFlightStatus(Long id, FlightStatus status) {
@@ -171,6 +179,7 @@ public class FlightService {
 
         // Kafka event
         kafkaProducerService.sendFlightEvent("FLIGHT_STATUS_CHANGED", flight);
+        webSocketMessageService.sendFlightStatusUpdate(flight.getFlightNumber(), oldStatus.toString(), status.toString(), mapToResponse(flight), id);
 
         log.info("Flight {} status changed from {} to {}", flight.getFlightNumber(), oldStatus, status);
         return mapToResponse(flight);
@@ -232,5 +241,96 @@ public class FlightService {
         }
 
         return response;
+    }
+
+    /**
+     * Belirtilen bir tarihe ait tüm temel istatistikleri döndürür.
+     * @param date İstatistiklerin hesaplanacağı tarih.
+     * @return Tarihe ait istatistikleri içeren bir Map.
+     */
+    public Map<String, Object> getDailySummary(LocalDate date) {
+        log.debug("Fetching daily summary for date: {}", date);
+        Map<String, Object> summary = new HashMap<>();
+        summary.put("date", date);
+        summary.put("totalFlights", flightRepository.countFlightsByDate(date));
+        summary.put("scheduled", flightRepository.countFlightsByStatusAndDate(FlightStatus.SCHEDULED, date));
+        summary.put("departed", flightRepository.countFlightsByStatusAndDate(FlightStatus.DEPARTED, date));
+        summary.put("arrived", flightRepository.countFlightsByStatusAndDate(FlightStatus.ARRIVED, date));
+        summary.put("cancelled", flightRepository.countFlightsByStatusAndDate(FlightStatus.CANCELLED, date));
+        summary.put("delayed", flightRepository.countFlightsByStatusAndDate(FlightStatus.DELAYED, date));
+        return summary;
+    }
+
+    /**
+     * Belirtilen tarih aralığı için grafik verisi oluşturur.
+     * @param startDate Başlangıç tarihi.
+     * @param endDate Bitiş tarihi.
+     * @return Grafik için formatlanmış DTO.
+     */
+    public FlightChartDataDto getFlightChartData(LocalDate startDate, LocalDate endDate) {
+        log.debug("Generating flight chart data from {} to {}", startDate, endDate);
+
+        // 1. DTO'yu ve tarih listesini oluştur
+        FlightChartDataDto chartData = new FlightChartDataDto();
+        long daysBetween = ChronoUnit.DAYS.between(startDate, endDate) + 1;
+        List<LocalDate> dateRange = Stream.iterate(startDate, date -> date.plusDays(1))
+                .limit(daysBetween)
+                .collect(Collectors.toList());
+
+        // 2. Her gün için tüm sayaçları sıfırla başlat
+        dateRange.forEach(date -> {
+            chartData.getDates().add(date.toString());
+            chartData.getScheduled().add(0L);
+            chartData.getDeparted().add(0L);
+            chartData.getArrived().add(0L);
+            chartData.getCancelled().add(0L);
+            chartData.getDelayed().add(0L);
+        });
+
+        // 3. Veritabanından toplu veriyi çek
+        List<Object[]> results = flightRepository.countFlightsGroupedByDateAndStatus(startDate, endDate);
+
+        // 4. Veritabanı sonuçlarını işleyerek DTO'yu doldur
+        for (Object[] result : results) {
+            LocalDate date = (LocalDate) result[0];
+            FlightStatus status = (FlightStatus) result[1];
+            long count = (long) result[2];
+
+            int index = dateRange.indexOf(date);
+            if (index == -1) continue; // Should not happen with the query logic
+
+            switch (status) {
+                case SCHEDULED:
+                    chartData.getScheduled().set(index, count);
+                    break;
+                case DEPARTED:
+                    chartData.getDeparted().set(index, count);
+                    break;
+                case ARRIVED:
+                    chartData.getArrived().set(index, count);
+                    break;
+                case CANCELLED:
+                    chartData.getCancelled().set(index, count);
+                    break;
+                case DELAYED:
+                    chartData.getDelayed().set(index, count);
+                    break;
+            }
+        }
+
+        return chartData;
+    }
+
+    /**
+     * Tüm uçuşların tiplerine göre dağılımını döndürür.
+     * @return Uçuş tipi ve sayısını içeren DTO listesi.
+     */
+    public List<FlightTypeDistributionDto> getFlightTypeDistribution() {
+        log.debug("Fetching flight type distribution");
+        List<Object[]> results = flightRepository.countFlightsGroupedByType();
+
+        return results.stream()
+                .map(result -> new FlightTypeDistributionDto((FlightType) result[0], (long) result[1]))
+                .collect(Collectors.toList());
     }
 }

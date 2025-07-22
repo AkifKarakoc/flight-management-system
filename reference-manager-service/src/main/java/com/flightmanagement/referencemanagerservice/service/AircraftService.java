@@ -31,6 +31,8 @@ public class AircraftService {
     private final AircraftMapper aircraftMapper;
     private final KafkaProducerService kafkaProducerService;
     private final AircraftDeletionValidator deletionValidator;
+    private final WebSocketMessageService webSocketMessageService;
+
 
     public List<AircraftResponse> getAllAircrafts() {
         log.debug("Fetching all aircrafts");
@@ -68,6 +70,7 @@ public class AircraftService {
         aircraft = aircraftRepository.save(aircraft);
 
         kafkaProducerService.sendAircraftEvent("AIRCRAFT_CREATED", aircraft);
+        webSocketMessageService.sendAircraftUpdate("CREATE", aircraftMapper.toResponse(aircraft), aircraftMapper.toResponse(aircraft).getId());
 
         return aircraftMapper.toResponse(aircraft);
     }
@@ -93,6 +96,8 @@ public class AircraftService {
         aircraft = aircraftRepository.save(aircraft);
 
         kafkaProducerService.sendAircraftEvent("AIRCRAFT_UPDATED", aircraft);
+        webSocketMessageService.sendAircraftUpdate("UPDATE", aircraftMapper.toResponse(aircraft), id);
+
 
         return aircraftMapper.toResponse(aircraft);
     }
@@ -118,6 +123,7 @@ public class AircraftService {
         aircraftRepository.delete(aircraft);
 
         kafkaProducerService.sendAircraftEvent("AIRCRAFT_DELETED", aircraft);
+        webSocketMessageService.sendAircraftUpdate("DELETE", null, id);
     }
 
     @Transactional

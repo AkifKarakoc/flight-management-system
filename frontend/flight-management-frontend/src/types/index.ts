@@ -1,14 +1,18 @@
-// Auth Types
 export interface User {
-  id: number
+  id: number | string
   username: string
-  firstName: string
-  lastName: string
   email: string
-  role: string
-  active: boolean
-  createdAt: string
-  updatedAt: string
+  firstName?: string
+  lastName?: string
+  fullName?: string
+  role?: string
+  roles?: string[]
+  permissions?: string[]  // ✅ Optional ve array
+  isActive?: boolean
+  avatar?: string
+  lastLoginAt?: string
+  createdAt?: string
+  updatedAt?: string
 }
 
 export interface LoginCredentials {
@@ -18,6 +22,7 @@ export interface LoginCredentials {
 }
 
 export interface AuthResponse {
+  accessToken: string
   token: string
   user: User
 }
@@ -176,7 +181,8 @@ export interface Flight {
   flightDate: string
   scheduledDeparture: string
   scheduledArrival: string
-  type: 'PASSENGER' | 'CARGO' | 'POSITIONING'
+  status?: FlightStatus
+  type?: FlightType
   passengerCount?: number
   cargoWeight?: number
   gateNumber?: string
@@ -212,12 +218,16 @@ export interface ApiResponse<T> {
   success: boolean
 }
 
+// @/types/index.ts dosyasında mevcut PaginatedResponse'ı şununla değiştirin:
 export interface PaginatedResponse<T> {
-  data: T[]
-  total: number
-  page: number
-  pageSize: number
-  totalPages: number
+  content: T[]           // Spring Boot'un field adı
+  totalElements: number  // Spring Boot'un field adı
+  totalPages: number     // Spring Boot'un field adı
+  number: number         // Spring Boot'un field adı (current page)
+  size: number           // Spring Boot'un field adı (page size)
+  first: boolean         // Spring Boot'un field adı
+  last: boolean          // Spring Boot'un field adı
+  empty: boolean         // Spring Boot'un field adı
 }
 
 // Table Column Type
@@ -323,3 +333,30 @@ export interface ApiError {
   code?: string
   details?: Record<string, string[]>
 }
+
+export interface FlightSearchParams {
+  page?: number
+  size?: number
+  search?: string
+  airlineId?: number | null
+  originAirportId?: number | null
+  destinationAirportId?: number | null
+  flightDate?: string
+  status?: string
+  type?: string
+  sortBy?: string
+  sortDirection?: 'asc' | 'desc'
+}
+
+export interface ValidationResult {
+  valid: boolean
+  errors: any[]
+}
+
+export interface ConflictCheckResult {
+  hasConflict: boolean
+  conflicts: any[]
+}
+
+export type FlightStatus = 'SCHEDULED' | 'BOARDING' | 'DEPARTED' | 'IN_FLIGHT' | 'ARRIVED' | 'CANCELLED' | 'DELAYED'
+export type FlightType = 'PASSENGER' | 'CARGO' | 'POSITIONING' | 'FERRY' | 'TRAINING'

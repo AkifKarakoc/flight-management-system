@@ -1,5 +1,7 @@
 package com.flightmanagement.flightservice.controller;
 
+import com.flightmanagement.flightservice.dto.response.stats.FlightChartDataDto;
+import com.flightmanagement.flightservice.dto.response.stats.FlightTypeDistributionDto;
 import com.flightmanagement.flightservice.entity.enums.FlightStatus;
 import com.flightmanagement.flightservice.service.FlightService;
 import lombok.RequiredArgsConstructor;
@@ -9,6 +11,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -17,6 +20,8 @@ import java.util.Map;
 public class FlightStatsController {
 
     private final FlightService flightService;
+
+    // --- ESKİ METOTLARINIZ ---
 
     @GetMapping("/count/date/{date}")
     public ResponseEntity<Map<String, Object>> getFlightCountByDate(
@@ -64,16 +69,28 @@ public class FlightStatsController {
     @GetMapping("/dashboard/{date}")
     public ResponseEntity<Map<String, Object>> getDashboardStats(
             @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        // Bu metot, getDailySummary ile neredeyse aynı işi yapıyor.
+        // Kod tekrarını önlemek için onu çağırabiliriz.
+        return ResponseEntity.ok(flightService.getDailySummary(date));
+    }
 
-        Map<String, Object> dashboard = new HashMap<>();
-        dashboard.put("date", date);
-        dashboard.put("totalFlights", flightService.getFlightCountByDate(date));
-        dashboard.put("scheduledFlights", flightService.getFlightCountByStatus(FlightStatus.SCHEDULED, date));
-        dashboard.put("departedFlights", flightService.getFlightCountByStatus(FlightStatus.DEPARTED, date));
-        dashboard.put("arrivedFlights", flightService.getFlightCountByStatus(FlightStatus.ARRIVED, date));
-        dashboard.put("cancelledFlights", flightService.getFlightCountByStatus(FlightStatus.CANCELLED, date));
-        dashboard.put("delayedFlights", flightService.getFlightCountByStatus(FlightStatus.DELAYED, date));
+    // --- YENİ EKLENEN METOTLAR ---
 
-        return ResponseEntity.ok(dashboard);
+    @GetMapping("/summary/{date}")
+    public ResponseEntity<Map<String, Object>> getDailySummary(
+            @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        return ResponseEntity.ok(flightService.getDailySummary(date));
+    }
+
+    @GetMapping("/daily-chart")
+    public ResponseEntity<FlightChartDataDto> getFlightChartData(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+        return ResponseEntity.ok(flightService.getFlightChartData(startDate, endDate));
+    }
+
+    @GetMapping("/type-distribution")
+    public ResponseEntity<List<FlightTypeDistributionDto>> getFlightTypeDistribution() {
+        return ResponseEntity.ok(flightService.getFlightTypeDistribution());
     }
 }

@@ -1,17 +1,18 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
-import flightService from '@/services/flightService.js'
+import flightService from '@/services/flightService'
 import { SUCCESS_MESSAGES, ERROR_MESSAGES } from '@/utils/constants'
 import type {
   Flight,
   CreateFlightRequest,
-  PaginatedResponse
+  PaginatedResponse,
+  ValidationResult,
+  ConflictCheckResult,
+  FlightStatus,
+  FlightType
 } from '@/types/index'
 
-// Flight Status Types
-type FlightStatus = 'SCHEDULED' | 'BOARDING' | 'DEPARTED' | 'IN_FLIGHT' | 'ARRIVED' | 'CANCELLED' | 'DELAYED'
-type FlightType = 'PASSENGER' | 'CARGO' | 'POSITIONING' | 'FERRY' | 'TRAINING'
 
 // Store Interface Types
 interface FlightFilters {
@@ -60,13 +61,6 @@ interface SearchParams {
   page?: number
   size?: number
     [key: string]: any
-}
-
-interface FlightResponse extends PaginatedResponse<Flight> {
-  content?: Flight[]
-  totalElements?: number
-  totalPages?: number
-  number?: number
 }
 
 export const useFlightStore = defineStore('flight', () => {
@@ -160,10 +154,20 @@ export const useFlightStore = defineStore('flight', () => {
   })
 
   // Actions
-  async function fetchFlights(params: SearchParams = {}, force: boolean = false): Promise<Flight[]> {
+  async function fetchFlights(params: SearchParams = {}, force: boolean = false): Promise<PaginatedResponse<Flight>> {
     // Check cache
     if (!force && lastFetch.value && Date.now() - lastFetch.value < cacheDuration) {
-      return flights.value
+      // Cache'den dönerken PaginatedResponse formatında döndür
+      return {
+        content: flights.value,
+        totalElements: totalElements.value,
+        totalPages: totalPages.value,
+        number: currentPage.value,
+        size: pageSize.value,
+        first: currentPage.value === 0,
+        last: currentPage.value === totalPages.value - 1,
+        empty: flights.value.length === 0
+      }
     }
 
     loading.value = true
@@ -172,24 +176,27 @@ export const useFlightStore = defineStore('flight', () => {
       const queryParams = {
         page: params.page ?? currentPage.value,
         size: params.size ?? pageSize.value,
-        ...filters.value,
-        ...params
-      }
+        search: filters.value.search,
+        airlineId: filters.value.airlineId,
+        originAirportId: filters.value.originAirportId,
+        destinationAirportId: filters.value.destinationAirportId,
+        flightDate: filters.value.flightDate,
+        status: filters.value.status,
+        type: filters.value.type,
+        sortBy: filters.value.sortBy,
+        sortDirection: filters.value.sortDirection
+      } as any
 
-      const response: FlightResponse = await flightService.getAll(queryParams)
+      const response: PaginatedResponse<Flight> = await flightService.getAll(queryParams)
 
       // Handle paginated response
-      if (response.content) {
-        flights.value = response.content
-        totalElements.value = response.totalElements || 0
-        totalPages.value = response.totalPages || 0
-        currentPage.value = response.number || 0
-      } else {
-        flights.value = Array.isArray(response) ? response : []
-      }
+      flights.value = response.content
+      totalElements.value = response.totalElements
+      totalPages.value = response.totalPages
+      currentPage.value = response.number
 
       lastFetch.value = Date.now()
-      return flights.value
+      return response  // ✅ PaginatedResponse döndür
 
     } catch (error: any) {
       console.error('Error fetching flights:', error)
@@ -451,12 +458,29 @@ export const useFlightStore = defineStore('flight', () => {
     }
   }
 
-  async function searchFlights(query: string, searchFilters: Record<string, any> = {}): Promise<Flight[]> {
+  async function searchFlights(query: string, searchFilters: Record<string, any> = {}): Promise<PaginatedResponse<Flight>> {
     loading.value = true
 
     try {
       const results = await flightService.search(query, searchFilters)
-      return results
+
+      // Service'den gelen sonucu PaginatedResponse formatına dönüştür
+      if (Array.isArray(results)) {
+        // Eğer results bir array ise, PaginatedResponse formatına çevir
+        return {
+          content: results,
+          totalElements: results.length,
+          totalPages: 1,
+          number: 0,
+          size: results.length,
+          first: true,
+          last: true,
+          empty: results.length === 0
+        }
+      } else {
+        // Eğer zaten PaginatedResponse formatındaysa direkt döndür
+        return results
+      }
 
     } catch (error: any) {
       console.error('Error searching flights:', error)
@@ -467,22 +491,26 @@ export const useFlightStore = defineStore('flight', () => {
     }
   }
 
-  async function validateFlight(flightData: CreateFlightRequest): Promise<FlightValidation> {
+  async function validateFlight(flightData: CreateFlightRequest): Promise<ValidationResult> {
     try {
       const validation = await flightService.validate(flightData)
-      return validation
-
+      return {
+        valid: validation.valid,
+        errors: validation.errors || []  // ✅ Type uyumu sağla
+      } as ValidationResult
     } catch (error: any) {
       console.error('Error validating flight:', error)
       throw error
     }
   }
 
-  async function checkConflicts(flightData: CreateFlightRequest): Promise<FlightConflicts> {
+  async function checkConflicts(flightData: CreateFlightRequest): Promise<ConflictCheckResult> {
     try {
       const conflicts = await flightService.checkConflicts(flightData)
-      return conflicts
-
+      return {
+        hasConflict: conflicts.hasConflict ?? false,  // ✅ hasConflicts yerine hasConflict
+        conflicts: conflicts.conflicts || []
+      } as ConflictCheckResult
     } catch (error: any) {
       console.error('Error checking conflicts:', error)
       throw error

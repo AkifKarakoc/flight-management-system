@@ -208,7 +208,7 @@ const STORAGE_KEYS = {
 
   hasRole(role: string): boolean {
     const user = this.getUser()
-    return user?.roles?.includes(role) || false
+    return user?.role?.includes(role) || false
   }
 
   hasPermission(permission: string): boolean {

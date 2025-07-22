@@ -222,7 +222,7 @@ class ExportService {
 
       // Add footer
       if (config.footer) {
-        const pageCount = doc.internal.getNumberOfPages()
+        const pageCount = doc.getNumberOfPages()
         for (let i = 1; i <= pageCount; i++) {
           doc.setPage(i)
           doc.setFontSize(8)
@@ -621,7 +621,7 @@ class ExportService {
     chartElement: HTMLCanvasElement | string,
     chartData: Record<string, any>[],
     title: string,
-    options: Partial<ChartConfig & PDFConfig> = {}
+    options: (Partial<ChartConfig> & Partial<PDFConfig>) = {}  // ✅ Doğru syntax
   ): Promise<ExportResult> {
     const timestamp = new Date().toISOString().split('T')[0]
     const filename = `grafik_${title.toLowerCase().replace(/\s+/g, '_')}_${timestamp}`

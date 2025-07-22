@@ -1,28 +1,14 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import authService from '@/services/authService.js'
-import router from '@/router/index.js'
+import authService from '@/services/authService'
+import router from '@/router/index.ts'
 import { SUCCESS_MESSAGES, ERROR_MESSAGES } from '@/utils/constants'
 import type {
   User,
   LoginCredentials,
   AuthResponse
 } from '@/types/index'
-
-interface AuthState {
-  user: User | null
-  token: string | null
-  refreshToken: string | null
-  loading: boolean
-  loginLoading: boolean
-}
-
-interface LoginResponse {
-  accessToken: string
-  refreshToken: string
-  user: User
-}
 
 export const useAuthStore = defineStore('auth', () => {
   // State
@@ -58,7 +44,7 @@ export const useAuthStore = defineStore('auth', () => {
   })
 
   // Actions
-  async function login(credentials: LoginCredentials): Promise<LoginResponse> {
+  async function login(credentials: LoginCredentials): Promise<AuthResponse> {
     loginLoading.value = true
 
     try {
@@ -66,7 +52,7 @@ export const useAuthStore = defineStore('auth', () => {
 
       // Update store state
       token.value = response.accessToken
-      refreshToken.value = response.refreshToken
+      refreshToken.value = response.refreshToken || null
       user.value = response.user
 
       ElMessage.success(SUCCESS_MESSAGES.LOGIN)
@@ -176,7 +162,7 @@ export const useAuthStore = defineStore('auth', () => {
     if (storedToken && authService.isAuthenticated()) {
       token.value = storedToken
       user.value = storedUser
-      refreshToken.value = storedRefreshToken
+      refreshToken.value = storedRefreshToken || null  // ✅ undefined'ı null'a çevir
     } else {
       // Clear invalid auth data
       clearAuth()

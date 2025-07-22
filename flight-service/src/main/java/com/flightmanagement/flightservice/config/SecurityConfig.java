@@ -66,10 +66,8 @@ public class SecurityConfig {
                 .exceptionHandling(exception -> exception.authenticationEntryPoint(jwtAuthenticationEntryPoint))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth ->
-                        auth.requestMatchers("/api/v1/auth/**").permitAll()
-                                .requestMatchers("/actuator/**").permitAll()
-                                .requestMatchers("/api/v1/**").authenticated()
-                                .anyRequest().permitAll()
+                        auth.requestMatchers("/actuator/**", "/ws/**").permitAll()
+                                .anyRequest().authenticated()
                 );
 
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

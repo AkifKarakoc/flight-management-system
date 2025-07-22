@@ -37,10 +37,25 @@ interface CacheState {
   crewMembers: number | null
 }
 
+// 35-38. satırları şununla değiştirin:
 interface ReferenceResponse<T> {
   data?: T
-    [key: string]: any
+  success?: boolean
+  message?: string
+  [key: string]: any
 }
+
+function isReferenceResponse<T>(response: any): response is ReferenceResponse<T> {
+  return response && typeof response === 'object' && 'data' in response
+}
+
+function extractData<T>(response: T | ReferenceResponse<T>): T {
+  if (isReferenceResponse<T>(response)) {
+    return response.data as T
+  }
+  return response as T
+}
+
 
 export const useReferenceStore = defineStore('reference', () => {
   // State
@@ -137,8 +152,8 @@ export const useReferenceStore = defineStore('reference', () => {
 
     loading.value.airlines = true
     try {
-      const response: ReferenceResponse<Airline[]> = await referenceService.airlines.getAll()
-      airlines.value = response.data || response
+      const response = await referenceService.airlines.getAll()
+      airlines.value = extractData<Airline[]>(response)
       lastFetch.value.airlines = Date.now()
       return airlines.value
     } catch (error: any) {
@@ -149,10 +164,11 @@ export const useReferenceStore = defineStore('reference', () => {
     }
   }
 
+// createAirline fonksiyonunu değiştirin:
   async function createAirline(data: CreateAirlineRequest): Promise<Airline> {
     try {
-      const response: ReferenceResponse<Airline> = await referenceService.airlines.create(data)
-      const newAirline = response.data || response
+      const response = await referenceService.airlines.create(data)
+      const newAirline = extractData<Airline>(response)
       airlines.value.push(newAirline)
       ElMessage.success(SUCCESS_MESSAGES.CREATED)
       return newAirline
@@ -162,10 +178,11 @@ export const useReferenceStore = defineStore('reference', () => {
     }
   }
 
+// updateAirline fonksiyonunu değiştirin:
   async function updateAirline(id: number, data: Partial<CreateAirlineRequest>): Promise<Airline> {
     try {
-      const response: ReferenceResponse<Airline> = await referenceService.airlines.update(id, data)
-      const updatedAirline = response.data || response
+      const response = await referenceService.airlines.update(id, data)
+      const updatedAirline = extractData<Airline>(response)
       const index = airlines.value.findIndex(airline => airline.id === id)
       if (index !== -1) {
         airlines.value[index] = updatedAirline
@@ -177,6 +194,7 @@ export const useReferenceStore = defineStore('reference', () => {
       throw error
     }
   }
+
 
   async function deleteAirline(id: number): Promise<void> {
     try {
@@ -194,8 +212,8 @@ export const useReferenceStore = defineStore('reference', () => {
 
   async function searchAirlines(query: string): Promise<Airline[]> {
     try {
-      const response: ReferenceResponse<Airline[]> = await referenceService.airlines.search(query)
-      return response.data || response
+      const response = await referenceService.airlines.search(query)
+      return extractData<Airline[]>(response)
     } catch (error: any) {
       ElMessage.error('Havayolu arama işleminde hata oluştu')
       return []
@@ -210,8 +228,8 @@ export const useReferenceStore = defineStore('reference', () => {
 
     loading.value.airports = true
     try {
-      const response: ReferenceResponse<Airport[]> = await referenceService.airports.getAll()
-      airports.value = response.data || response
+      const response = await referenceService.airports.getAll()
+      airports.value = extractData<Airport[]>(response)
       lastFetch.value.airports = Date.now()
       return airports.value
     } catch (error: any) {
@@ -222,10 +240,11 @@ export const useReferenceStore = defineStore('reference', () => {
     }
   }
 
+// createAirport fonksiyonunu değiştirin:
   async function createAirport(data: CreateAirportRequest): Promise<Airport> {
     try {
-      const response: ReferenceResponse<Airport> = await referenceService.airports.create(data)
-      const newAirport = response.data || response
+      const response = await referenceService.airports.create(data)
+      const newAirport = extractData<Airport>(response)
       airports.value.push(newAirport)
       ElMessage.success(SUCCESS_MESSAGES.CREATED)
       return newAirport
@@ -235,10 +254,11 @@ export const useReferenceStore = defineStore('reference', () => {
     }
   }
 
+// updateAirport fonksiyonunu değiştirin:
   async function updateAirport(id: number, data: Partial<CreateAirportRequest>): Promise<Airport> {
     try {
-      const response: ReferenceResponse<Airport> = await referenceService.airports.update(id, data)
-      const updatedAirport = response.data || response
+      const response = await referenceService.airports.update(id, data)
+      const updatedAirport = extractData<Airport>(response)
       const index = airports.value.findIndex(airport => airport.id === id)
       if (index !== -1) {
         airports.value[index] = updatedAirport
@@ -267,8 +287,8 @@ export const useReferenceStore = defineStore('reference', () => {
 
   async function searchAirportsByIcao(icao: string): Promise<Airport[]> {
     try {
-      const response: ReferenceResponse<Airport[]> = await referenceService.airports.searchByIcao(icao)
-      return response.data || response
+      const response = await referenceService.airports.searchByIcao(icao)
+      return extractData<Airport[]>(response)
     } catch (error: any) {
       ElMessage.error('Havaalanı arama işleminde hata oluştu')
       return []
@@ -283,8 +303,8 @@ export const useReferenceStore = defineStore('reference', () => {
 
     loading.value.aircrafts = true
     try {
-      const response: ReferenceResponse<Aircraft[]> = await referenceService.aircrafts.getAll()
-      aircrafts.value = response.data || response
+      const response = await referenceService.aircrafts.getAll()
+      aircrafts.value = extractData<Aircraft[]>(response)
       lastFetch.value.aircrafts = Date.now()
       return aircrafts.value
     } catch (error: any) {
@@ -295,10 +315,11 @@ export const useReferenceStore = defineStore('reference', () => {
     }
   }
 
+// createAircraft fonksiyonunu değiştirin:
   async function createAircraft(data: CreateAircraftRequest): Promise<Aircraft> {
     try {
-      const response: ReferenceResponse<Aircraft> = await referenceService.aircrafts.create(data)
-      const newAircraft = response.data || response
+      const response = await referenceService.aircrafts.create(data)
+      const newAircraft = extractData<Aircraft>(response)
       aircrafts.value.push(newAircraft)
       ElMessage.success(SUCCESS_MESSAGES.CREATED)
       return newAircraft
@@ -308,10 +329,11 @@ export const useReferenceStore = defineStore('reference', () => {
     }
   }
 
+// updateAircraft fonksiyonunu değiştirin:
   async function updateAircraft(id: number, data: Partial<CreateAircraftRequest>): Promise<Aircraft> {
     try {
-      const response: ReferenceResponse<Aircraft> = await referenceService.aircrafts.update(id, data)
-      const updatedAircraft = response.data || response
+      const response = await referenceService.aircrafts.update(id, data)
+      const updatedAircraft = extractData<Aircraft>(response)
       const index = aircrafts.value.findIndex(aircraft => aircraft.id === id)
       if (index !== -1) {
         aircrafts.value[index] = updatedAircraft
@@ -346,8 +368,8 @@ export const useReferenceStore = defineStore('reference', () => {
 
     loading.value.routes = true
     try {
-      const response: ReferenceResponse<Route[]> = await referenceService.routes.getAll()
-      routes.value = response.data || response
+      const response = await referenceService.routes.getAll()
+      routes.value = extractData<Route[]>(response)
       lastFetch.value.routes = Date.now()
       return routes.value
     } catch (error: any) {
@@ -358,10 +380,11 @@ export const useReferenceStore = defineStore('reference', () => {
     }
   }
 
+// createRoute ve updateRoute için de aynı pattern:
   async function createRoute(data: CreateRouteRequest): Promise<Route> {
     try {
-      const response: ReferenceResponse<Route> = await referenceService.routes.create(data)
-      const newRoute = response.data || response
+      const response = await referenceService.routes.create(data)
+      const newRoute = extractData<Route>(response)
       routes.value.push(newRoute)
       ElMessage.success(SUCCESS_MESSAGES.CREATED)
       return newRoute
@@ -373,8 +396,8 @@ export const useReferenceStore = defineStore('reference', () => {
 
   async function updateRoute(id: number, data: Partial<CreateRouteRequest>): Promise<Route> {
     try {
-      const response: ReferenceResponse<Route> = await referenceService.routes.update(id, data)
-      const updatedRoute = response.data || response
+      const response = await referenceService.routes.update(id, data)
+      const updatedRoute = extractData<Route>(response)
       const index = routes.value.findIndex(route => route.id === id)
       if (index !== -1) {
         routes.value[index] = updatedRoute
@@ -409,8 +432,8 @@ export const useReferenceStore = defineStore('reference', () => {
 
     loading.value.crewMembers = true
     try {
-      const response: ReferenceResponse<CrewMember[]> = await referenceService.crewMembers.getAll()
-      crewMembers.value = response.data || response
+      const response = await referenceService.crewMembers.getAll()
+      crewMembers.value = extractData<CrewMember[]>(response)
       lastFetch.value.crewMembers = Date.now()
       return crewMembers.value
     } catch (error: any) {
@@ -423,8 +446,8 @@ export const useReferenceStore = defineStore('reference', () => {
 
   async function createCrewMember(data: CreateCrewMemberRequest): Promise<CrewMember> {
     try {
-      const response: ReferenceResponse<CrewMember> = await referenceService.crewMembers.create(data)
-      const newCrewMember = response.data || response
+      const response = await referenceService.crewMembers.create(data)
+      const newCrewMember = extractData<CrewMember>(response)
       crewMembers.value.push(newCrewMember)
       ElMessage.success(SUCCESS_MESSAGES.CREATED)
       return newCrewMember
@@ -436,8 +459,8 @@ export const useReferenceStore = defineStore('reference', () => {
 
   async function updateCrewMember(id: number, data: Partial<CreateCrewMemberRequest>): Promise<CrewMember> {
     try {
-      const response: ReferenceResponse<CrewMember> = await referenceService.crewMembers.update(id, data)
-      const updatedCrewMember = response.data || response
+      const response = await referenceService.crewMembers.update(id, data)
+      const updatedCrewMember = extractData<CrewMember>(response)
       const index = crewMembers.value.findIndex(crew => crew.id === id)
       if (index !== -1) {
         crewMembers.value[index] = updatedCrewMember

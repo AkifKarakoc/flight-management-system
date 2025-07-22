@@ -71,4 +71,12 @@ public interface FlightRepository extends JpaRepository<Flight, Long> {
     // Rota bazlı sayım
     @Query("SELECT COUNT(f) FROM Flight f WHERE f.originAirportId = :originId AND f.destinationAirportId = :destId")
     Long countFlightsByRoute(@Param("originId") Long originId, @Param("destId") Long destinationId);
+
+    // Grafik verisi için tarih ve duruma göre gruplanmış sayım
+    @Query("SELECT f.flightDate, f.status, COUNT(f) FROM Flight f WHERE f.flightDate BETWEEN :startDate AND :endDate GROUP BY f.flightDate, f.status")
+    List<Object[]> countFlightsGroupedByDateAndStatus(@Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
+
+    // Uçuş tipine göre gruplanmış sayım
+    @Query("SELECT f.type, COUNT(f) FROM Flight f GROUP BY f.type")
+    List<Object[]> countFlightsGroupedByType();
 }

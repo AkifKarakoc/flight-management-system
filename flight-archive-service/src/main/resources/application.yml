@@ -31,6 +31,9 @@ spring:
 
 server:
   port: 8083
+  websocket:
+    endpoint: /ws
+    topic-prefix: /topic/archive
 
 # JWT yap?land?rmas?
 jwt:

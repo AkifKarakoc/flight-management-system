@@ -153,7 +153,7 @@ const emptyText = ref('Henüz uçuş verisi bulunmuyor')
 
 // Status mappings
 const statusTypes = {
-  'SCHEDULED': '',
+  'SCHEDULED': 'info',
   'BOARDING': 'warning',
   'DEPARTED': 'success',
   'IN_FLIGHT': 'primary',

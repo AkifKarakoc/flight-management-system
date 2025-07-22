@@ -29,6 +29,7 @@ public class FlightArchiveService {
     private final FlightArchiveRepository flightArchiveRepository;
     private final FlightArchiveMapper flightArchiveMapper;
     private final ObjectMapper objectMapper;
+    private final WebSocketMessageService webSocketMessageService;
 
     public FlightArchive archiveFlightEvent(FlightEvent event) {
         log.debug("Archiving flight event: {} for flight: {}", event.getEventType(), event.getEntityId());
@@ -48,6 +49,7 @@ public class FlightArchiveService {
             log.error("Failed to archive flight event: {}", event.getEventId(), e);
             throw new RuntimeException("Failed to archive flight event", e);
         }
+
     }
 
     public List<FlightArchiveResponse> getFlightHistory(String flightNumber, LocalDate date) {
@@ -112,6 +114,7 @@ public class FlightArchiveService {
         LocalDateTime cutoffDate = LocalDateTime.now().minusDays(retentionDays);
         flightArchiveRepository.deleteArchivedBefore(cutoffDate);
         log.info("Cleanup completed for records before {}", cutoffDate);
+        webSocketMessageService.sendBatchProcessUpdate("ARCHIVE_CLEANUP", "Done");
     }
 
     @SuppressWarnings("unchecked")
@@ -302,4 +305,5 @@ public class FlightArchiveService {
         }
         return null;
     }
+
 }

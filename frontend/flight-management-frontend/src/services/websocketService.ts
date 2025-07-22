@@ -12,24 +12,24 @@ import type {
 
 // WebSocket message types
 type MessageType =
-| 'ping'
-| 'pong'
-| 'flight_update'
-| 'system_status'
-| 'notification'
-| 'kpi_update'
-| 'chart_update'
-| 'subscribe'
-| 'flight_status_update'
-| 'user_activity'
+  | 'ping'
+  | 'pong'
+  | 'flight_update'
+  | 'system_status'
+  | 'notification'
+  | 'kpi_update'
+  | 'chart_update'
+  | 'subscribe'
+  | 'flight_status_update'
+  | 'user_activity'
 
 // WebSocket connection options interface
 interface WebSocketOptions {
   onMessage?: (data: WebSocketMessage) => void
-    onError?: (error: Event) => void
-    onOpen?: (event: Event) => void
-    onClose?: (event: CloseEvent) => void
-    autoReconnect?: boolean
+  onError?: (error: Event) => void
+  onOpen?: (event: Event) => void
+  onClose?: (event: CloseEvent) => void
+  autoReconnect?: boolean
   heartbeat?: boolean
 }
 
@@ -88,13 +88,13 @@ interface FlightUpdatePayload {
 interface SystemStatusPayload {
   services: SystemStatusItem[]
   alerts?: Array<{
-      id: number
-      type: 'info' | 'warning' | 'error' | 'success'
-      title: string
-      message: string
-      timestamp: string
-    }>
-    overall: 'healthy' | 'warning' | 'critical'
+    id: number
+    type: 'info' | 'warning' | 'error' | 'success'
+    title: string
+    message: string
+    timestamp: string
+  }>
+  overall: 'healthy' | 'warning' | 'critical'
 }
 
 // Dashboard update payloads
@@ -121,11 +121,11 @@ interface NotificationPayload {
   targetUsers?: number[]
   persistent?: boolean
   actions?: Array<{
-      label: string
-      action: string
-      type?: 'primary' | 'success' | 'warning' | 'danger'
-    }>
-    timestamp: number
+    label: string
+    action: string
+    type?: 'primary' | 'success' | 'warning' | 'danger'
+  }>
+  timestamp: number
 }
 
 // User activity payload
@@ -142,7 +142,7 @@ class WebSocketService {
   private readonly maxReconnectAttempts: number
   private readonly reconnectDelay: number
   private readonly heartbeatInterval: number
-  private heartbeatTimers: Map<string, NodeJS.Timeout>
+  private heartbeatTimers: Map<string, number>
   private isOnline: boolean
 
   constructor() {
@@ -334,16 +334,41 @@ class WebSocketService {
   }
 
   /**
-   * Build WebSocket URL from endpoint
+   * DÜZELTİLMİŞ METOT
+   * Bu metot, endpoint'e göre doğru mikroservis portunu seçer ve
+   * backend'in beklediği doğru URL yapısını oluşturur.
    */
   private buildWebSocketUrl(endpoint: string): string {
-    // WebSocket backend'ler hazır - Flight Service 8082'de WebSocket var
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const host = process.env.NODE_ENV === 'production'
-      ? 'api.flightmanagement.com'
-      : 'localhost:8082'
-    return `${protocol}//${host}/ws/${endpoint}`
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+
+    // Endpoint'in ilk kısmına göre hangi servise bağlanılacağını belirliyoruz.
+    // Örn: "flight-tracking/TK123" -> "flight-tracking" anahtar kelimesi olur.
+    const endpointType = endpoint.split('/')[0];
+
+    // Servis portlarını merkezi bir yerden yönetiyoruz.
+    const SERVICE_PORTS: { [key: string]: string } = {
+      // Reference Manager Service (Port 8081)
+      'notifications': '8081',
+      'system': '8081',
+      'airline': '8081',
+      'route': '8081',
+      // Flight Service (Port 8082)
+      'flights': '8082',
+      'dashboard': '8082',
+      'flight-tracking': '8082', // Uçuş takibi de flight-service'e aittir
+      // Archive Service (Port 8083)
+      'archive': '8083'
+    };
+
+    // Endpoint türüne göre portu bul, bulamazsan varsayılan olarak 8082 kullan.
+    const port = SERVICE_PORTS[endpointType] || '8082';
+    const host = `localhost:${port}`;
+
+    // HATA BURADAYDI: URL'in sonuna endpoint eklemiyoruz. Bağlantı sadece /ws adresine yapılır.
+    // Konu (topic) ayrımı bağlantı kurulduktan sonra STOMP mesajları ile yapılır.
+    return `${protocol}//${host}/ws`;
   }
+
 
   /**
    * Generate unique connection ID
@@ -577,159 +602,159 @@ class WebSocketService {
    * Send user activity ping
    */
   sendUserActivity(userId: string | number, page: string, action?: string): boolean {
-  return this.send('notifications', {
-  type: 'user_activity',
-  payload: {
-    userId,
-    page,
-    action,
-    timestamp: Date.now()
-  } as UserActivityPayload
-})
-}
+    return this.send('notifications', {
+      type: 'user_activity',
+      payload: {
+        userId,
+        page,
+        action,
+        timestamp: Date.now()
+      } as UserActivityPayload
+    })
+  }
 
-/**
- * Subscribe to specific flight tracking
- */
-async subscribeToFlightTracking(
-  flightNumber: string,
-  onUpdate: (data: FlightUpdatePayload) => void,
-  date?: string
-): Promise<WebSocket> {
-  const endpoint = `flight-tracking/${flightNumber}${date ? `?date=${date}` : ''}`
+  /**
+   * Subscribe to specific flight tracking
+   */
+  async subscribeToFlightTracking(
+    flightNumber: string,
+    onUpdate: (data: FlightUpdatePayload) => void,
+    date?: string
+  ): Promise<WebSocket> {
+    const endpoint = `flight-tracking/${flightNumber}${date ? `?date=${date}` : ''}`
 
-  return this.connect(endpoint, {
-    onMessage: (data: WebSocketMessage) => {
-      if (data.type === 'flight_update') {
-        onUpdate(data.payload as FlightUpdatePayload)
-      }
-    },
-    autoReconnect: true,
-    heartbeat: true
-  })
-}
-
-/**
- * Subscribe to airline-specific updates
- */
-async subscribeToAirlineUpdates(
-  airlineId: number,
-  onUpdate: (data: FlightUpdatePayload) => void
-): Promise<WebSocket> {
-  return this.connect(`airline/${airlineId}`, {
-    onMessage: (data: WebSocketMessage) => {
-      if (data.type === 'flight_update') {
-        onUpdate(data.payload as FlightUpdatePayload)
-      }
-    },
-    onOpen: () => {
-      this.send(`airline/${airlineId}`, {
-        type: 'subscribe',
-        filters: { airlineIds: [airlineId] }
-      })
-    },
-    autoReconnect: true,
-    heartbeat: true
-  })
-}
-
-/**
- * Subscribe to route-specific updates
- */
-async subscribeToRouteUpdates(
-  originAirportId: number,
-  destinationAirportId: number,
-  onUpdate: (data: FlightUpdatePayload) => void
-): Promise<WebSocket> {
-  const endpoint = `route/${originAirportId}-${destinationAirportId}`
-
-  return this.connect(endpoint, {
-    onMessage: (data: WebSocketMessage) => {
-      if (data.type === 'flight_update') {
-        onUpdate(data.payload as FlightUpdatePayload)
-      }
-    },
-    onOpen: () => {
-      this.send(endpoint, {
-        type: 'subscribe',
-        filters: {
-          originAirportIds: [originAirportId],
-          destinationAirportIds: [destinationAirportId]
+    return this.connect(endpoint, {
+      onMessage: (data: WebSocketMessage) => {
+        if (data.type === 'flight_update') {
+          onUpdate(data.payload as FlightUpdatePayload)
         }
-      })
-    },
-    autoReconnect: true,
-    heartbeat: true
-  })
-}
+      },
+      autoReconnect: true,
+      heartbeat: true
+    })
+  }
 
-/**
- * Broadcast message to specific endpoint
- */
-broadcast(endpoint: string, message: Omit<WebSocketMessage, 'timestamp'>): boolean {
-  return this.send(endpoint, {
-    ...message,
-    timestamp: Date.now()
-  })
-}
+  /**
+   * Subscribe to airline-specific updates
+   */
+  async subscribeToAirlineUpdates(
+    airlineId: number,
+    onUpdate: (data: FlightUpdatePayload) => void
+  ): Promise<WebSocket> {
+    return this.connect(`airline/${airlineId}`, {
+      onMessage: (data: WebSocketMessage) => {
+        if (data.type === 'flight_update') {
+          onUpdate(data.payload as FlightUpdatePayload)
+        }
+      },
+      onOpen: () => {
+        this.send(`airline/${airlineId}`, {
+          type: 'subscribe',
+          filters: { airlineIds: [airlineId] }
+        })
+      },
+      autoReconnect: true,
+      heartbeat: true
+    })
+  }
 
-/**
- * Get connection health status
- */
-getConnectionHealth(): {
-  totalConnections: number
-  activeConnections: number
-  reconnectingConnections: number
-  healthyConnections: number
-  averageLatency: number
-} {
-  const now = Date.now()
-  let activeCount = 0
-  let reconnectingCount = 0
-  let healthyCount = 0
-  let totalLatency = 0
+  /**
+   * Subscribe to route-specific updates
+   */
+  async subscribeToRouteUpdates(
+    originAirportId: number,
+    destinationAirportId: number,
+    onUpdate: (data: FlightUpdatePayload) => void
+  ): Promise<WebSocket> {
+    const endpoint = `route/${originAirportId}-${destinationAirportId}`
 
-  for (const [connectionId, connection] of this.connections) {
-    if (connection.isConnected) {
-      activeCount++
-      const latency = now - connection.lastActivity
-      totalLatency += latency
+    return this.connect(endpoint, {
+      onMessage: (data: WebSocketMessage) => {
+        if (data.type === 'flight_update') {
+          onUpdate(data.payload as FlightUpdatePayload)
+        }
+      },
+      onOpen: () => {
+        this.send(endpoint, {
+          type: 'subscribe',
+          filters: {
+            originAirportIds: [originAirportId],
+            destinationAirportIds: [destinationAirportId]
+          }
+        })
+      },
+      autoReconnect: true,
+      heartbeat: true
+    })
+  }
 
-      if (latency < 30000) { // Healthy if last activity within 30 seconds
-        healthyCount++
+  /**
+   * Broadcast message to specific endpoint
+   */
+  broadcast(endpoint: string, message: Omit<WebSocketMessage, 'timestamp'>): boolean {
+    return this.send(endpoint, {
+      ...message,
+      timestamp: Date.now()
+    })
+  }
+
+  /**
+   * Get connection health status
+   */
+  getConnectionHealth(): {
+    totalConnections: number
+    activeConnections: number
+    reconnectingConnections: number
+    healthyConnections: number
+    averageLatency: number
+  } {
+    const now = Date.now()
+    let activeCount = 0
+    let reconnectingCount = 0
+    let healthyCount = 0
+    let totalLatency = 0
+
+    for (const [connectionId, connection] of this.connections) {
+      if (connection.isConnected) {
+        activeCount++
+        const latency = now - connection.lastActivity
+        totalLatency += latency
+
+        if (latency < 30000) { // Healthy if last activity within 30 seconds
+          healthyCount++
+        }
+      } else if (this.reconnectAttempts.has(connectionId)) {
+        reconnectingCount++
       }
-    } else if (this.reconnectAttempts.has(connectionId)) {
-      reconnectingCount++
+    }
+
+    return {
+      totalConnections: this.connections.size,
+      activeConnections: activeCount,
+      reconnectingConnections: reconnectingCount,
+      healthyConnections: healthyCount,
+      averageLatency: activeCount > 0 ? totalLatency / activeCount : 0
     }
   }
 
-  return {
-    totalConnections: this.connections.size,
-    activeConnections: activeCount,
-    reconnectingConnections: reconnectingCount,
-    healthyConnections: healthyCount,
-    averageLatency: activeCount > 0 ? totalLatency / activeCount : 0
+  /**
+   * Set connection options globally
+   */
+  setGlobalOptions(options: Partial<{
+    maxReconnectAttempts: number
+    reconnectDelay: number
+    heartbeatInterval: number
+  }>): void {
+    if (options.maxReconnectAttempts !== undefined) {
+      (this as any).maxReconnectAttempts = options.maxReconnectAttempts
+    }
+    if (options.reconnectDelay !== undefined) {
+      (this as any).reconnectDelay = options.reconnectDelay
+    }
+    if (options.heartbeatInterval !== undefined) {
+      (this as any).heartbeatInterval = options.heartbeatInterval
+    }
   }
-}
-
-/**
- * Set connection options globally
- */
-setGlobalOptions(options: Partial<{
-  maxReconnectAttempts: number
-  reconnectDelay: number
-  heartbeatInterval: number
-}>): void {
-  if (options.maxReconnectAttempts !== undefined) {
-  (this as any).maxReconnectAttempts = options.maxReconnectAttempts
-}
-if (options.reconnectDelay !== undefined) {
-  (this as any).reconnectDelay = options.reconnectDelay
-}
-if (options.heartbeatInterval !== undefined) {
-  (this as any).heartbeatInterval = options.heartbeatInterval
-}
-}
 }
 
 // Create singleton instance
@@ -738,16 +763,16 @@ export const websocketService = new WebSocketService()
 // Export types for external use
 export type {
   WebSocketOptions,
-    WebSocketMessage,
-    MessageType,
-    FlightSubscriptionFilters,
-    FlightUpdatePayload,
-    SystemStatusPayload,
-    KpiUpdatePayload,
-    ChartUpdatePayload,
-    NotificationPayload,
-    UserActivityPayload,
-    ActiveConnection
+  WebSocketMessage,
+  MessageType,
+  FlightSubscriptionFilters,
+  FlightUpdatePayload,
+  SystemStatusPayload,
+  KpiUpdatePayload,
+  ChartUpdatePayload,
+  NotificationPayload,
+  UserActivityPayload,
+  ActiveConnection
 }
 
 // Export class for testing

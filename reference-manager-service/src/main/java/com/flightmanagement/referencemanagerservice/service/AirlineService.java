@@ -34,6 +34,8 @@ public class AirlineService {
     private final AirlineDeletionValidator deletionValidator;
     private final AircraftService aircraftService;
     private final CrewMemberService crewMemberService;
+    private final WebSocketMessageService webSocketMessageService;
+
 
     public List<AirlineResponse> getAllAirlines() {
         log.debug("Fetching all airlines");
@@ -72,6 +74,8 @@ public class AirlineService {
 
         // Kafka event publish
         kafkaProducerService.sendAirlineEvent("AIRLINE_CREATED", airline);
+        webSocketMessageService.sendAirlineUpdate("CREATE", airlineMapper.toResponse(airline), airlineMapper.toResponse(airline).getId());
+
 
         return airlineMapper.toResponse(airline);
     }
@@ -98,6 +102,8 @@ public class AirlineService {
 
         // Kafka event publish
         kafkaProducerService.sendAirlineEvent("AIRLINE_UPDATED", airline);
+        webSocketMessageService.sendAirlineUpdate("UPDATE", airlineMapper.toResponse(airline), id);
+
 
         return airlineMapper.toResponse(airline);
     }
@@ -125,6 +131,7 @@ public class AirlineService {
 
         // Kafka event publish
         kafkaProducerService.sendAirlineEvent("AIRLINE_DELETED", airline);
+        webSocketMessageService.sendAirlineUpdate("DELETE", null, id);
     }
 
     @Transactional

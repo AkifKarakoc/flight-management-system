@@ -37,6 +37,8 @@ public class AirportService {
     private final KafkaProducerService kafkaProducerService;
     private final AirportDeletionValidator deletionValidator;
     private final RouteService routeService;
+    private final WebSocketMessageService webSocketMessageService;
+
 
     public List<AirportResponse> getAllAirports() {
         log.debug("Fetching all airports");
@@ -81,6 +83,8 @@ public class AirportService {
 
         // Kafka event publish
         kafkaProducerService.sendAirportEvent("AIRPORT_CREATED", airport);
+        webSocketMessageService.sendAirportUpdate("CREATE", airportMapper.toResponse(airport), airportMapper.toResponse(airport).getId());
+
 
         return airportMapper.toResponse(airport);
     }
@@ -113,6 +117,8 @@ public class AirportService {
 
         // Kafka event publish
         kafkaProducerService.sendAirportEvent("AIRPORT_UPDATED", airport);
+        webSocketMessageService.sendAirportUpdate("UPDATE", airportMapper.toResponse(airport), id);
+
 
         return airportMapper.toResponse(airport);
     }
@@ -140,6 +146,7 @@ public class AirportService {
 
         // Kafka event publish
         kafkaProducerService.sendAirportEvent("AIRPORT_DELETED", airport);
+        webSocketMessageService.sendAirportUpdate("DELETE", null, id);
     }
 
     @Transactional

@@ -80,6 +80,7 @@ export const useAppStore = defineStore('app', () => {
     width: typeof window !== 'undefined' ? window.innerWidth : 1024,
     height: typeof window !== 'undefined' ? window.innerHeight : 768
   })
+  let resizeHandler: (() => void) | null = null
 
   // UI Settings
   const settings = ref<AppSettings>({
@@ -215,11 +216,11 @@ export const useAppStore = defineStore('app', () => {
     const errorObject: AppError = {
       id: Date.now() + Math.random(),
       timestamp: new Date(),
-      message: error.message || 'Bilinmeyen hata',
-      code: error.code || 'UNKNOWN',
-      stack: error.stack,
       handled: false,
-      ...error
+      code: 'UNKNOWN',
+      ...error, // Önce error'dan gelen değerleri al
+      // Sonra gerekli default'ları override et
+      message: error.message || 'Bilinmeyen hata'
     }
 
     errors.value.push(errorObject)
@@ -443,8 +444,9 @@ export const useAppStore = defineStore('app', () => {
     clearNotifications()
     clearErrors()
 
-    if (typeof window !== 'undefined') {
-      window.removeEventListener('resize', updateWindowSize)
+    if (typeof window !== 'undefined' && resizeHandler) {
+      window.removeEventListener('resize', resizeHandler)
+      resizeHandler = null
     }
   }
 

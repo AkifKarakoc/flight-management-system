@@ -14,9 +14,12 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-
-import java.time.LocalDate;
+import com.flightmanagement.flightservice.dto.response.stats.FlightChartDataDto;
+import com.flightmanagement.flightservice.dto.response.stats.FlightTypeDistributionDto;
 import java.util.List;
+import java.time.LocalDate;
+import java.util.Map;
+
 
 @RestController
 @RequestMapping("/api/v1/flights")
@@ -110,6 +113,24 @@ public class FlightController {
         } else {
             return ResponseEntity.ok(result);
         }
+    }
+
+    @GetMapping("/summary/{date}")
+    public ResponseEntity<Map<String, Object>> getDailySummary(
+            @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        return ResponseEntity.ok(flightService.getDailySummary(date));
+    }
+
+    @GetMapping("/daily-chart")
+    public ResponseEntity<FlightChartDataDto> getFlightChartData(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+        return ResponseEntity.ok(flightService.getFlightChartData(startDate, endDate));
+    }
+
+    @GetMapping("/type-distribution")
+    public ResponseEntity<List<FlightTypeDistributionDto>> getFlightTypeDistribution() {
+        return ResponseEntity.ok(flightService.getFlightTypeDistribution());
     }
 
 }
