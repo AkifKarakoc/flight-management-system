@@ -177,11 +177,35 @@ export const useAuthStore = defineStore('auth', () => {
 
   // Permission and role checks
   function hasRole(role: string): boolean {
-    return userRoles.value.includes(role)
+    if (!userInfo.value) return false
+
+    // role string ise
+    if (typeof userInfo.value.role === 'string') {
+      return userInfo.value.role === role || userInfo.value.role.includes(role)
+    }
+
+    // roles array ise
+    if (Array.isArray(userInfo.value.roles)) {
+      return userInfo.value.roles.includes(role)
+    }
+
+    return false
   }
 
   function hasPermission(permission: string): boolean {
-    return userPermissions.value.includes(permission)
+    if (!userInfo.value) return false
+
+    // permissions varsa kontrol et
+    if (Array.isArray(userInfo.value.permissions)) {
+      return userInfo.value.permissions.includes(permission)
+    }
+
+    // Admin rolü varsa tüm yetkiler var sayılır
+    if (hasRole('ADMIN')) {
+      return true
+    }
+
+    return false
   }
 
   function hasAnyRole(roles: string[]): boolean {

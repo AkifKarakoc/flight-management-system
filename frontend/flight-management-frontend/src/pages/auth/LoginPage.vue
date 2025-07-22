@@ -70,50 +70,56 @@
   </div>
 </template>
 
-<script setup>
-import { ref, onMounted } from 'vue'
+<script setup lang="ts">
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
 import { User, Lock } from '@element-plus/icons-vue'
-import apiService from '@/services/api.js'
-import authService from "@/services/authService.js";
+import { useAuthStore } from '@/stores/auth'
+import authService from '@/services/authService'
+import apiService from '@/services/api'
+import type { LoginCredentials } from '@/types'
 
 const router = useRouter()
-const loginFormRef = ref()
+const authStore = useAuthStore()
+const loginFormRef = ref<FormInstance>()
 const loading = ref(false)
+const backendStatus = ref<any[]>([])
 const backendError = ref('')
-const backendStatus = ref([])
 
-const credentials = ref({
-  username: 'admin',
-  password: 'admin123'
+const credentials = reactive<LoginCredentials>({
+  username: '',
+  password: ''
 })
 
-const rules = {
+const rules = reactive<FormRules>({
   username: [
-    { required: true, message: 'Kullanıcı adı gereklidir', trigger: 'blur' }
+    { required: true, message: 'Kullanıcı adı gerekli', trigger: 'blur' },
+    { min: 3, max: 20, message: 'Kullanıcı adı 3-20 karakter olmalı', trigger: 'blur' }
   ],
   password: [
-    { required: true, message: 'Şifre gereklidir', trigger: 'blur' }
+    { required: true, message: 'Şifre gerekli', trigger: 'blur' },
+    { min: 6, message: 'Şifre en az 6 karakter olmalı', trigger: 'blur' }
   ]
-}
+})
 
 const checkBackendServices = async () => {
+  console.log('🔍 Backend servisleri kontrol ediliyor...')
+
+  const services = [
+    { name: 'Reference Manager', url: import.meta.env.VITE_REFERENCE_MANAGER_URL },
+    { name: 'Flight Service', url: import.meta.env.VITE_FLIGHT_SERVICE_URL },
+    { name: 'Archive Service', url: import.meta.env.VITE_ARCHIVE_SERVICE_URL }
+  ]
+
+  const results = []
+
   try {
-    console.log('🔍 Backend servisleri kontrol ediliyor...')
-
-    const services = [
-      { name: 'Reference Manager', url: 'http://localhost:8081/actuator/health' },
-      { name: 'Flight Service', url: 'http://localhost:8082/actuator/health' },
-      { name: 'Archive Service', url: 'http://localhost:8083/actuator/health' }
-    ]
-
-    const results = []
-
     for (const service of services) {
+      console.log(`Checking ${service.name}...`)
       try {
-        console.log(`Checking ${service.name}...`)
-        const response = await fetch(service.url, {
+        const response = await fetch(`${service.url}/actuator/health`, {
           method: 'GET',
           mode: 'cors',
           headers: {
@@ -128,7 +134,7 @@ const checkBackendServices = async () => {
         })
 
         console.log(`✅ ${service.name}: UP`)
-      } catch (error) {
+      } catch (error: any) {
         console.log(`❌ ${service.name}: DOWN - ${error.message}`)
         results.push({
           name: service.name,
@@ -168,20 +174,12 @@ const handleLogin = async () => {
   try {
     console.log('🔑 Login deneniyor:', credentials.value.username)
 
-    const response = await authService.login(credentials.value)
-    console.log('✅ Login başarılı:', response)
+    // Auth store'un login metodunu kullan
+    await authStore.login(credentials.value)
 
-    // Auth store'u güncelle
-    const authStore = useAuthStore()
-    authStore.user = response.user
-    authStore.token = response.accessToken
+    // Login başarılı - auth store zaten yönlendirme yapacak
 
-    ElMessage.success('Giriş başarılı!')
-
-    // Router'ı kullanarak yönlendir
-    await router.replace('/dashboard')
-
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ Login hatası:', error)
 
     let errorMessage = 'Giriş hatası'
@@ -195,8 +193,10 @@ const handleLogin = async () => {
       errorMessage = 'Bu işlem için yetkiniz bulunmuyor'
     } else if (error.response?.data?.message) {
       errorMessage = error.response.data.message
+    } else if (error.message) {
+      errorMessage = error.message
     } else {
-      errorMessage = `Bilinmeyen hata: ${error.message}`
+      errorMessage = 'Bilinmeyen hata oluştu'
     }
 
     ElMessage.error(errorMessage)
