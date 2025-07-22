@@ -344,8 +344,8 @@ import {
   Close,
   RefreshRight
 } from '@element-plus/icons-vue'
-import { useFlightStore } from '@/stores/flight'
-import { useAppStore } from '@/stores/app'
+import { useFlightStore } from '@/stores/flight.js'
+import { useAppStore } from '@/stores/app.js'
 import FlightForm from '@/components/forms/FlightForm.vue'
 import dayjs from 'dayjs'
 

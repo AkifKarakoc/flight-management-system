@@ -4,42 +4,61 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import authService from '@/services/authService.js'
 import router from '@/router/index.js'
 import { SUCCESS_MESSAGES, ERROR_MESSAGES } from '@/utils/constants'
+import type {
+  User,
+  LoginCredentials,
+  AuthResponse
+} from '@/types/index'
+
+interface AuthState {
+  user: User | null
+  token: string | null
+  refreshToken: string | null
+  loading: boolean
+  loginLoading: boolean
+}
+
+interface LoginResponse {
+  accessToken: string
+  refreshToken: string
+  user: User
+}
 
 export const useAuthStore = defineStore('auth', () => {
   // State
-  const user = ref(null)
-  const token = ref(null)
-  const refreshToken = ref(null)
-  const loading = ref(false)
-  const loginLoading = ref(false)
+  const user = ref<User | null>(null)
+  const token = ref<string | null>(null)
+  const refreshToken = ref<string | null>(null)
+  const loading = ref<boolean>(false)
+  const loginLoading = ref<boolean>(false)
 
   // Computed
-  const isAuthenticated = computed(() => {
+  const isAuthenticated = computed((): boolean => {
     return !!token.value && authService.isAuthenticated()
   })
 
-  const userInfo = computed(() => {
+  const userInfo = computed((): User | null => {
     return user.value || authService.getUser()
   })
 
-  const userRoles = computed(() => {
+  const userRoles = computed((): string[] => {
     return userInfo.value?.roles || []
   })
 
-  const userPermissions = computed(() => {
+  const userPermissions = computed((): string[] => {
     return userInfo.value?.permissions || []
   })
 
-  const isAdmin = computed(() => {
+  const isAdmin = computed((): boolean => {
     return userRoles.value.includes('ADMIN')
   })
 
-  const isUser = computed(() => {
+  const isUser = computed((): boolean => {
     return userRoles.value.includes('USER')
   })
 
   // Actions
-  async function login(credentials) {
+  async function login(credentials: LoginCredentials): Promise<LoginResponse> {
     loginLoading.value = true
 
     try {
@@ -53,11 +72,11 @@ export const useAuthStore = defineStore('auth', () => {
       ElMessage.success(SUCCESS_MESSAGES.LOGIN)
 
       // Redirect to dashboard or intended route
-      const redirectPath = router.currentRoute.value.query.redirect || '/dashboard'
+      const redirectPath = router.currentRoute.value.query.redirect as string || '/dashboard'
       await router.push(redirectPath)
 
       return response
-    } catch (error) {
+    } catch (error: any) {
       console.error('Login failed:', error)
 
       // Handle different error types
@@ -77,17 +96,17 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  async function logout(showConfirm = true) {
+  async function logout(showConfirm: boolean = true): Promise<void> {
     try {
       if (showConfirm) {
         await ElMessageBox.confirm(
-            'Oturumu kapatmak istediğinizden emin misiniz?',
-            'Oturumu Kapat',
-            {
-              confirmButtonText: 'Evet',
-              cancelButtonText: 'Hayır',
-              type: 'warning'
-            }
+          'Oturumu kapatmak istediğinizden emin misiniz?',
+          'Oturumu Kapat',
+          {
+            confirmButtonText: 'Evet',
+            cancelButtonText: 'Hayır',
+            type: 'warning'
+          }
         )
       }
 
@@ -101,7 +120,7 @@ export const useAuthStore = defineStore('auth', () => {
       // Redirect to login
       await router.push('/login')
 
-    } catch (error) {
+    } catch (error: any) {
       if (error === 'cancel') {
         return // User cancelled logout
       }
@@ -114,19 +133,19 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  async function refreshAuthToken() {
+  async function refreshAuthToken(): Promise<string> {
     try {
       const newToken = await authService.refreshToken()
       token.value = newToken
       return newToken
-    } catch (error) {
+    } catch (error: any) {
       console.error('Token refresh failed:', error)
       await logout(false) // Don't show confirmation for automatic logout
       throw error
     }
   }
 
-  async function fetchCurrentUser() {
+  async function fetchCurrentUser(): Promise<User | null> {
     if (!isAuthenticated.value) return null
 
     loading.value = true
@@ -135,7 +154,7 @@ export const useAuthStore = defineStore('auth', () => {
       const userData = await authService.getCurrentUser()
       user.value = userData
       return userData
-    } catch (error) {
+    } catch (error: any) {
       console.error('Fetch current user failed:', error)
 
       if (error.response?.status === 401) {
@@ -148,7 +167,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  function initializeAuth() {
+  function initializeAuth(): void {
     // Initialize from localStorage
     const storedToken = authService.getToken()
     const storedUser = authService.getUser()
@@ -164,7 +183,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  function clearAuth() {
+  function clearAuth(): void {
     user.value = null
     token.value = null
     refreshToken.value = null
@@ -172,32 +191,32 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   // Permission and role checks
-  function hasRole(role) {
+  function hasRole(role: string): boolean {
     return userRoles.value.includes(role)
   }
 
-  function hasPermission(permission) {
+  function hasPermission(permission: string): boolean {
     return userPermissions.value.includes(permission)
   }
 
-  function hasAnyRole(roles) {
+  function hasAnyRole(roles: string[]): boolean {
     return roles.some(role => hasRole(role))
   }
 
-  function hasAllRoles(roles) {
+  function hasAllRoles(roles: string[]): boolean {
     return roles.every(role => hasRole(role))
   }
 
-  function hasAnyPermission(permissions) {
+  function hasAnyPermission(permissions: string[]): boolean {
     return permissions.some(permission => hasPermission(permission))
   }
 
-  function hasAllPermissions(permissions) {
+  function hasAllPermissions(permissions: string[]): boolean {
     return permissions.every(permission => hasPermission(permission))
   }
 
   // Update user profile
-  async function updateProfile(profileData) {
+  async function updateProfile(profileData: Partial<User>): Promise<User | null> {
     loading.value = true
 
     try {
@@ -208,7 +227,7 @@ export const useAuthStore = defineStore('auth', () => {
       ElMessage.success('Profil başarıyla güncellendi')
 
       return user.value
-    } catch (error) {
+    } catch (error: any) {
       console.error('Profile update failed:', error)
       ElMessage.error('Profil güncellenirken hata oluştu')
       throw error

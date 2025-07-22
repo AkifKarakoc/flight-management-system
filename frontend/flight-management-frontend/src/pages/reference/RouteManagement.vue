@@ -662,8 +662,8 @@ import {
   Sunny,
   Flag
 } from '@element-plus/icons-vue'
-import { useReferenceStore } from '@/stores/reference'
-import { useAppStore } from '@/stores/app'
+import { useReferenceStore } from '@/stores/reference.js'
+import { useAppStore } from '@/stores/app.js'
 import RouteForm from '@/components/forms/RouteForm.vue'
 
 // Stores

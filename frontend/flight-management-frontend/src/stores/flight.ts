@@ -3,28 +3,93 @@ import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import flightService from '@/services/flightService.js'
 import { SUCCESS_MESSAGES, ERROR_MESSAGES } from '@/utils/constants'
+import type {
+  Flight,
+  CreateFlightRequest,
+  PaginatedResponse
+} from '@/types/index'
+
+// Flight Status Types
+type FlightStatus = 'SCHEDULED' | 'BOARDING' | 'DEPARTED' | 'IN_FLIGHT' | 'ARRIVED' | 'CANCELLED' | 'DELAYED'
+type FlightType = 'PASSENGER' | 'CARGO' | 'POSITIONING' | 'FERRY' | 'TRAINING'
+
+// Store Interface Types
+interface FlightFilters {
+  search: string
+  airlineId: number | null
+  originAirportId: number | null
+  destinationAirportId: number | null
+  flightDate: string
+  status: FlightStatus | ''
+  type: FlightType | ''
+  sortBy: string
+  sortDirection: 'asc' | 'desc'
+}
+
+interface FlightStats {
+  totalFlights?: number
+  activeFlights?: number
+  delayedFlights?: number
+  cancelledFlights?: number
+  onTimePercentage?: number
+  averageDelay?: number
+    [key: string]: any
+}
+
+interface ActionLoading {
+  [key: string]: boolean
+}
+
+interface UploadResult {
+  successCount: number
+  errorCount: number
+  errors?: any[]
+}
+
+interface FlightValidation {
+  valid: boolean
+  errors: string[]
+}
+
+interface FlightConflicts {
+  hasConflicts: boolean
+  conflicts: any[]
+}
+
+interface SearchParams {
+  page?: number
+  size?: number
+    [key: string]: any
+}
+
+interface FlightResponse extends PaginatedResponse<Flight> {
+  content?: Flight[]
+  totalElements?: number
+  totalPages?: number
+  number?: number
+}
 
 export const useFlightStore = defineStore('flight', () => {
   // State
-  const flights = ref([])
-  const currentFlight = ref(null)
-  const stats = ref({})
-  const recentFlights = ref([])
+  const flights = ref<Flight[]>([])
+  const currentFlight = ref<Flight | null>(null)
+  const stats = ref<FlightStats>({})
+  const recentFlights = ref<Flight[]>([])
 
   // Loading states
-  const loading = ref(false)
-  const statsLoading = ref(false)
-  const uploadLoading = ref(false)
-  const actionLoading = ref({})
+  const loading = ref<boolean>(false)
+  const statsLoading = ref<boolean>(false)
+  const uploadLoading = ref<boolean>(false)
+  const actionLoading = ref<ActionLoading>({})
 
   // Pagination
-  const currentPage = ref(0)
-  const pageSize = ref(20)
-  const totalElements = ref(0)
-  const totalPages = ref(0)
+  const currentPage = ref<number>(0)
+  const pageSize = ref<number>(20)
+  const totalElements = ref<number>(0)
+  const totalPages = ref<number>(0)
 
   // Filters
-  const filters = ref({
+  const filters = ref<FlightFilters>({
     search: '',
     airlineId: null,
     originAirportId: null,
@@ -37,31 +102,33 @@ export const useFlightStore = defineStore('flight', () => {
   })
 
   // Cache
-  const lastFetch = ref(null)
+  const lastFetch = ref<number | null>(null)
   const cacheDuration = 2 * 60 * 1000 // 2 minutes
 
   // Computed
-  const isLoading = computed(() => loading.value)
-  const hasFlights = computed(() => flights.value.length > 0)
-  const activeFlights = computed(() =>
-    flights.value.filter(flight =>
-      !['CANCELLED', 'ARRIVED'].includes(flight.status)
-    )
-  )
+  const isLoading = computed((): boolean => loading.value)
+  const hasFlights = computed((): boolean => flights.value.length > 0)
 
-  const flightsByStatus = computed(() => {
-    const grouped = {}
+  const activeFlights = computed((): Flight[] =>
+  flights.value.filter(flight =>
+    !['CANCELLED', 'ARRIVED'].includes(flight.status || '')
+  )
+)
+
+  const flightsByStatus = computed((): Record<string, Flight[]> => {
+    const grouped: Record<string, Flight[]> = {}
     flights.value.forEach(flight => {
-      if (!grouped[flight.status]) {
-        grouped[flight.status] = []
+      const status = flight.status || 'UNKNOWN'
+      if (!grouped[status]) {
+        grouped[status] = []
       }
-      grouped[flight.status].push(flight)
+      grouped[status].push(flight)
     })
     return grouped
   })
 
-  const flightsByAirline = computed(() => {
-    const grouped = {}
+  const flightsByAirline = computed((): Record<number, Flight[]> => {
+    const grouped: Record<number, Flight[]> = {}
     flights.value.forEach(flight => {
       const airlineId = flight.airlineId
       if (!grouped[airlineId]) {
@@ -73,27 +140,27 @@ export const useFlightStore = defineStore('flight', () => {
   })
 
   // Getters
-  const getFlightById = computed(() => (id) => {
+  const getFlightById = computed(() => (id: number): Flight | undefined => {
     return flights.value.find(flight => flight.id === id)
   })
 
-  const getFlightsByAirline = computed(() => (airlineId) => {
+  const getFlightsByAirline = computed(() => (airlineId: number): Flight[] => {
     return flights.value.filter(flight => flight.airlineId === airlineId)
   })
 
-  const getFlightsByRoute = computed(() => (originId, destinationId) => {
+  const getFlightsByRoute = computed(() => (originId: number, destinationId: number): Flight[] => {
     return flights.value.filter(flight =>
       flight.originAirportId === originId &&
       flight.destinationAirportId === destinationId
     )
   })
 
-  const getFlightsByStatus = computed(() => (status) => {
+  const getFlightsByStatus = computed(() => (status: FlightStatus): Flight[] => {
     return flights.value.filter(flight => flight.status === status)
   })
 
   // Actions
-  async function fetchFlights(params = {}, force = false) {
+  async function fetchFlights(params: SearchParams = {}, force: boolean = false): Promise<Flight[]> {
     // Check cache
     if (!force && lastFetch.value && Date.now() - lastFetch.value < cacheDuration) {
       return flights.value
@@ -109,14 +176,14 @@ export const useFlightStore = defineStore('flight', () => {
         ...params
       }
 
-      const response = await flightService.getAll(queryParams)
+      const response: FlightResponse = await flightService.getAll(queryParams)
 
       // Handle paginated response
       if (response.content) {
         flights.value = response.content
-        totalElements.value = response.totalElements
-        totalPages.value = response.totalPages
-        currentPage.value = response.number
+        totalElements.value = response.totalElements || 0
+        totalPages.value = response.totalPages || 0
+        currentPage.value = response.number || 0
       } else {
         flights.value = Array.isArray(response) ? response : []
       }
@@ -124,7 +191,7 @@ export const useFlightStore = defineStore('flight', () => {
       lastFetch.value = Date.now()
       return flights.value
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching flights:', error)
       ElMessage.error('Uçuşlar yüklenirken hata oluştu')
       throw error
@@ -133,7 +200,7 @@ export const useFlightStore = defineStore('flight', () => {
     }
   }
 
-  async function fetchFlightById(id, force = false) {
+  async function fetchFlightById(id: number, force: boolean = false): Promise<Flight> {
     // Check if already in cache
     if (!force && currentFlight.value?.id === id) {
       return currentFlight.value
@@ -153,7 +220,7 @@ export const useFlightStore = defineStore('flight', () => {
 
       return flight
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching flight:', error)
       ElMessage.error('Uçuş detayları yüklenirken hata oluştu')
       throw error
@@ -162,7 +229,7 @@ export const useFlightStore = defineStore('flight', () => {
     }
   }
 
-  async function createFlight(flightData) {
+  async function createFlight(flightData: CreateFlightRequest): Promise<Flight> {
     loading.value = true
 
     try {
@@ -175,7 +242,7 @@ export const useFlightStore = defineStore('flight', () => {
       ElMessage.success(SUCCESS_MESSAGES.CREATED)
       return newFlight
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating flight:', error)
 
       if (error.response?.status === 409) {
@@ -190,7 +257,7 @@ export const useFlightStore = defineStore('flight', () => {
     }
   }
 
-  async function updateFlight(id, flightData) {
+  async function updateFlight(id: number, flightData: Partial<CreateFlightRequest>): Promise<Flight> {
     loading.value = true
 
     try {
@@ -210,7 +277,7 @@ export const useFlightStore = defineStore('flight', () => {
       ElMessage.success(SUCCESS_MESSAGES.UPDATED)
       return updatedFlight
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating flight:', error)
       ElMessage.error('Uçuş güncellenirken hata oluştu')
       throw error
@@ -219,7 +286,7 @@ export const useFlightStore = defineStore('flight', () => {
     }
   }
 
-  async function deleteFlight(id) {
+  async function deleteFlight(id: number): Promise<void> {
     loading.value = true
 
     try {
@@ -239,7 +306,7 @@ export const useFlightStore = defineStore('flight', () => {
 
       ElMessage.success(SUCCESS_MESSAGES.DELETED)
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting flight:', error)
       ElMessage.error('Uçuş silinirken hata oluştu')
       throw error
@@ -248,7 +315,7 @@ export const useFlightStore = defineStore('flight', () => {
     }
   }
 
-  async function uploadFlights(file, options = {}) {
+  async function uploadFlights(file: File, options: Record<string, any> = {}): Promise<UploadResult> {
     uploadLoading.value = true
 
     try {
@@ -265,7 +332,7 @@ export const useFlightStore = defineStore('flight', () => {
 
       return result
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error uploading flights:', error)
       ElMessage.error('Uçuş yüklemesi sırasında hata oluştu')
       throw error
@@ -274,7 +341,7 @@ export const useFlightStore = defineStore('flight', () => {
     }
   }
 
-  async function updateFlightStatus(id, status, notes = '') {
+  async function updateFlightStatus(id: number, status: FlightStatus, notes: string = ''): Promise<Flight> {
     const loadingKey = `status_${id}`
     actionLoading.value[loadingKey] = true
 
@@ -295,7 +362,7 @@ export const useFlightStore = defineStore('flight', () => {
       ElMessage.success('Uçuş durumu güncellendi')
       return updatedFlight
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating flight status:', error)
       ElMessage.error('Uçuş durumu güncellenirken hata oluştu')
       throw error
@@ -304,7 +371,7 @@ export const useFlightStore = defineStore('flight', () => {
     }
   }
 
-  async function cancelFlight(id, reason = '') {
+  async function cancelFlight(id: number, reason: string = ''): Promise<Flight> {
     const loadingKey = `cancel_${id}`
     actionLoading.value[loadingKey] = true
 
@@ -320,7 +387,7 @@ export const useFlightStore = defineStore('flight', () => {
       ElMessage.success('Uçuş iptal edildi')
       return updatedFlight
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error cancelling flight:', error)
       ElMessage.error('Uçuş iptal edilirken hata oluştu')
       throw error
@@ -329,7 +396,7 @@ export const useFlightStore = defineStore('flight', () => {
     }
   }
 
-  async function delayFlight(id, newDepartureTime, reason = '') {
+  async function delayFlight(id: number, newDepartureTime: string, reason: string = ''): Promise<Flight> {
     const loadingKey = `delay_${id}`
     actionLoading.value[loadingKey] = true
 
@@ -345,7 +412,7 @@ export const useFlightStore = defineStore('flight', () => {
       ElMessage.success('Uçuş geciktirildi')
       return updatedFlight
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error delaying flight:', error)
       ElMessage.error('Uçuş geciktirilirken hata oluştu')
       throw error
@@ -354,7 +421,7 @@ export const useFlightStore = defineStore('flight', () => {
     }
   }
 
-  async function fetchStats(params = {}) {
+  async function fetchStats(params: Record<string, any> = {}): Promise<FlightStats> {
     statsLoading.value = true
 
     try {
@@ -362,7 +429,7 @@ export const useFlightStore = defineStore('flight', () => {
       stats.value = statsData
       return statsData
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching flight stats:', error)
       ElMessage.error('İstatistikler yüklenirken hata oluştu')
       throw error
@@ -371,27 +438,27 @@ export const useFlightStore = defineStore('flight', () => {
     }
   }
 
-  async function fetchRecentFlights(limit = 10) {
+  async function fetchRecentFlights(limit: number = 10): Promise<Flight[]> {
     try {
       const recent = await flightService.getRecent(limit)
       recentFlights.value = recent
       return recent
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching recent flights:', error)
       ElMessage.error('Son uçuşlar yüklenirken hata oluştu')
       throw error
     }
   }
 
-  async function searchFlights(query, searchFilters = {}) {
+  async function searchFlights(query: string, searchFilters: Record<string, any> = {}): Promise<Flight[]> {
     loading.value = true
 
     try {
       const results = await flightService.search(query, searchFilters)
       return results
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error searching flights:', error)
       ElMessage.error('Uçuş arama sırasında hata oluştu')
       throw error
@@ -400,29 +467,29 @@ export const useFlightStore = defineStore('flight', () => {
     }
   }
 
-  async function validateFlight(flightData) {
+  async function validateFlight(flightData: CreateFlightRequest): Promise<FlightValidation> {
     try {
       const validation = await flightService.validate(flightData)
       return validation
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error validating flight:', error)
       throw error
     }
   }
 
-  async function checkConflicts(flightData) {
+  async function checkConflicts(flightData: CreateFlightRequest): Promise<FlightConflicts> {
     try {
       const conflicts = await flightService.checkConflicts(flightData)
       return conflicts
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error checking conflicts:', error)
       throw error
     }
   }
 
-  async function exportFlights(exportFilters = {}) {
+  async function exportFlights(exportFilters: Record<string, any> = {}): Promise<void> {
     loading.value = true
 
     try {
@@ -440,7 +507,7 @@ export const useFlightStore = defineStore('flight', () => {
 
       ElMessage.success('Uçuşlar başarıyla dışa aktarıldı')
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error exporting flights:', error)
       ElMessage.error('Dışa aktarma sırasında hata oluştu')
       throw error
@@ -449,7 +516,7 @@ export const useFlightStore = defineStore('flight', () => {
     }
   }
 
-  async function downloadTemplate() {
+  async function downloadTemplate(): Promise<void> {
     try {
       const blob = await flightService.getTemplate()
 
@@ -465,7 +532,7 @@ export const useFlightStore = defineStore('flight', () => {
 
       ElMessage.success('Şablon dosyası indirildi')
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error downloading template:', error)
       ElMessage.error('Şablon dosyası indirilirken hata oluştu')
       throw error
@@ -473,11 +540,11 @@ export const useFlightStore = defineStore('flight', () => {
   }
 
   // Filter management
-  function setFilters(newFilters) {
+  function setFilters(newFilters: Partial<FlightFilters>): void {
     filters.value = { ...filters.value, ...newFilters }
   }
 
-  function resetFilters() {
+  function resetFilters(): void {
     filters.value = {
       search: '',
       airlineId: null,
@@ -491,21 +558,21 @@ export const useFlightStore = defineStore('flight', () => {
     }
   }
 
-  function setCurrentPage(page) {
+  function setCurrentPage(page: number): void {
     currentPage.value = page
   }
 
-  function setPageSize(size) {
+  function setPageSize(size: number): void {
     pageSize.value = size
     currentPage.value = 0 // Reset to first page
   }
 
   // Cache management
-  function invalidateCache() {
+  function invalidateCache(): void {
     lastFetch.value = null
   }
 
-  function clearFlights() {
+  function clearFlights(): void {
     flights.value = []
     currentFlight.value = null
     totalElements.value = 0
@@ -513,17 +580,17 @@ export const useFlightStore = defineStore('flight', () => {
     currentPage.value = 0
   }
 
-  function clearCurrentFlight() {
+  function clearCurrentFlight(): void {
     currentFlight.value = null
   }
 
   // Utility functions
-  function isActionLoading(action, id) {
+  function isActionLoading(action: string, id: number): boolean {
     return actionLoading.value[`${action}_${id}`] || false
   }
 
-  function getFlightStatusText(status) {
-    const statusMap = {
+  function getFlightStatusText(status: FlightStatus): string {
+    const statusMap: Record<FlightStatus, string> = {
       'SCHEDULED': 'Planlandı',
       'BOARDING': 'Biniş',
       'DEPARTED': 'Kalktı',
@@ -535,12 +602,13 @@ export const useFlightStore = defineStore('flight', () => {
     return statusMap[status] || status
   }
 
-  function getFlightTypeText(type) {
-    const typeMap = {
+  function getFlightTypeText(type: FlightType): string {
+    const typeMap: Record<FlightType, string> = {
       'PASSENGER': 'Yolcu',
       'CARGO': 'Kargo',
-      'DOMESTIC': 'İç Hat',
-      'INTERNATIONAL': 'Dış Hat'
+      'POSITIONING': 'Pozisyon',
+      'FERRY': 'Ferry',
+      'TRAINING': 'Eğitim'
     }
     return typeMap[type] || type
   }

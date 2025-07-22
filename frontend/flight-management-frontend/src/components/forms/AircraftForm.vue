@@ -364,7 +364,7 @@ import {
   MapLocation,
   InfoFilled
 } from '@element-plus/icons-vue'
-import { useReferenceStore } from '@/stores/reference'
+import { useReferenceStore } from '@/stores/reference.js'
 import dayjs from 'dayjs'
 
 // Props

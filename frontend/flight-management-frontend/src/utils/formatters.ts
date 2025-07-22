@@ -1,53 +1,85 @@
+// Type definitions
+type DateInput = string | number | Date
+type NumberInput = string | number | null | undefined
+
+interface DateFormatOptions {
+  year?: 'numeric' | '2-digit'
+  month?: 'numeric' | '2-digit' | 'long' | 'short' | 'narrow'
+  day?: 'numeric' | '2-digit'
+  hour?: 'numeric' | '2-digit'
+  minute?: 'numeric' | '2-digit'
+  second?: 'numeric' | '2-digit'
+}
+
+type FlightStatus =
+| 'SCHEDULED'
+| 'BOARDING'
+| 'DEPARTED'
+| 'IN_FLIGHT'
+| 'ARRIVED'
+| 'DELAYED'
+| 'CANCELLED'
+| 'DIVERTED'
+
 /**
  * Number formatting utilities
  */
-export const formatNumber = (num) => {
+export const formatNumber = (num: NumberInput): string => {
   if (num === null || num === undefined) return '0'
 
+  let numValue: number
   if (typeof num !== 'number') {
-    num = parseFloat(num)
-    if (isNaN(num)) return '0'
+    numValue = parseFloat(String(num))
+    if (isNaN(numValue)) return '0'
+  } else {
+    numValue = num
   }
 
-  return new Intl.NumberFormat('tr-TR').format(num)
+  return new Intl.NumberFormat('tr-TR').format(numValue)
 }
 
-export const formatCurrency = (amount, currency = 'TRY') => {
+export const formatCurrency = (amount: NumberInput, currency: string = 'TRY'): string => {
   if (amount === null || amount === undefined) return '0'
 
+  let amountValue: number
   if (typeof amount !== 'number') {
-    amount = parseFloat(amount)
-    if (isNaN(amount)) return '0'
+    amountValue = parseFloat(String(amount))
+    if (isNaN(amountValue)) return '0'
+  } else {
+    amountValue = amount
   }
 
   return new Intl.NumberFormat('tr-TR', {
     style: 'currency',
     currency: currency,
     minimumFractionDigits: 2
-  }).format(amount)
+  }).format(amountValue)
 }
 
-export const formatPercentage = (value, decimals = 1) => {
+export const formatPercentage = (value: NumberInput, decimals: number = 1): string => {
   if (value === null || value === undefined) return '0%'
 
+  let valueNum: number
   if (typeof value !== 'number') {
-    value = parseFloat(value)
-    if (isNaN(value)) return '0%'
+    valueNum = parseFloat(String(value))
+    if (isNaN(valueNum)) return '0%'
+  } else {
+    valueNum = value
   }
 
-  return `${value.toFixed(decimals)}%`
+  return `${valueNum.toFixed(decimals)}%`
 }
 
 /**
  * Date and time formatting utilities
  */
-export const formatDate = (date, options = {}) => {
+export const formatDate = (date: DateInput, options: DateFormatOptions = {}): string => {
   if (!date) return ''
 
   const dateObj = new Date(date)
   if (isNaN(dateObj.getTime())) return ''
 
-  const defaultOptions = {
+  const defaultOptions: DateFormatOptions = {
     year: 'numeric',
     month: 'short',
     day: 'numeric'
@@ -56,7 +88,7 @@ export const formatDate = (date, options = {}) => {
   return new Intl.DateTimeFormat('tr-TR', { ...defaultOptions, ...options }).format(dateObj)
 }
 
-export const formatTime = (date) => {
+export const formatTime = (date: DateInput): string => {
   if (!date) return ''
 
   const dateObj = new Date(date)
@@ -68,7 +100,7 @@ export const formatTime = (date) => {
   }).format(dateObj)
 }
 
-export const formatDateTime = (date) => {
+export const formatDateTime = (date: DateInput): string => {
   if (!date) return ''
 
   const dateObj = new Date(date)
@@ -83,14 +115,14 @@ export const formatDateTime = (date) => {
   }).format(dateObj)
 }
 
-export const formatRelativeTime = (date) => {
+export const formatRelativeTime = (date: DateInput): string => {
   if (!date) return ''
 
   const dateObj = new Date(date)
   if (isNaN(dateObj.getTime())) return ''
 
   const now = new Date()
-  const diffInSeconds = Math.floor((now - dateObj) / 1000)
+  const diffInSeconds = Math.floor((now.getTime() - dateObj.getTime()) / 1000)
 
   if (diffInSeconds < 60) {
     return `${diffInSeconds} saniye önce`
@@ -123,7 +155,7 @@ export const formatRelativeTime = (date) => {
 /**
  * Duration formatting utilities
  */
-export const formatDuration = (minutes) => {
+export const formatDuration = (minutes: number): string => {
   if (!minutes || minutes <= 0) return '0 dk'
 
   const hours = Math.floor(minutes / 60)
@@ -140,7 +172,7 @@ export const formatDuration = (minutes) => {
   return `${hours} sa ${remainingMinutes} dk`
 }
 
-export const formatFlightDuration = (departureTime, arrivalTime) => {
+export const formatFlightDuration = (departureTime: DateInput, arrivalTime: DateInput): string => {
   if (!departureTime || !arrivalTime) return ''
 
   const departure = new Date(departureTime)
@@ -148,7 +180,7 @@ export const formatFlightDuration = (departureTime, arrivalTime) => {
 
   if (isNaN(departure.getTime()) || isNaN(arrival.getTime())) return ''
 
-  const diffInMs = arrival - departure
+  const diffInMs = arrival.getTime() - departure.getTime()
   const diffInMinutes = Math.floor(diffInMs / (1000 * 60))
 
   return formatDuration(diffInMinutes)
@@ -157,10 +189,10 @@ export const formatFlightDuration = (departureTime, arrivalTime) => {
 /**
  * File size formatting utilities
  */
-export const formatFileSize = (bytes) => {
+export const formatFileSize = (bytes: number): string => {
   if (!bytes || bytes === 0) return '0 B'
 
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'] as const
   const i = Math.floor(Math.log(bytes) / Math.log(1024))
 
   return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${sizes[i]}`
@@ -169,7 +201,7 @@ export const formatFileSize = (bytes) => {
 /**
  * String formatting utilities
  */
-export const truncateText = (text, maxLength = 50) => {
+export const truncateText = (text: string, maxLength: number = 50): string => {
   if (!text) return ''
 
   if (text.length <= maxLength) return text
@@ -177,13 +209,13 @@ export const truncateText = (text, maxLength = 50) => {
   return text.substring(0, maxLength) + '...'
 }
 
-export const capitalizeFirst = (str) => {
+export const capitalizeFirst = (str: string): string => {
   if (!str) return ''
 
   return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase()
 }
 
-export const formatPhoneNumber = (phone) => {
+export const formatPhoneNumber = (phone: string): string => {
   if (!phone) return ''
 
   // Remove all non-digit characters
@@ -204,7 +236,7 @@ export const formatPhoneNumber = (phone) => {
 /**
  * Flight specific formatting utilities
  */
-export const formatFlightNumber = (flightNumber) => {
+export const formatFlightNumber = (flightNumber: string): string => {
   if (!flightNumber) return ''
 
   // Format: TK1234 -> TK 1234
@@ -216,13 +248,13 @@ export const formatFlightNumber = (flightNumber) => {
   return flightNumber
 }
 
-export const formatAirportCode = (code) => {
+export const formatAirportCode = (code: string): string => {
   if (!code) return ''
 
   return code.toUpperCase()
 }
 
-export const formatRoute = (origin, destination) => {
+export const formatRoute = (origin: string, destination: string): string => {
   if (!origin || !destination) return ''
 
   return `${formatAirportCode(origin)} → ${formatAirportCode(destination)}`
@@ -231,8 +263,8 @@ export const formatRoute = (origin, destination) => {
 /**
  * Status formatting utilities
  */
-export const getFlightStatusText = (status) => {
-  const statusMap = {
+export const getFlightStatusText = (status: FlightStatus): string => {
+  const statusMap: Record<FlightStatus, string> = {
     'SCHEDULED': 'Planlandı',
     'BOARDING': 'Biniş',
     'DEPARTED': 'Kalktı',
@@ -246,8 +278,8 @@ export const getFlightStatusText = (status) => {
   return statusMap[status] || status
 }
 
-export const getFlightStatusColor = (status) => {
-  const colorMap = {
+export const getFlightStatusColor = (status: FlightStatus): string => {
+  const colorMap: Record<FlightStatus, string> = {
     'SCHEDULED': '#909399',
     'BOARDING': '#e6a23c',
     'DEPARTED': '#67c23a',
@@ -264,17 +296,17 @@ export const getFlightStatusColor = (status) => {
 /**
  * Validation utilities
  */
-export const isValidEmail = (email) => {
+export const isValidEmail = (email: string): boolean => {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
   return emailRegex.test(email)
 }
 
-export const isValidPhoneNumber = (phone) => {
+export const isValidPhoneNumber = (phone: string): boolean => {
   const cleaned = phone.replace(/\D/g, '')
   return cleaned.length === 10 || (cleaned.length === 11 && cleaned.startsWith('0'))
 }
 
-export const isValidFlightNumber = (flightNumber) => {
+export const isValidFlightNumber = (flightNumber: string): boolean => {
   const flightRegex = /^[A-Z]{2}\d{3,4}$/
   return flightRegex.test(flightNumber)
 }
@@ -282,7 +314,7 @@ export const isValidFlightNumber = (flightNumber) => {
 /**
  * Array and object formatting utilities
  */
-export const formatList = (items, separator = ', ', lastSeparator = ' ve ') => {
+export const formatList = (items: string[], separator: string = ', ', lastSeparator: string = ' ve '): string => {
   if (!Array.isArray(items) || items.length === 0) return ''
 
   if (items.length === 1) return items[0]
@@ -295,13 +327,13 @@ export const formatList = (items, separator = ', ', lastSeparator = ' ve ') => {
   return `${allButLast}${lastSeparator}${last}`
 }
 
-export const groupBy = (array, key) => {
+export const groupBy = <T>(array: T[], key: keyof T): Record<string, T[]> => {
   return array.reduce((result, item) => {
-    const group = item[key]
+    const group = String(item[key])
     if (!result[group]) {
       result[group] = []
     }
     result[group].push(item)
     return result
-  }, {})
+  }, {} as Record<string, T[]>)
 }

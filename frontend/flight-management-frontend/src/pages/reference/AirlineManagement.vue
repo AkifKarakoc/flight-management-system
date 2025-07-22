@@ -405,8 +405,8 @@ import {
   Phone,
   Calendar
 } from '@element-plus/icons-vue'
-import { useReferenceStore } from '@/stores/reference'
-import { useAppStore } from '@/stores/app'
+import { useReferenceStore } from '@/stores/reference.js'
+import { useAppStore } from '@/stores/app.js'
 import AirlineForm from '@/components/forms/AirlineForm.vue'
 
 // Stores

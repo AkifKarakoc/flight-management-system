@@ -505,8 +505,8 @@ import {
   Loading,
   UploadFilled
 } from '@element-plus/icons-vue'
-import { useFlightStore } from '@/stores/flight'
-import { useAppStore } from '@/stores/app'
+import { useFlightStore } from '@/stores/flight.js'
+import { useAppStore } from '@/stores/app.js'
 import dayjs from 'dayjs'
 
 // Router and stores

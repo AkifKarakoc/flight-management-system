@@ -573,8 +573,8 @@ import {
   Clock,
   MapLocation
 } from '@element-plus/icons-vue'
-import { useReferenceStore } from '@/stores/reference'
-import { useAppStore } from '@/stores/app'
+import { useReferenceStore } from '@/stores/reference.js'
+import { useAppStore } from '@/stores/app.js'
 import AircraftForm from '@/components/forms/AircraftForm.vue'
 import dayjs from 'dayjs'
 

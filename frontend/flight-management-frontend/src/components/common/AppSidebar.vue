@@ -186,7 +186,7 @@ import {
   Expand,
   Fold
 } from '@element-plus/icons-vue'
-import { useAuthStore } from '@/stores/auth'
+import { useAuthStore } from '@/stores/auth.js'
 
 // Props
 const props = defineProps({

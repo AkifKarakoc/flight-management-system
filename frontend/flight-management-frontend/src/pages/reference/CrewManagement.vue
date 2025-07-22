@@ -767,8 +767,8 @@ import {
   CircleCheckFilled,
   TrendCharts
 } from '@element-plus/icons-vue'
-import { useReferenceStore } from '@/stores/reference'
-import { useAppStore } from '@/stores/app'
+import { useReferenceStore } from '@/stores/reference.js'
+import { useAppStore } from '@/stores/app.js'
 import CrewMemberForm from '@/components/forms/CrewMemberForm.vue'
 import dayjs from 'dayjs'
 

@@ -579,8 +579,8 @@ import {
   Link,
   Phone
 } from '@element-plus/icons-vue'
-import { useReferenceStore } from '@/stores/reference'
-import { useAppStore } from '@/stores/app'
+import { useReferenceStore } from '@/stores/reference.js'
+import { useAppStore } from '@/stores/app.js'
 import AirportForm from '@/components/forms/AirportForm.vue'
 
 // Stores

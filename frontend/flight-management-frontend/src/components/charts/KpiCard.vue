@@ -26,7 +26,7 @@
 
 <script setup>
 import { computed } from 'vue'
-import { formatNumber } from '@/utils/formatters'
+import { formatNumber } from '@/utils/formatters.js'
 import {
   Position, Ship, MapLocation, Promotion, Avatar,
   Monitor, TrendCharts, ArrowUp, ArrowDown

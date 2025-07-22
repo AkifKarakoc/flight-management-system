@@ -231,8 +231,8 @@ import {
   ArrowDown,
   RefreshRight
 } from '@element-plus/icons-vue'
-import { useReferenceStore } from '@/stores/reference'
-import { FLIGHT_STATUS, FLIGHT_TYPES } from '@/utils/constants'
+import { useReferenceStore } from '@/stores/reference.js'
+import { FLIGHT_STATUS, FLIGHT_TYPES } from '@/utils/constants.js'
 
 // Props
 const props = defineProps({
