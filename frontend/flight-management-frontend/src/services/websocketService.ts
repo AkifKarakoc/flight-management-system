@@ -341,11 +341,10 @@ class WebSocketService {
   private buildWebSocketUrl(endpoint: string): string {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 
-    // Endpoint'in ilk kısmına göre hangi servise bağlanılacağını belirliyoruz.
-    // Örn: "flight-tracking/TK123" -> "flight-tracking" anahtar kelimesi olur.
+    // Endpoint'in ilk kısmına göre hangi servise bağlanılacağını belirliyoruz
     const endpointType = endpoint.split('/')[0];
 
-    // Servis portlarını merkezi bir yerden yönetiyoruz.
+    // Servis portlarını merkezi bir yerden yönetiyoruz
     const SERVICE_PORTS: { [key: string]: string } = {
       // Reference Manager Service (Port 8081)
       'notifications': '8081',
@@ -355,18 +354,17 @@ class WebSocketService {
       // Flight Service (Port 8082)
       'flights': '8082',
       'dashboard': '8082',
-      'flight-tracking': '8082', // Uçuş takibi de flight-service'e aittir
+      'flight-tracking': '8082',
       // Archive Service (Port 8083)
       'archive': '8083'
     };
 
-    // Endpoint türüne göre portu bul, bulamazsan varsayılan olarak 8082 kullan.
+    // Endpoint türüne göre portu bul
     const port = SERVICE_PORTS[endpointType] || '8082';
     const host = `localhost:${port}`;
 
-    // HATA BURADAYDI: URL'in sonuna endpoint eklemiyoruz. Bağlantı sadece /ws adresine yapılır.
-    // Konu (topic) ayrımı bağlantı kurulduktan sonra STOMP mesajları ile yapılır.
-    return `${protocol}//${host}/ws`;
+    // WebSocket URL'ini oluştur - /ws/sockjs ekle (SockJS için)
+    return `${protocol}//${host}/ws/sockjs`;
   }
 
 

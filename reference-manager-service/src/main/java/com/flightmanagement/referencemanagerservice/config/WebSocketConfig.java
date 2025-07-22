@@ -12,18 +12,18 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry config) {
-        // Enable a simple memory-based message broker
         config.enableSimpleBroker("/topic", "/queue");
-
-        // Set application destination prefix
         config.setApplicationDestinationPrefixes("/app");
     }
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
-        // Register STOMP endpoint
         registry.addEndpoint("/ws")
-                .setAllowedOriginPatterns("*")
+                .setAllowedOriginPatterns("http://localhost:5173", "http://localhost:*")
                 .withSockJS();
+
+        // SockJS olmadan direkt WebSocket endpoint'i de ekleyelim
+        registry.addEndpoint("/ws")
+                .setAllowedOriginPatterns("http://localhost:5173", "http://localhost:*");
     }
 }
