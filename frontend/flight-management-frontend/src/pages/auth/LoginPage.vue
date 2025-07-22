@@ -75,7 +75,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, Lock } from '@element-plus/icons-vue'
-import apiService from '@/services/api'
+import apiService from '@/services/api.js'
 
 const router = useRouter()
 const loginFormRef = ref()

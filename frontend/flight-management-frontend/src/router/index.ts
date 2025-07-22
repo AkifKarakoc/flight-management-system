@@ -1,8 +1,20 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHistory, type RouteRecordRaw, type Router } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
 
-// Lazy import components
+// Vue Router RouteMeta interface'ini genişletiyoruz
+declare module 'vue-router' {
+  interface RouteMeta {
+    title?: string
+    breadcrumb?: string
+    requiresAuth?: boolean
+    keepAlive?: boolean
+    permissions?: string[]
+    roles?: string[]
+  }
+}
+
+// Lazy import components with proper typing
 const AuthLayout = () => import('@/layouts/AuthLayout.vue')
 const MainLayout = () => import('@/layouts/MainLayout.vue')
 const LoginPage = () => import('@/pages/auth/LoginPage.vue')
@@ -16,7 +28,7 @@ const AircraftManagement = () => import('@/pages/reference/AircraftManagement.vu
 const RouteManagement = () => import('@/pages/reference/RouteManagement.vue')
 const CrewManagement = () => import('@/pages/reference/CrewManagement.vue')
 
-const routes = [
+const routes: RouteRecordRaw[] = [
   // Auth Routes
   {
     path: '/auth',
@@ -180,7 +192,7 @@ const routes = [
   }
 ]
 
-const router = createRouter({
+const router: Router = createRouter({
   history: createWebHistory(),
   routes,
   scrollBehavior(to, from, savedPosition) {
@@ -216,7 +228,7 @@ router.beforeEach(async (to, from, next) => {
 
     // Check permissions if specified
     if (to.meta.permissions && to.meta.permissions.length > 0) {
-      const hasPermission = to.meta.permissions.some(permission =>
+      const hasPermission = to.meta.permissions.some((permission: string) =>
         authStore.hasPermission(permission)
       )
 
@@ -229,7 +241,7 @@ router.beforeEach(async (to, from, next) => {
 
     // Check roles if specified
     if (to.meta.roles && to.meta.roles.length > 0) {
-      const hasRole = to.meta.roles.some(role =>
+      const hasRole = to.meta.roles.some((role: string) =>
         authStore.hasRole(role)
       )
 
@@ -256,7 +268,7 @@ router.afterEach((to, from) => {
 })
 
 // Handle navigation errors
-router.onError((error) => {
+router.onError((error: Error) => {
   console.error('Router error:', error)
   ElMessage.error('Sayfa yüklenirken hata oluştu')
 })

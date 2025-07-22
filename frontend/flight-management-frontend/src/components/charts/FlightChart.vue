@@ -23,7 +23,7 @@
 <script setup>
 import { ref, reactive, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import * as echarts from 'echarts'
-import apiService from '@/services/api'
+import apiService from '@/services/api.js'
 
 const props = defineProps({
   period: {

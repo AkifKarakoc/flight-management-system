@@ -1,8 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import authService from '@/services/authService'
-import router from '@/router'
+import authService from '@/services/authService.js'
+import router from '@/router/index.js'
 import { SUCCESS_MESSAGES, ERROR_MESSAGES } from '@/utils/constants'
 
 export const useAuthStore = defineStore('auth', () => {

@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
-import flightService from '@/services/flightService'
+import flightService from '@/services/flightService.js'
 import { SUCCESS_MESSAGES, ERROR_MESSAGES } from '@/utils/constants'
 
 export const useFlightStore = defineStore('flight', () => {

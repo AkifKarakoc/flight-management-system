@@ -117,8 +117,8 @@
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Right, More, View, Edit, Clock } from '@element-plus/icons-vue'
-import apiService from '@/services/api'
-import websocketService from '@/services/websocketService'
+import apiService from '@/services/api.js'
+import websocketService from '@/services/websocketService.js'
 
 const props = defineProps({
   limit: {

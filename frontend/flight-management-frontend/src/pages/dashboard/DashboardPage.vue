@@ -307,9 +307,9 @@ import RecentFlightsTable from '@/components/tables/RecentFlightsTable.vue'
 import SystemStatus from '@/components/common/SystemStatus.vue'
 
 // Services
-import websocketService from '@/services/websocketService'
-import exportService from '@/services/exportService'
-import apiService from '@/services/api'
+import websocketService from '@/services/websocketService.js'
+import exportService from '@/services/exportService.js'
+import apiService from '@/services/api.js'
 
 // Reactive data
 const loading = ref(true)

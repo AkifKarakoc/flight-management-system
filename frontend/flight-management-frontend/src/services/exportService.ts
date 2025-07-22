@@ -6,8 +6,128 @@
 import * as XLSX from 'xlsx'
 import { jsPDF } from 'jspdf'
 import 'jspdf-autotable'
+import type {
+  Flight,
+  KpiData,
+  SystemStatusItem
+} from '@/types'
+
+// jsPDF AutoTable type declaration
+declare module 'jspdf' {
+  interface jsPDF {
+    autoTable: (options: any) => jsPDF
+  }
+}
+
+// Export format types
+type ExportFormat = 'pdf' | 'excel' | 'csv'
+type ChartFormat = 'png' | 'jpg' | 'jpeg' | 'webp'
+type OrientationType = 'portrait' | 'landscape'
+type PageFormat = 'a4' | 'a3' | 'letter' | 'legal'
+
+// Configuration interfaces
+interface MarginConfig {
+  top: number
+  right: number
+  bottom: number
+  left: number
+}
+
+interface PDFConfig {
+  format: PageFormat
+  orientation: OrientationType
+  margin: MarginConfig
+  fontSize: number
+  font: string
+  title?: string
+  subtitle?: string
+  footer?: string
+  metadata?: Record<string, string | number>
+  columns?: string[]
+  columnLabels?: Record<string, string>
+  columnStyles?: Record<string, any>
+}
+
+interface ExcelConfig {
+  sheetName: string
+  bookType: string
+  columnWidths?: number[]
+  headers?: boolean
+  metadata?: {
+    title?: string
+    subject?: string
+    author?: string
+  }
+}
+
+interface CSVConfig {
+  delimiter: string
+  encoding: string
+  columns?: string[]
+  columnLabels?: Record<string, string>
+}
+
+interface ChartConfig {
+  format: ChartFormat
+  quality: number
+  width: number
+  height: number
+  backgroundColor: string
+}
+
+interface DefaultOptions {
+  pdf: PDFConfig
+  excel: ExcelConfig
+  csv: CSVConfig
+}
+
+// Dashboard data interfaces
+interface DashboardKpis {
+  totalFlights: number
+  activeAirlines: number
+  totalAirports: number
+  activeAircrafts: number
+}
+
+interface DashboardData {
+  kpis?: DashboardKpis
+  recentFlights?: Flight[]
+  systemStatus?: SystemStatusItem[]
+  alerts?: Array<{
+    id: number
+    type: string
+    message: string
+    timestamp: string
+  }>
+}
+
+// Export result interface
+interface ExportResult {
+  blob: Blob
+  filename: string
+}
+
+// Flight export specific interface
+interface FlightExportData {
+  flightNumber: string
+  airline: string
+  origin: string
+  destination: string
+  departureTime: string
+  arrivalTime: string
+  status: string
+    [key: string]: any
+}
+
+// Report data interface for dashboard
+interface ReportData {
+  'Metrik': string
+  'Değer': string | number
+}
 
 class ExportService {
+  private readonly defaultOptions: DefaultOptions
+
   constructor() {
     this.defaultOptions = {
       pdf: {
@@ -30,12 +150,9 @@ class ExportService {
 
   /**
    * Export data to PDF
-   * @param {Array} data - Data to export
-   * @param {Object} options - Export options
-   * @returns {Promise<Blob>}
    */
-  async exportToPDF(data, options = {}) {
-    const config = { ...this.defaultOptions.pdf, ...options }
+  async exportToPDF(data: Record<string, any>[], options: Partial<PDFConfig> = {}): Promise<Blob> {
+    const config: PDFConfig = { ...this.defaultOptions.pdf, ...options }
 
     try {
       const doc = new jsPDF({
@@ -132,12 +249,12 @@ class ExportService {
 
   /**
    * Export data to Excel
-   * @param {Array|Object} data - Data to export (can be multiple sheets)
-   * @param {Object} options - Export options
-   * @returns {Promise<Blob>}
    */
-  async exportToExcel(data, options = {}) {
-    const config = { ...this.defaultOptions.excel, ...options }
+  async exportToExcel(
+    data: Record<string, any>[] | Record<string, Record<string, any>[]>,
+    options: Partial<ExcelConfig> = {}
+  ): Promise<Blob> {
+    const config: ExcelConfig = { ...this.defaultOptions.excel, ...options }
 
     try {
       const workbook = XLSX.utils.book_new()
@@ -153,7 +270,7 @@ class ExportService {
 
         // Apply styles (basic styling)
         if (config.headers && data.length > 0) {
-          const range = XLSX.utils.decode_range(worksheet['!ref'])
+          const range = XLSX.utils.decode_range(worksheet['!ref']!)
           for (let col = range.s.c; col <= range.e.c; col++) {
             const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col })
             if (worksheet[cellAddress]) {
@@ -185,9 +302,9 @@ class ExportService {
         }
       }
 
-      return new Promise((resolve) => {
+      return new Promise<Blob>((resolve) => {
         const excelBuffer = XLSX.write(workbook, {
-          bookType: config.bookType,
+          bookType: config.bookType as XLSX.BookType,
           type: 'array'
         })
         resolve(new Blob([excelBuffer], {
@@ -202,12 +319,9 @@ class ExportService {
 
   /**
    * Export data to CSV
-   * @param {Array} data - Data to export
-   * @param {Object} options - Export options
-   * @returns {Promise<Blob>}
    */
-  async exportToCSV(data, options = {}) {
-    const config = { ...this.defaultOptions.csv, ...options }
+  async exportToCSV(data: Record<string, any>[], options: Partial<CSVConfig> = {}): Promise<Blob> {
+    const config: CSVConfig = { ...this.defaultOptions.csv, ...options }
 
     try {
       if (!Array.isArray(data) || data.length === 0) {
@@ -242,12 +356,12 @@ class ExportService {
 
   /**
    * Export chart as image
-   * @param {HTMLCanvasElement|string} chartElement - Chart canvas element or data URL
-   * @param {Object} options - Export options
-   * @returns {Promise<Blob>}
    */
-  async exportChartAsImage(chartElement, options = {}) {
-    const config = {
+  async exportChartAsImage(
+    chartElement: HTMLCanvasElement | string,
+    options: Partial<ChartConfig> = {}
+  ): Promise<Blob> {
+    const config: ChartConfig = {
       format: 'png',
       quality: 0.9,
       width: 800,
@@ -257,7 +371,7 @@ class ExportService {
     }
 
     try {
-      let dataURL
+      let dataURL: string
 
       if (typeof chartElement === 'string') {
         dataURL = chartElement
@@ -278,10 +392,8 @@ class ExportService {
 
   /**
    * Download blob as file
-   * @param {Blob} blob - Blob to download
-   * @param {string} filename - File name
    */
-  downloadBlob(blob, filename) {
+  downloadBlob(blob: Blob, filename: string): void {
     try {
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
@@ -303,11 +415,12 @@ class ExportService {
 
   /**
    * Export flights data with multiple formats
-   * @param {Array} flights - Flights data
-   * @param {string} format - Export format (pdf, excel, csv)
-   * @param {Object} options - Export options
    */
-  async exportFlights(flights, format, options = {}) {
+  async exportFlights(
+    flights: FlightExportData[],
+    format: ExportFormat,
+    options: Partial<PDFConfig & ExcelConfig & CSVConfig> = {}
+  ): Promise<ExportResult> {
     const timestamp = new Date().toISOString().split('T')[0]
     const baseFilename = `ucuslar_${timestamp}`
 
@@ -333,8 +446,8 @@ class ExportService {
       ...options
     }
 
-    let blob
-    let filename
+    let blob: Blob
+    let filename: string
 
     switch (format) {
       case 'pdf':
@@ -359,11 +472,12 @@ class ExportService {
 
   /**
    * Export dashboard report
-   * @param {Object} dashboardData - Dashboard data
-   * @param {string} format - Export format
-   * @param {Object} options - Export options
    */
-  async exportDashboardReport(dashboardData, format, options = {}) {
+  async exportDashboardReport(
+    dashboardData: DashboardData,
+    format: ExportFormat,
+    options: Partial<PDFConfig & ExcelConfig> = {}
+  ): Promise<ExportResult> {
     const timestamp = new Date().toISOString().split('T')[0]
     const baseFilename = `dashboard_raporu_${timestamp}`
 
@@ -378,36 +492,36 @@ class ExportService {
       ...options
     }
 
+    let blob: Blob
+    let filename: string
+
     if (format === 'excel') {
       // Multi-sheet Excel for dashboard
-      const workbookData = {
+      const workbookData: Record<string, Record<string, any>[]> = {
         'KPI Özeti': dashboardData.kpis ? [dashboardData.kpis] : [],
         'Son Uçuşlar': dashboardData.recentFlights || [],
         'Sistem Durumu': dashboardData.systemStatus || [],
         'Uyarılar': dashboardData.alerts || []
       }
 
-      const blob = await this.exportToExcel(workbookData, exportConfig)
-      const filename = `${baseFilename}.xlsx`
-      this.downloadBlob(blob, filename)
-      return { blob, filename }
+      blob = await this.exportToExcel(workbookData, exportConfig)
+      filename = `${baseFilename}.xlsx`
     } else {
       // For PDF, create a comprehensive report
       const reportData = this.prepareDashboardReportData(dashboardData)
-      const blob = await this.exportToPDF(reportData, exportConfig)
-      const filename = `${baseFilename}.pdf`
-      this.downloadBlob(blob, filename)
-      return { blob, filename }
+      blob = await this.exportToPDF(reportData, exportConfig)
+      filename = `${baseFilename}.pdf`
     }
+
+    this.downloadBlob(blob, filename)
+    return { blob, filename }
   }
 
   /**
    * Prepare dashboard data for PDF report
-   * @param {Object} dashboardData - Dashboard data
-   * @returns {Array}
    */
-  prepareDashboardReportData(dashboardData) {
-    const reportData = []
+  private prepareDashboardReportData(dashboardData: DashboardData): ReportData[] {
+    const reportData: ReportData[] = []
 
     // Add KPI summary
     if (dashboardData.kpis) {
@@ -434,10 +548,8 @@ class ExportService {
 
   /**
    * Format cell value for export
-   * @param {any} value - Cell value
-   * @returns {string}
    */
-  formatCellValue(value) {
+  private formatCellValue(value: any): string {
     if (value === null || value === undefined) {
       return ''
     }
@@ -452,6 +564,139 @@ class ExportService {
 
     return String(value)
   }
+
+  /**
+   * Export reference data (airlines, airports, etc.)
+   */
+  async exportReferenceData<T extends Record<string, any>>(
+  data: T[],
+  type: string,
+  format: ExportFormat,
+  options: Partial<PDFConfig & ExcelConfig & CSVConfig> = {}
+): Promise<ExportResult> {
+    const timestamp = new Date().toISOString().split('T')[0]
+    const baseFilename = `${type}_${timestamp}`
+
+    const exportConfig = {
+      title: `${type} Listesi`,
+      subtitle: `Toplam ${data.length} kayıt - ${new Date().toLocaleDateString('tr-TR')}`,
+      metadata: {
+        'Oluşturma Tarihi': new Date().toLocaleString('tr-TR'),
+        'Toplam Kayıt': data.length,
+        'Veri Tipi': type,
+        'Sistem': 'Flight Management System'
+      },
+      footer: 'Flight Management System © 2025',
+      ...options
+    }
+
+    let blob: Blob
+    let filename: string
+
+    switch (format) {
+      case 'pdf':
+        blob = await this.exportToPDF(data, exportConfig)
+        filename = `${baseFilename}.pdf`
+        break
+      case 'excel':
+        blob = await this.exportToExcel(data, exportConfig)
+        filename = `${baseFilename}.xlsx`
+        break
+      case 'csv':
+        blob = await this.exportToCSV(data, exportConfig)
+        filename = `${baseFilename}.csv`
+        break
+      default:
+        throw new Error('Desteklenmeyen format')
+    }
+
+    this.downloadBlob(blob, filename)
+    return { blob, filename }
+  }
+
+  /**
+   * Export chart with custom data
+   */
+  async exportChartWithData(
+    chartElement: HTMLCanvasElement | string,
+    chartData: Record<string, any>[],
+    title: string,
+    options: Partial<ChartConfig & PDFConfig> = {}
+  ): Promise<ExportResult> {
+    const timestamp = new Date().toISOString().split('T')[0]
+    const filename = `grafik_${title.toLowerCase().replace(/\s+/g, '_')}_${timestamp}`
+
+    // Export chart as image
+    const imageBlob = await this.exportChartAsImage(chartElement, options)
+
+    // If PDF format is requested, create a PDF with both chart and data
+    if (options.format === 'pdf') {
+      const doc = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: 'a4'
+      })
+
+      // Add title
+      doc.setFontSize(16)
+      doc.setFont('helvetica', 'bold')
+      doc.text(title, 20, 20)
+
+      // Add chart image (this would require converting blob to data URL)
+      // For now, just add the data table
+      if (chartData.length > 0) {
+        const headers = Object.keys(chartData[0])
+        const tableData = chartData.map(row =>
+          headers.map(header => this.formatCellValue(row[header]))
+        )
+
+        doc.autoTable({
+          head: [headers],
+          body: tableData,
+          startY: 30,
+          styles: { fontSize: 8 },
+          headStyles: { fillColor: [64, 158, 255] }
+        })
+      }
+
+      const pdfBlob = doc.output('blob')
+      this.downloadBlob(pdfBlob, `${filename}.pdf`)
+      return { blob: pdfBlob, filename: `${filename}.pdf` }
+    } else {
+      // Download image directly
+      this.downloadBlob(imageBlob, `${filename}.${options.format || 'png'}`)
+      return { blob: imageBlob, filename: `${filename}.${options.format || 'png'}` }
+    }
+  }
+
+  /**
+   * Validate export data
+   */
+  private validateExportData(data: any[], minRows: number = 1): boolean {
+    if (!Array.isArray(data)) {
+      throw new Error('Export verisi array formatında olmalıdır')
+    }
+
+    if (data.length < minRows) {
+      throw new Error(`En az ${minRows} satır veri gereklidir`)
+    }
+
+    return true
+  }
+
+  /**
+   * Get supported formats
+   */
+  getSupportedFormats(): ExportFormat[] {
+    return ['pdf', 'excel', 'csv']
+  }
+
+  /**
+   * Get supported chart formats
+   */
+  getSupportedChartFormats(): ChartFormat[] {
+    return ['png', 'jpg', 'jpeg', 'webp']
+  }
 }
 
 // Create singleton instance
@@ -459,6 +704,19 @@ export const exportService = new ExportService()
 
 // Export class for testing
 export { ExportService }
+
+// Export types
+export type {
+  ExportFormat,
+    ChartFormat,
+    PDFConfig,
+    ExcelConfig,
+    CSVConfig,
+    ChartConfig,
+    ExportResult,
+    DashboardData,
+    FlightExportData
+}
 
 // Export default instance
 export default exportService

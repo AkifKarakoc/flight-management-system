@@ -145,7 +145,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
-import apiService from '@/services/api'
+import apiService from '@/services/api.js'
 import {
   Refresh,
   ArrowDown,
