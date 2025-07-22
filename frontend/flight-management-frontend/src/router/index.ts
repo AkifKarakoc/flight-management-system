@@ -1,20 +1,8 @@
-import { createRouter, createWebHistory, type RouteRecordRaw, type Router } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
+import { createRouter, createWebHistory, type Router } from 'vue-router'
+import { useAuthStore } from '@/stores/auth.js'
 import { ElMessage } from 'element-plus'
 
-// Vue Router RouteMeta interface'ini genişletiyoruz
-declare module 'vue-router' {
-  interface RouteMeta {
-    title?: string
-    breadcrumb?: string
-    requiresAuth?: boolean
-    keepAlive?: boolean
-    permissions?: string[]
-    roles?: string[]
-  }
-}
-
-// Lazy import components with proper typing
+// Lazy import components
 const AuthLayout = () => import('@/layouts/AuthLayout.vue')
 const MainLayout = () => import('@/layouts/MainLayout.vue')
 const LoginPage = () => import('@/pages/auth/LoginPage.vue')
@@ -28,7 +16,13 @@ const AircraftManagement = () => import('@/pages/reference/AircraftManagement.vu
 const RouteManagement = () => import('@/pages/reference/RouteManagement.vue')
 const CrewManagement = () => import('@/pages/reference/CrewManagement.vue')
 
-const routes: RouteRecordRaw[] = [
+// Flight Management Pages
+const FlightManagement = () => import('@/pages/flights/FlightManagement.vue')
+const FlightCreate = () => import('@/pages/flights/FlightCreate.vue')
+const FlightEdit = () => import('@/pages/flights/FlightEdit.vue')
+const FlightUpload = () => import('@/pages/flights/FlightUpload.vue')
+
+const routes = [
   // Auth Routes
   {
     path: '/auth',
@@ -51,136 +45,110 @@ const routes: RouteRecordRaw[] = [
     ]
   },
 
-  // Redirect root to login if not authenticated, dashboard if authenticated
+  // Main App Routes
   {
     path: '/',
-    redirect: () => {
-      const authStore = useAuthStore()
-      return authStore.isAuthenticated ? '/dashboard' : '/auth/login'
-    }
-  },
-
-  // Main Application Routes
-  {
-    path: '/dashboard',
     component: MainLayout,
-    meta: { requiresAuth: true },
+    redirect: '/dashboard',
     children: [
       {
-        path: '',
+        path: 'dashboard',
         name: 'Dashboard',
         component: DashboardPage,
         meta: {
           title: 'Dashboard',
-          breadcrumb: 'Ana Sayfa',
-          keepAlive: true
+          requiresAuth: true
         }
-      }
-    ]
-  },
+      },
 
-  // Reference Management Routes
-  {
-    path: '/reference',
-    component: MainLayout,
-    meta: { requiresAuth: true },
-    children: [
-      // Airlines
+      // Reference Management Routes
       {
         path: 'airlines',
         name: 'Airlines',
         component: AirlineManagement,
         meta: {
-          title: 'Havayolu Yönetimi',
-          breadcrumb: 'Havayolları',
-          keepAlive: true,
-          permissions: ['REFERENCE_READ']
+          title: 'Havayolları',
+          requiresAuth: true
         }
       },
-
-      // Airports
       {
         path: 'airports',
         name: 'Airports',
         component: AirportManagement,
         meta: {
-          title: 'Havaalanı Yönetimi',
-          breadcrumb: 'Havaalanları',
-          keepAlive: true,
-          permissions: ['REFERENCE_READ']
+          title: 'Havaalanları',
+          requiresAuth: true
         }
       },
-
-      // Aircrafts
       {
         path: 'aircrafts',
         name: 'Aircrafts',
         component: AircraftManagement,
         meta: {
-          title: 'Uçak Yönetimi',
-          breadcrumb: 'Uçaklar',
-          keepAlive: true,
-          permissions: ['REFERENCE_READ']
+          title: 'Uçaklar',
+          requiresAuth: true
         }
       },
-
-      // Routes
       {
         path: 'routes',
         name: 'Routes',
         component: RouteManagement,
         meta: {
-          title: 'Rota Yönetimi',
-          breadcrumb: 'Rotalar',
-          keepAlive: true,
-          permissions: ['REFERENCE_READ']
+          title: 'Rotalar',
+          requiresAuth: true
         }
       },
-
-      // Crew Members
       {
         path: 'crew-members',
         name: 'CrewMembers',
         component: CrewManagement,
         meta: {
-          title: 'Mürettebat Yönetimi',
-          breadcrumb: 'Mürettebat',
-          keepAlive: true,
-          permissions: ['REFERENCE_READ']
+          title: 'Mürettebat',
+          requiresAuth: true
+        }
+      },
+
+      // Flight Management Routes
+      {
+        path: 'flights',
+        name: 'Flights',
+        component: FlightManagement,
+        meta: {
+          title: 'Uçuşlar',
+          requiresAuth: true
+        }
+      },
+      {
+        path: 'flights/create',
+        name: 'FlightCreate',
+        component: FlightCreate,
+        meta: {
+          title: 'Yeni Uçuş',
+          requiresAuth: true
+        }
+      },
+      {
+        path: 'flights/:id/edit',
+        name: 'FlightEdit',
+        component: FlightEdit,
+        meta: {
+          title: 'Uçuş Düzenle',
+          requiresAuth: true
+        }
+      },
+      {
+        path: 'flights/upload',
+        name: 'FlightUpload',
+        component: FlightUpload,
+        meta: {
+          title: 'Toplu Uçuş Yükleme',
+          requiresAuth: true
         }
       }
     ]
   },
 
-  // Legacy route redirects for compatibility
-  {
-    path: '/airlines',
-    redirect: '/reference/airlines'
-  },
-  {
-    path: '/airports',
-    redirect: '/reference/airports'
-  },
-  {
-    path: '/aircrafts',
-    redirect: '/reference/aircrafts'
-  },
-  {
-    path: '/routes',
-    redirect: '/reference/routes'
-  },
-  {
-    path: '/crew-members',
-    redirect: '/reference/crew-members'
-  },
-
-  // Login redirect (legacy)
-  {
-    path: '/login',
-    redirect: '/auth/login'
-  },
-
-  // 404 Not Found
+  // 404 Route
   {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
@@ -209,14 +177,14 @@ router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
 
   // Set page title
-  if (to.meta.title) {
+  if (to.meta?.title) {
     document.title = `${to.meta.title} - Flight Management System`
   } else {
     document.title = 'Flight Management System'
   }
 
   // Check if route requires authentication
-  if (to.meta.requiresAuth !== false) {
+  if (to.meta?.requiresAuth !== false) {
     if (!authStore.isAuthenticated) {
       ElMessage.warning('Bu sayfaya erişmek için giriş yapmalısınız')
       next({
@@ -227,7 +195,7 @@ router.beforeEach(async (to, from, next) => {
     }
 
     // Check permissions if specified
-    if (to.meta.permissions && to.meta.permissions.length > 0) {
+    if (to.meta?.permissions && to.meta.permissions.length > 0) {
       const hasPermission = to.meta.permissions.some((permission: string) =>
         authStore.hasPermission(permission)
       )
@@ -240,7 +208,7 @@ router.beforeEach(async (to, from, next) => {
     }
 
     // Check roles if specified
-    if (to.meta.roles && to.meta.roles.length > 0) {
+    if (to.meta?.roles && to.meta.roles.length > 0) {
       const hasRole = to.meta.roles.some((role: string) =>
         authStore.hasRole(role)
       )
@@ -263,11 +231,9 @@ router.beforeEach(async (to, from, next) => {
 })
 
 router.afterEach((to, from) => {
-  // Analytics or other post-navigation logic can go here
   console.log(`Navigation: ${from.path} -> ${to.path}`)
 })
 
-// Handle navigation errors
 router.onError((error: Error) => {
   console.error('Router error:', error)
   ElMessage.error('Sayfa yüklenirken hata oluştu')
