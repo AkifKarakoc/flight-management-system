@@ -155,9 +155,15 @@ import {
   Clock,
   Monitor,
   Connection,
-  DataBase,
-  Server
+  Coin
 } from '@element-plus/icons-vue'
+
+const emit = defineEmits(['statusChange', 'alertTriggered'])
+
+const loading = ref(true)
+const refreshing = ref(false)
+const lastUpdate = ref(new Date())
+let refreshTimer = null
 
 const props = defineProps({
   autoRefresh: {
@@ -167,6 +173,338 @@ const props = defineProps({
   refreshInterval: {
     type: Number,
     default: 30000 // 30 seconds
+  }
+})
+
+const systemServices = reactive([
+  {
+    name: 'Flight Service',
+    status: 'online',
+    responseTime: 125,
+    expanded: false,
+    details: [
+      { label: 'Endpoint', value: 'http://localhost:8081', type: 'url' },
+      { label: 'Versiyon', value: 'v1.2.3', type: 'version' },
+      { label: 'Uptime', value: '15d 4h 23m', type: 'uptime' },
+      { label: 'Memory Usage', value: '2.1 GB / 4 GB', type: 'memory' }
+    ],
+    metrics: [
+      { name: 'CPU Kullanımı', value: '45%', percentage: 45 },
+      { name: 'Memory', value: '52%', percentage: 52 },
+      { name: 'Disk I/O', value: '23%', percentage: 23 }
+    ],
+    logs: [
+      { id: 1, level: 'INFO', message: 'Flight data successfully processed', timestamp: new Date() },
+      { id: 2, level: 'WARN', message: 'High response time detected', timestamp: new Date(Date.now() - 300000) },
+      { id: 3, level: 'INFO', message: 'Database connection established', timestamp: new Date(Date.now() - 600000) }
+    ]
+  },
+  {
+    name: 'Reference Manager',
+    status: 'online',
+    responseTime: 89,
+    expanded: false,
+    details: [
+      { label: 'Endpoint', value: 'http://localhost:8082', type: 'url' },
+      { label: 'Versiyon', value: 'v1.1.8', type: 'version' },
+      { label: 'Uptime', value: '15d 4h 23m', type: 'uptime' },
+      { label: 'Cache Hit Rate', value: '94.2%', type: 'cache' }
+    ],
+    metrics: [
+      { name: 'CPU Kullanımı', value: '22%', percentage: 22 },
+      { name: 'Memory', value: '38%', percentage: 38 },
+      { name: 'Cache Efficiency', value: '94%', percentage: 94 }
+    ],
+    logs: [
+      { id: 1, level: 'INFO', message: 'Reference data synchronized', timestamp: new Date() },
+      { id: 2, level: 'INFO', message: 'Cache refreshed successfully', timestamp: new Date(Date.now() - 180000) }
+    ]
+  },
+  {
+    name: 'Archive Manager',
+    status: 'warning',
+    responseTime: 450,
+    expanded: false,
+    details: [
+      { label: 'Endpoint', value: 'http://localhost:8083', type: 'url' },
+      { label: 'Versiyon', value: 'v1.0.5', type: 'version' },
+      { label: 'Uptime', value: '2d 15h 42m', type: 'uptime' },
+      { label: 'Storage Usage', value: '856 GB / 1 TB', type: 'storage' }
+    ],
+    metrics: [
+      { name: 'CPU Kullanımı', value: '78%', percentage: 78 },
+      { name: 'Memory', value: '65%', percentage: 65 },
+      { name: 'Disk Space', value: '86%', percentage: 86 }
+    ],
+    logs: [
+      { id: 1, level: 'WARN', message: 'High disk usage detected', timestamp: new Date() },
+      { id: 2, level: 'INFO', message: 'Archive cleanup completed', timestamp: new Date(Date.now() - 120000) },
+      { id: 3, level: 'ERROR', message: 'Failed to archive old records', timestamp: new Date(Date.now() - 300000) }
+    ]
+  },
+  {
+    name: 'Database (PostgreSQL)',
+    status: 'online',
+    responseTime: 45,
+    expanded: false,
+    details: [
+      { label: 'Host', value: 'localhost:5432', type: 'host' },
+      { label: 'Versiyon', value: 'PostgreSQL 15.3', type: 'version' },
+      { label: 'Uptime', value: '30d 12h 5m', type: 'uptime' },
+      { label: 'Active Connections', value: '24 / 100', type: 'connections' }
+    ],
+    metrics: [
+      { name: 'CPU Kullanımı', value: '35%', percentage: 35 },
+      { name: 'Memory', value: '48%', percentage: 48 },
+      { name: 'Connection Pool', value: '24%', percentage: 24 }
+    ],
+    logs: [
+      { id: 1, level: 'INFO', message: 'Query executed successfully', timestamp: new Date() },
+      { id: 2, level: 'INFO', message: 'Backup completed', timestamp: new Date(Date.now() - 3600000) }
+    ]
+  },
+  {
+    name: 'Redis Cache',
+    status: 'online',
+    responseTime: 12,
+    expanded: false,
+    details: [
+      { label: 'Host', value: 'localhost:6379', type: 'host' },
+      { label: 'Versiyon', value: 'Redis 7.0.11', type: 'version' },
+      { label: 'Uptime', value: '30d 12h 5m', type: 'uptime' },
+      { label: 'Memory Usage', value: '256 MB / 512 MB', type: 'memory' }
+    ],
+    metrics: [
+      { name: 'Memory', value: '50%', percentage: 50 },
+      { name: 'Hit Rate', value: '96%', percentage: 96 },
+      { name: 'Operations/sec', value: '1.2K', percentage: 60 }
+    ],
+    logs: [
+      { id: 1, level: 'INFO', message: 'Cache key expired and refreshed', timestamp: new Date() },
+      { id: 2, level: 'INFO', message: 'Memory cleanup completed', timestamp: new Date(Date.now() - 900000) }
+    ]
+  },
+  {
+    name: 'Kafka Message Queue',
+    status: 'error',
+    responseTime: null,
+    expanded: false,
+    details: [
+      { label: 'Bootstrap Servers', value: 'localhost:9092', type: 'host' },
+      { label: 'Versiyon', value: 'Kafka 3.4.0', type: 'version' },
+      { label: 'Uptime', value: 'Offline', type: 'uptime' },
+      { label: 'Topics', value: '12', type: 'topics' }
+    ],
+    metrics: [
+      { name: 'CPU Kullanımı', value: 'N/A', percentage: 0 },
+      { name: 'Memory', value: 'N/A', percentage: 0 },
+      { name: 'Message Rate', value: '0', percentage: 0 }
+    ],
+    logs: [
+      { id: 1, level: 'ERROR', message: 'Connection refused to Kafka broker', timestamp: new Date() },
+      { id: 2, level: 'ERROR', message: 'Failed to produce message', timestamp: new Date(Date.now() - 60000) },
+      { id: 3, level: 'WARN', message: 'Retrying connection to broker', timestamp: new Date(Date.now() - 120000) }
+    ]
+  }
+])
+
+const systemAlerts = reactive([
+  {
+    id: 1,
+    title: 'Yüksek Disk Kullanımı',
+    description: 'Archive Manager servisi disk alanının %86\'sını kullanıyor. Temizlik gerekli.',
+    type: 'warning',
+    closable: true
+  },
+  {
+    id: 2,
+    title: 'Kafka Bağlantı Hatası',
+    description: 'Kafka message queue servisine bağlanılamıyor. Mesaj işleme etkilenebilir.',
+    type: 'error',
+    closable: true
+  }
+])
+
+// Computed properties
+const overallStatus = computed(() => {
+  const statuses = systemServices.map(s => s.status)
+  if (statuses.includes('error')) return 'error'
+  if (statuses.includes('warning')) return 'warning'
+  return 'online'
+})
+
+const overallStatusColor = computed(() => getStatusColor(overallStatus.value))
+const overallStatusIcon = computed(() => getStatusIcon(overallStatus.value))
+const overallStatusText = computed(() => getStatusText(overallStatus.value))
+const overallStatusType = computed(() => getStatusType(overallStatus.value))
+
+// Methods
+const getStatusColor = (status) => {
+  const colors = {
+    'online': '#67c23a',
+    'warning': '#e6a23c',
+    'error': '#f56c6c',
+    'offline': '#909399'
+  }
+  return colors[status] || '#909399'
+}
+
+const getStatusIcon = (status) => {
+  const icons = {
+    'online': CircleCheck,
+    'warning': Warning,
+    'error': CircleClose,
+    'offline': Clock
+  }
+  return icons[status] || Clock
+}
+
+const getStatusText = (status) => {
+  const texts = {
+    'online': 'Çevrimiçi',
+    'warning': 'Uyarı',
+    'error': 'Hata',
+    'offline': 'Çevrimdışı'
+  }
+  return texts[status] || 'Bilinmiyor'
+}
+
+const getStatusType = (status) => {
+  const types = {
+    'online': 'success',
+    'warning': 'warning',
+    'error': 'danger',
+    'offline': 'info'
+  }
+  return types[status] || 'info'
+}
+
+const getStatusBadge = (status) => {
+  const badges = {
+    'online': 'Sistem Sağlıklı',
+    'warning': 'Dikkat Gerekli',
+    'error': 'Kritik Durum',
+    'offline': 'Servis Dışı'
+  }
+  return badges[status] || 'Durum Belirsiz'
+}
+
+const getMetricColor = (percentage) => {
+  if (percentage < 50) return '#67c23a'
+  if (percentage < 80) return '#e6a23c'
+  return '#f56c6c'
+}
+
+const formatLastUpdate = (date) => {
+  return date.toLocaleTimeString('tr-TR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  })
+}
+
+const formatLogTime = (timestamp) => {
+  return timestamp.toLocaleTimeString('tr-TR', {
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+const toggleService = (service) => {
+  service.expanded = !service.expanded
+}
+
+const refreshStatus = async () => {
+  refreshing.value = true
+
+  try {
+// Gerçek backend health check
+    const services = await apiService.checkSystemHealth()
+
+// Update system services based on real backend status
+    systemServices.forEach(service => {
+      const backendService = services.find(s =>
+        service.name.toLowerCase().includes(s.name.toLowerCase().replace(' service', ''))
+      )
+
+      if (backendService) {
+        service.status = backendService.status
+        service.responseTime = backendService.status === 'online'
+          ? Math.floor(Math.random() * 200) + 50
+          : null
+
+// Update details based on status
+        if (backendService.status === 'error') {
+          service.details = service.details.map(detail => ({
+            ...detail,
+            value: detail.label === 'Uptime' ? 'Offline' : detail.value
+          }))
+        }
+      }
+    })
+
+// Update last update time
+    lastUpdate.value = new Date()
+
+    emit('statusChange', { services: systemServices, alerts: systemAlerts })
+
+  } catch (error) {
+    console.error('Error refreshing status:', error)
+// Update all services to error state
+    systemServices.forEach(service => {
+      service.status = 'error'
+      service.responseTime = null
+    })
+  } finally {
+    refreshing.value = false
+  }
+}
+
+const dismissAlert = (alertId) => {
+  const index = systemAlerts.findIndex(alert => alert.id === alertId)
+  if (index > -1) {
+    systemAlerts.splice(index, 1)
+  }
+}
+
+const startAutoRefresh = () => {
+  if (props.autoRefresh && !refreshTimer) {
+    refreshTimer = setInterval(() => {
+      refreshStatus()
+    }, props.refreshInterval)
+  }
+}
+
+const stopAutoRefresh = () => {
+  if (refreshTimer) {
+    clearInterval(refreshTimer)
+    refreshTimer = null
+  }
+}
+
+// Lifecycle hooks
+onMounted(async () => {
+  loading.value = false
+  await refreshStatus()
+  startAutoRefresh()
+})
+
+onUnmounted(() => {
+  stopAutoRefresh()
+})
+
+// Expose methods
+defineExpose({
+  refreshStatus,
+  getServiceStatus: (serviceName) => {
+    return systemServices.find(s => s.name === serviceName)
+  },
+  addAlert: (alert) => {
+    systemAlerts.push({
+      id: Date.now(),
+      ...alert,
+      closable: true
+    })
   }
 })
 </script>
@@ -498,342 +836,3 @@ const props = defineProps({
   }
 }
 </style>
-
-const emit = defineEmits(['statusChange', 'alertTriggered'])
-
-const loading = ref(true)
-const refreshing = ref(false)
-const lastUpdate = ref(new Date())
-let refreshTimer = null
-
-const systemServices = reactive([
-{
-name: 'Flight Service',
-status: 'online',
-responseTime: 125,
-expanded: false,
-details: [
-{ label: 'Endpoint', value: 'http://localhost:8081', type: 'url' },
-{ label: 'Versiyon', value: 'v1.2.3', type: 'version' },
-{ label: 'Uptime', value: '15d 4h 23m', type: 'uptime' },
-{ label: 'Memory Usage', value: '2.1 GB / 4 GB', type: 'memory' }
-],
-metrics: [
-{ name: 'CPU Kullanımı', value: '45%', percentage: 45 },
-{ name: 'Memory', value: '52%', percentage: 52 },
-{ name: 'Disk I/O', value: '23%', percentage: 23 }
-],
-logs: [
-{ id: 1, level: 'INFO', message: 'Flight data successfully processed', timestamp: new Date() },
-{ id: 2, level: 'WARN', message: 'High response time detected', timestamp: new Date(Date.now() - 300000) },
-{ id: 3, level: 'INFO', message: 'Database connection established', timestamp: new Date(Date.now() - 600000) }
-]
-},
-{
-name: 'Reference Manager',
-status: 'online',
-responseTime: 89,
-expanded: false,
-details: [
-{ label: 'Endpoint', value: 'http://localhost:8082', type: 'url' },
-{ label: 'Versiyon', value: 'v1.1.8', type: 'version' },
-{ label: 'Uptime', value: '15d 4h 23m', type: 'uptime' },
-{ label: 'Cache Hit Rate', value: '94.2%', type: 'cache' }
-],
-metrics: [
-{ name: 'CPU Kullanımı', value: '22%', percentage: 22 },
-{ name: 'Memory', value: '38%', percentage: 38 },
-{ name: 'Cache Efficiency', value: '94%', percentage: 94 }
-],
-logs: [
-{ id: 1, level: 'INFO', message: 'Reference data synchronized', timestamp: new Date() },
-{ id: 2, level: 'INFO', message: 'Cache refreshed successfully', timestamp: new Date(Date.now() - 180000) }
-]
-},
-{
-name: 'Archive Manager',
-status: 'warning',
-responseTime: 450,
-expanded: false,
-details: [
-{ label: 'Endpoint', value: 'http://localhost:8083', type: 'url' },
-{ label: 'Versiyon', value: 'v1.0.5', type: 'version' },
-{ label: 'Uptime', value: '2d 15h 42m', type: 'uptime' },
-{ label: 'Storage Usage', value: '856 GB / 1 TB', type: 'storage' }
-],
-metrics: [
-{ name: 'CPU Kullanımı', value: '78%', percentage: 78 },
-{ name: 'Memory', value: '65%', percentage: 65 },
-{ name: 'Disk Space', value: '86%', percentage: 86 }
-],
-logs: [
-{ id: 1, level: 'WARN', message: 'High disk usage detected', timestamp: new Date() },
-{ id: 2, level: 'INFO', message: 'Archive cleanup completed', timestamp: new Date(Date.now() - 120000) },
-{ id: 3, level: 'ERROR', message: 'Failed to archive old records', timestamp: new Date(Date.now() - 300000) }
-]
-},
-{
-name: 'Database (PostgreSQL)',
-status: 'online',
-responseTime: 45,
-expanded: false,
-details: [
-{ label: 'Host', value: 'localhost:5432', type: 'host' },
-{ label: 'Versiyon', value: 'PostgreSQL 15.3', type: 'version' },
-{ label: 'Uptime', value: '30d 12h 5m', type: 'uptime' },
-{ label: 'Active Connections', value: '24 / 100', type: 'connections' }
-],
-metrics: [
-{ name: 'CPU Kullanımı', value: '35%', percentage: 35 },
-{ name: 'Memory', value: '48%', percentage: 48 },
-{ name: 'Connection Pool', value: '24%', percentage: 24 }
-],
-logs: [
-{ id: 1, level: 'INFO', message: 'Query executed successfully', timestamp: new Date() },
-{ id: 2, level: 'INFO', message: 'Backup completed', timestamp: new Date(Date.now() - 3600000) }
-]
-},
-{
-name: 'Redis Cache',
-status: 'online',
-responseTime: 12,
-expanded: false,
-details: [
-{ label: 'Host', value: 'localhost:6379', type: 'host' },
-{ label: 'Versiyon', value: 'Redis 7.0.11', type: 'version' },
-{ label: 'Uptime', value: '30d 12h 5m', type: 'uptime' },
-{ label: 'Memory Usage', value: '256 MB / 512 MB', type: 'memory' }
-],
-metrics: [
-{ name: 'Memory', value: '50%', percentage: 50 },
-{ name: 'Hit Rate', value: '96%', percentage: 96 },
-{ name: 'Operations/sec', value: '1.2K', percentage: 60 }
-],
-logs: [
-{ id: 1, level: 'INFO', message: 'Cache key expired and refreshed', timestamp: new Date() },
-{ id: 2, level: 'INFO', message: 'Memory cleanup completed', timestamp: new Date(Date.now() - 900000) }
-]
-},
-{
-name: 'Kafka Message Queue',
-status: 'error',
-responseTime: null,
-expanded: false,
-details: [
-{ label: 'Bootstrap Servers', value: 'localhost:9092', type: 'host' },
-{ label: 'Versiyon', value: 'Kafka 3.4.0', type: 'version' },
-{ label: 'Uptime', value: 'Offline', type: 'uptime' },
-{ label: 'Topics', value: '12', type: 'topics' }
-],
-metrics: [
-{ name: 'CPU Kullanımı', value: 'N/A', percentage: 0 },
-{ name: 'Memory', value: 'N/A', percentage: 0 },
-{ name: 'Message Rate', value: '0', percentage: 0 }
-],
-logs: [
-{ id: 1, level: 'ERROR', message: 'Connection refused to Kafka broker', timestamp: new Date() },
-{ id: 2, level: 'ERROR', message: 'Failed to produce message', timestamp: new Date(Date.now() - 60000) },
-{ id: 3, level: 'WARN', message: 'Retrying connection to broker', timestamp: new Date(Date.now() - 120000) }
-]
-}
-])
-
-const systemAlerts = reactive([
-{
-id: 1,
-title: 'Yüksek Disk Kullanımı',
-description: 'Archive Manager servisi disk alanının %86\'sını kullanıyor. Temizlik gerekli.',
-type: 'warning',
-closable: true
-},
-{
-id: 2,
-title: 'Kafka Bağlantı Hatası',
-description: 'Kafka message queue servisine bağlanılamıyor. Mesaj işleme etkilenebilir.',
-type: 'error',
-closable: true
-}
-])
-
-// Computed properties
-const overallStatus = computed(() => {
-const statuses = systemServices.map(s => s.status)
-if (statuses.includes('error')) return 'error'
-if (statuses.includes('warning')) return 'warning'
-return 'online'
-})
-
-const overallStatusColor = computed(() => getStatusColor(overallStatus.value))
-const overallStatusIcon = computed(() => getStatusIcon(overallStatus.value))
-const overallStatusText = computed(() => getStatusText(overallStatus.value))
-const overallStatusType = computed(() => getStatusType(overallStatus.value))
-
-// Methods
-const getStatusColor = (status) => {
-const colors = {
-'online': '#67c23a',
-'warning': '#e6a23c',
-'error': '#f56c6c',
-'offline': '#909399'
-}
-return colors[status] || '#909399'
-}
-
-const getStatusIcon = (status) => {
-const icons = {
-'online': CircleCheck,
-'warning': Warning,
-'error': CircleClose,
-'offline': Clock
-}
-return icons[status] || Clock
-}
-
-const getStatusText = (status) => {
-const texts = {
-'online': 'Çevrimiçi',
-'warning': 'Uyarı',
-'error': 'Hata',
-'offline': 'Çevrimdışı'
-}
-return texts[status] || 'Bilinmiyor'
-}
-
-const getStatusType = (status) => {
-const types = {
-'online': 'success',
-'warning': 'warning',
-'error': 'danger',
-'offline': 'info'
-}
-return types[status] || 'info'
-}
-
-const getStatusBadge = (status) => {
-const badges = {
-'online': 'Sistem Sağlıklı',
-'warning': 'Dikkat Gerekli',
-'error': 'Kritik Durum',
-'offline': 'Servis Dışı'
-}
-return badges[status] || 'Durum Belirsiz'
-}
-
-const getMetricColor = (percentage) => {
-if (percentage < 50) return '#67c23a'
-if (percentage < 80) return '#e6a23c'
-return '#f56c6c'
-}
-
-const formatLastUpdate = (date) => {
-return date.toLocaleTimeString('tr-TR', {
-hour: '2-digit',
-minute: '2-digit',
-second: '2-digit'
-})
-}
-
-const formatLogTime = (timestamp) => {
-return timestamp.toLocaleTimeString('tr-TR', {
-hour: '2-digit',
-minute: '2-digit'
-})
-}
-
-const toggleService = (service) => {
-service.expanded = !service.expanded
-}
-
-const refreshStatus = async () => {
-refreshing.value = true
-
-try {
-// Gerçek backend health check
-const services = await apiService.checkSystemHealth()
-
-// Update system services based on real backend status
-systemServices.forEach(service => {
-const backendService = services.find(s =>
-service.name.toLowerCase().includes(s.name.toLowerCase().replace(' service', ''))
-)
-
-if (backendService) {
-service.status = backendService.status
-service.responseTime = backendService.status === 'online'
-? Math.floor(Math.random() * 200) + 50
-: null
-
-// Update details based on status
-if (backendService.status === 'error') {
-service.details = service.details.map(detail => ({
-...detail,
-value: detail.label === 'Uptime' ? 'Offline' : detail.value
-}))
-}
-}
-})
-
-// Update last update time
-lastUpdate.value = new Date()
-
-emit('statusChange', { services: systemServices, alerts: systemAlerts })
-
-} catch (error) {
-console.error('Error refreshing status:', error)
-// Update all services to error state
-systemServices.forEach(service => {
-service.status = 'error'
-service.responseTime = null
-})
-} finally {
-refreshing.value = false
-}
-}
-
-const dismissAlert = (alertId) => {
-const index = systemAlerts.findIndex(alert => alert.id === alertId)
-if (index > -1) {
-systemAlerts.splice(index, 1)
-}
-}
-
-const startAutoRefresh = () => {
-if (props.autoRefresh && !refreshTimer) {
-refreshTimer = setInterval(() => {
-refreshStatus()
-}, props.refreshInterval)
-}
-}
-
-const stopAutoRefresh = () => {
-if (refreshTimer) {
-clearInterval(refreshTimer)
-refreshTimer = null
-}
-}
-
-// Lifecycle hooks
-onMounted(async () => {
-loading.value = false
-await refreshStatus()
-startAutoRefresh()
-})
-
-onUnmounted(() => {
-stopAutoRefresh()
-})
-
-// Expose methods
-defineExpose({
-refreshStatus,
-getServiceStatus: (serviceName) => {
-return systemServices.find(s => s.name === serviceName)
-},
-addAlert: (alert) => {
-systemAlerts.push({
-id: Date.now(),
-...alert,
-closable: true
-})
-}
-})

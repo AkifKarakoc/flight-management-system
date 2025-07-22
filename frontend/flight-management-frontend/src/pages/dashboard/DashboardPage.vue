@@ -174,7 +174,7 @@
                     size="small"
                     :type="autoRefresh ? 'primary' : ''"
                     @click="toggleAutoRefresh"
-                    :icon="autoRefresh ? Pause : VideoPlay"
+                    :icon="autoRefresh ? VideoPause : VideoPlay"
                   >
                     {{ autoRefresh ? 'Durdur' : 'Başlat' }}
                   </el-button>
@@ -290,7 +290,7 @@ import {
   Tickets,
   ArrowDown,
   VideoPlay,
-  Pause,
+  VideoPause,
   Setting,
   Close,
   CircleCheck,
@@ -308,7 +308,7 @@ import SystemStatus from '@/components/common/SystemStatus.vue'
 
 // Services
 import websocketService from '@/services/websocketService'
-import exportService from '@/utils/exportService'
+import exportService from '@/services/exportService'
 import apiService from '@/services/api'
 
 // Reactive data
