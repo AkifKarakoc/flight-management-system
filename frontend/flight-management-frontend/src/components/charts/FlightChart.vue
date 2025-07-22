@@ -3,222 +3,308 @@
     <div v-if="loading" class="chart-loading">
       <el-skeleton animated>
         <template #template>
-          <div style="height: 300px; display: flex; align-items: center; justify-content: center;">
-            <el-skeleton-item variant="text" style="width: 200px; height: 20px;" />
-          </div>
+          <el-skeleton-item variant="rect" style="width: 100%; height: 300px" />
         </template>
       </el-skeleton>
     </div>
 
     <div v-else ref="chartContainer" class="chart-container"></div>
+
+    <div v-if="error" class="chart-error">
+      <el-empty description="Grafik yüklenirken hata oluştu">
+        <el-button type="primary" @click="fetchChartData">
+          Tekrar Dene
+        </el-button>
+      </el-empty>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import * as echarts from 'echarts'
+import apiService from '@/services/api'
 
 const props = defineProps({
   period: {
     type: String,
     default: '7d',
-    validator: (value) => ['7d', '30d'].includes(value)
+    validator: (value) => ['7d', '30d', '90d'].includes(value)
+  },
+  height: {
+    type: String,
+    default: '300px'
   }
 })
 
+const emit = defineEmits(['dataLoaded', 'error'])
+
 const chartContainer = ref(null)
 const loading = ref(true)
+const error = ref(false)
 let chartInstance = null
 
-// Mock data generation
-const generateMockData = (period) => {
-  const days = period === '7d' ? 7 : 30
-  const data = []
-  const categories = []
+const chartData = reactive({
+  dates: [],
+  scheduled: [],
+  completed: [],
+  cancelled: [],
+  delayed: []
+})
 
-  const today = new Date()
-
-  for (let i = days - 1; i >= 0; i--) {
-    const date = new Date(today)
-    date.setDate(date.getDate() - i)
-
-    categories.push(date.toLocaleDateString('tr-TR', {
-      month: 'short',
-      day: 'numeric'
-    }))
-
-    // Generate random flight counts with some realistic patterns
-    const baseFlights = Math.floor(Math.random() * 50) + 20
-    const weekendMultiplier = date.getDay() === 0 || date.getDay() === 6 ? 1.3 : 1
-    data.push(Math.floor(baseFlights * weekendMultiplier))
-  }
-
-  return { data, categories }
-}
-
-const initChart = async () => {
-  loading.value = true
-
-  try {
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 800))
-
-    const mockData = generateMockData(props.period)
-
-    await nextTick()
-
-    if (!chartContainer.value) return
-
-    // Dispose existing chart
-    if (chartInstance) {
-      chartInstance.dispose()
+// Chart configuration
+const chartOptions = reactive({
+  title: {
+    text: 'Günlük Uçuş Dağılımı',
+    left: 'center',
+    textStyle: {
+      fontSize: 16,
+      fontWeight: 'normal',
+      color: '#303133'
     }
-
-    chartInstance = echarts.init(chartContainer.value)
-
-    const option = {
-      tooltip: {
-        trigger: 'axis',
-        backgroundColor: 'rgba(50, 50, 50, 0.9)',
-        borderColor: '#409eff',
-        borderWidth: 1,
-        textStyle: {
-          color: '#fff',
-          fontSize: 12
-        },
-        formatter: (params) => {
-          const data = params[0]
-          return `
-            <div style="font-weight: 600; margin-bottom: 4px;">${data.name}</div>
-            <div style="display: flex; align-items: center;">
-              <span style="display: inline-block; width: 8px; height: 8px; background: ${data.color}; border-radius: 50%; margin-right: 6px;"></span>
-              <span>Uçuş Sayısı: <strong>${data.value}</strong></span>
-            </div>
-          `
-        }
-      },
-      grid: {
-        left: '3%',
-        right: '4%',
-        bottom: '3%',
-        top: '10%',
-        containLabel: true
-      },
-      xAxis: {
-        type: 'category',
-        boundaryGap: false,
-        data: mockData.categories,
-        axisLine: {
-          lineStyle: {
-            color: '#e4e7ed'
-          }
-        },
-        axisTick: {
-          lineStyle: {
-            color: '#e4e7ed'
-          }
-        },
-        axisLabel: {
-          color: '#606266',
-          fontSize: 11
-        }
-      },
-      yAxis: {
-        type: 'value',
-        axisLine: {
-          show: false
-        },
-        axisTick: {
-          show: false
-        },
-        axisLabel: {
-          color: '#606266',
-          fontSize: 11
-        },
-        splitLine: {
-          lineStyle: {
-            color: '#f5f7fa',
-            type: 'dashed'
-          }
-        }
-      },
-      series: [
-        {
-          name: 'Uçuş Sayısı',
-          type: 'line',
-          smooth: true,
-          symbol: 'circle',
-          symbolSize: 6,
-          lineStyle: {
-            width: 3,
-            color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-              { offset: 0, color: '#409eff' },
-              { offset: 1, color: '#67c23a' }
-            ])
-          },
-          itemStyle: {
-            color: '#409eff',
-            borderColor: '#fff',
-            borderWidth: 2
-          },
-          areaStyle: {
-            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: 'rgba(64, 158, 255, 0.3)' },
-              { offset: 1, color: 'rgba(64, 158, 255, 0.05)' }
-            ])
-          },
-          data: mockData.data,
-          emphasis: {
-            focus: 'series',
-            itemStyle: {
-              color: '#409eff',
-              borderColor: '#fff',
-              borderWidth: 3,
-              shadowColor: 'rgba(64, 158, 255, 0.5)',
-              shadowBlur: 10
-            }
-          }
-        }
-      ]
+  },
+  tooltip: {
+    trigger: 'axis',
+    axisPointer: {
+      type: 'cross',
+      label: {
+        backgroundColor: '#6a7985'
+      }
+    },
+    formatter: function (params) {
+      let result = `<div style="font-weight: bold; margin-bottom: 5px;">${params[0].axisValue}</div>`
+      params.forEach(param => {
+        result += `
+          <div style="display: flex; align-items: center; margin: 2px 0;">
+            <span style="display: inline-block; width: 10px; height: 10px; background-color: ${param.color}; border-radius: 50%; margin-right: 8px;"></span>
+            <span style="flex: 1;">${param.seriesName}:</span>
+            <span style="font-weight: bold; margin-left: 8px;">${param.value}</span>
+          </div>
+        `
+      })
+      return result
     }
-
-    chartInstance.setOption(option)
-
-    // Handle resize
-    const handleResize = () => {
-      if (chartInstance) {
-        chartInstance.resize()
+  },
+  legend: {
+    data: ['Planlanmış', 'Tamamlanmış', 'İptal', 'Gecikmeli'],
+    bottom: 10,
+    textStyle: {
+      color: '#606266'
+    }
+  },
+  grid: {
+    left: '3%',
+    right: '4%',
+    bottom: '15%',
+    top: '15%',
+    containLabel: true
+  },
+  toolbox: {
+    feature: {
+      saveAsImage: {
+        title: 'Resim Olarak Kaydet',
+        name: 'flight-chart'
+      },
+      dataZoom: {
+        title: {
+          zoom: 'Yakınlaştır',
+          back: 'Sıfırla'
+        }
       }
     }
+  },
+  xAxis: {
+    type: 'category',
+    boundaryGap: false,
+    data: [],
+    axisLabel: {
+      color: '#606266',
+      formatter: function (value) {
+        return new Date(value).toLocaleDateString('tr-TR', {
+          month: 'short',
+          day: 'numeric'
+        })
+      }
+    }
+  },
+  yAxis: {
+    type: 'value',
+    axisLabel: {
+      color: '#606266'
+    },
+    splitLine: {
+      lineStyle: {
+        color: '#f0f0f0'
+      }
+    }
+  },
+  series: [
+    {
+      name: 'Planlanmış',
+      type: 'line',
+      stack: 'Total',
+      areaStyle: {
+        opacity: 0.3
+      },
+      emphasis: {
+        focus: 'series'
+      },
+      data: [],
+      itemStyle: {
+        color: '#409eff'
+      }
+    },
+    {
+      name: 'Tamamlanmış',
+      type: 'line',
+      stack: 'Total',
+      areaStyle: {
+        opacity: 0.3
+      },
+      emphasis: {
+        focus: 'series'
+      },
+      data: [],
+      itemStyle: {
+        color: '#67c23a'
+      }
+    },
+    {
+      name: 'İptal',
+      type: 'line',
+      stack: 'Total',
+      areaStyle: {
+        opacity: 0.3
+      },
+      emphasis: {
+        focus: 'series'
+      },
+      data: [],
+      itemStyle: {
+        color: '#f56c6c'
+      }
+    },
+    {
+      name: 'Gecikmeli',
+      type: 'line',
+      stack: 'Total',
+      areaStyle: {
+        opacity: 0.3
+      },
+      emphasis: {
+        focus: 'series'
+      },
+      data: [],
+      itemStyle: {
+        color: '#e6a23c'
+      }
+    }
+  ]
+})
 
-    window.addEventListener('resize', handleResize)
+// Fetch chart data from API
+const fetchChartData = async () => {
+  loading.value = true
+  error.value = false
 
-    // Store resize handler for cleanup
-    chartInstance._resizeHandler = handleResize
+  try {
+    // Gerçek backend'den veri çek
+    const data = await apiService.getFlightChartData(props.period)
 
-  } catch (error) {
-    console.error('Error initializing flight chart:', error)
+    // Update chart data
+    chartData.dates = data.dates
+    chartData.scheduled = data.scheduled
+    chartData.completed = data.completed
+    chartData.cancelled = data.cancelled
+    chartData.delayed = data.delayed
+
+    updateChart()
+    emit('dataLoaded', chartData)
+
+  } catch (err) {
+    console.error('Error fetching chart data:', err)
+    error.value = true
+    emit('error', err)
   } finally {
     loading.value = false
   }
 }
 
+// Update chart with new data
+const updateChart = () => {
+  if (!chartInstance) return
+
+  const newOptions = {
+    xAxis: {
+      data: chartData.dates
+    },
+    series: [
+      { data: chartData.scheduled },
+      { data: chartData.completed },
+      { data: chartData.cancelled },
+      { data: chartData.delayed }
+    ]
+  }
+
+  chartInstance.setOption(newOptions)
+}
+
+// Initialize chart
+const initChart = async () => {
+  await nextTick()
+  if (!chartContainer.value) return
+
+  chartInstance = echarts.init(chartContainer.value)
+  chartInstance.setOption(chartOptions)
+
+  // Handle resize
+  window.addEventListener('resize', handleResize)
+}
+
+// Handle window resize
+const handleResize = () => {
+  if (chartInstance) {
+    chartInstance.resize()
+  }
+}
+
+// Cleanup
+const cleanup = () => {
+  if (chartInstance) {
+    chartInstance.dispose()
+    chartInstance = null
+  }
+  window.removeEventListener('resize', handleResize)
+}
+
 // Watch for period changes
 watch(() => props.period, () => {
-  initChart()
+  fetchChartData()
 }, { immediate: false })
 
-onMounted(() => {
-  initChart()
+// Lifecycle hooks
+onMounted(async () => {
+  await initChart()
+  await fetchChartData()
 })
 
 onUnmounted(() => {
-  if (chartInstance) {
-    if (chartInstance._resizeHandler) {
-      window.removeEventListener('resize', chartInstance._resizeHandler)
+  cleanup()
+})
+
+// Expose methods for parent component
+defineExpose({
+  refreshData: fetchChartData,
+  exportChart: () => {
+    if (chartInstance) {
+      const dataURL = chartInstance.getDataURL({
+        type: 'png',
+        pixelRatio: 2,
+        backgroundColor: '#fff'
+      })
+      return dataURL
     }
-    chartInstance.dispose()
-    chartInstance = null
+    return null
   }
 })
 </script>
@@ -231,21 +317,25 @@ onUnmounted(() => {
 
 .chart-container {
   width: 100%;
-  height: 300px;
+  height: v-bind(height);
+  min-height: 300px;
 }
 
 .chart-loading {
-  width: 100%;
+  padding: 20px;
+}
+
+.chart-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   height: 300px;
 }
 
 @media (max-width: 768px) {
   .chart-container {
     height: 250px;
-  }
-
-  .chart-loading {
-    height: 250px;
+    min-height: 250px;
   }
 }
 </style>

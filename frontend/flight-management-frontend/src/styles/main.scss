@@ -55,7 +55,7 @@ body {
 .app-card {
   background: white;
   border-radius: 8px;
-  box-shadow: $box-shadow-base;
+  //box-shadow: $box-shadow-base;
   padding: $spacing-lg;
   margin-bottom: $spacing-md;
 }
@@ -82,15 +82,3 @@ body {
   }
 }
 
-// Responsive utilities
-@media (max-width: $breakpoint-mobile) {
-  .hide-mobile {
-    display: none !important;
-  }
-}
-
-@media (max-width: $breakpoint-tablet) {
-  .hide-tablet {
-    display: none !important;
-  }
-}
