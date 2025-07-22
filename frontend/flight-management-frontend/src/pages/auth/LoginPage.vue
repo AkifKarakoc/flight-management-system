@@ -76,6 +76,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, Lock } from '@element-plus/icons-vue'
 import apiService from '@/services/api.js'
+import authService from "@/services/authService.js";
 
 const router = useRouter()
 const loginFormRef = ref()
@@ -167,11 +168,18 @@ const handleLogin = async () => {
   try {
     console.log('🔑 Login deneniyor:', credentials.value.username)
 
-    const response = await apiService.login(credentials.value)
+    const response = await authService.login(credentials.value)
     console.log('✅ Login başarılı:', response)
 
+    // Auth store'u güncelle
+    const authStore = useAuthStore()
+    authStore.user = response.user
+    authStore.token = response.accessToken
+
     ElMessage.success('Giriş başarılı!')
-    router.push('/dashboard')
+
+    // Router'ı kullanarak yönlendir
+    await router.replace('/dashboard')
 
   } catch (error) {
     console.error('❌ Login hatası:', error)

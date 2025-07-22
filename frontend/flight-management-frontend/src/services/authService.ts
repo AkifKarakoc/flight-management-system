@@ -52,36 +52,66 @@ const STORAGE_KEYS = {
   }
 
   // Authentication API calls
-  async login(credentials: LoginCredentials): Promise<EnhancedAuthResponse> {
-    try {
-      // Auth endpoints are on Reference Manager Service
-      const response = await apiService.reference.post<EnhancedAuthResponse>(
-        API_ENDPOINTS.AUTH.LOGIN,
+    async login(credentials: LoginCredentials): Promise<EnhancedAuthResponse> {
+      try {
+        // Auth endpoints are on Reference Manager Service
+        const response = await apiService.reference.post<any>(
+          API_ENDPOINTS.AUTH.LOGIN,
           credentials
-      )
+        )
 
-      if (response.data?.accessToken) {
-    this.setToken(response.data.accessToken)
+        console.log('Backend response:', response.data)
 
-    // Store refresh token if provided
-    if (response.data.refreshToken) {
-      this.setRefreshToken(response.data.refreshToken)
+        if (response.data?.accessToken) {
+          this.setToken(response.data.accessToken)
+
+          // Backend'den user objesi gelmiyorsa, token'dan parse et
+          let user: User
+          if (response.data.user) {
+            user = response.data.user
+          } else {
+            // Token'dan kullanıcı bilgilerini çıkar
+            const payload = this.parseToken(response.data.accessToken)
+            if (payload) {
+              user = {
+                id: payload.sub,
+                username: payload.sub,
+                email: `${payload.sub}@flightmanagement.com`,
+                role: payload.roles || 'USER',
+                roles: payload.roles ? [payload.roles] : ['USER'],
+                permissions: [],
+                isActive: true
+              }
+            } else {
+              throw new Error('Invalid token format')
+            }
+          }
+
+          // Store refresh token if provided
+          if (response.data.refreshToken) {
+            this.setRefreshToken(response.data.refreshToken)
+          }
+
+          // Store user info
+          this.setUser(user)
+
+          // Return enhanced response
+          return {
+            token: "",
+            accessToken: response.data.accessToken,
+            refreshToken: response.data.refreshToken,
+            tokenType: response.data.tokenType || 'Bearer',
+            expiresIn: response.data.expiresIn || 86400,
+            user: user
+          }
+        }
+
+        throw new Error('Invalid response format')
+      } catch (error) {
+        console.error('Login error:', error)
+        throw error
+      }
     }
-
-    // Store user info if provided
-    if (response.data.user) {
-      this.setUser(response.data.user)
-    }
-
-    return response.data
-  }
-
-  throw new Error('Invalid response format')
-} catch (error) {
-    console.error('Login error:', error)
-    throw error
-  }
-}
 
   async logout(): Promise<void> {
     try {

@@ -154,18 +154,17 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function initializeAuth(): void {
-    // Initialize from localStorage
-    const storedToken = authService.getToken()
-    const storedUser = authService.getUser()
-    const storedRefreshToken = authService.getRefreshToken()
+    const savedToken = authService.getToken()
+    const savedUser = authService.getUser()
 
-    if (storedToken && authService.isAuthenticated()) {
-      token.value = storedToken
-      user.value = storedUser
-      refreshToken.value = storedRefreshToken || null  // ✅ undefined'ı null'a çevir
-    } else {
-      // Clear invalid auth data
-      clearAuth()
+    if (savedToken && savedUser) {
+      token.value = savedToken
+      user.value = savedUser
+
+      // Token geçerliliğini kontrol et
+      if (authService.isTokenExpired()) {
+        clearAuth()
+      }
     }
   }
 

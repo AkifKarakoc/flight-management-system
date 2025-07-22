@@ -405,9 +405,12 @@ import {
   Phone,
   Calendar
 } from '@element-plus/icons-vue'
-import { useReferenceStore } from '@/stores/reference.js'
-import { useAppStore } from '@/stores/app.js'
+import { useReferenceStore } from '@/stores/reference'
+import { useAppStore } from '@/stores/app'
 import AirlineForm from '@/components/forms/AirlineForm.vue'
+import { onMounted } from 'vue'
+import { useReferenceStore } from '@/stores/reference'
+import apiService from '@/services/api'
 
 // Stores
 const referenceStore = useReferenceStore()
@@ -454,6 +457,22 @@ const countries = {
 // Computed
 const airlines = computed(() => referenceStore.airlines)
 
+const fetchAirlines = async () => {
+  loading.value = true
+  try {
+    const response = await apiService.reference.get('/api/v1/airlines')
+    airlines.value = response.data
+  } catch (error) {
+    ElMessage.error('Havayolları yüklenemedi')
+    console.error(error)
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  fetchAirlines()
+})
 const availableCountries = computed(() => {
   const countrySet = new Set(airlines.value.map(a => a.country))
   return Array.from(countrySet).map(code => ({

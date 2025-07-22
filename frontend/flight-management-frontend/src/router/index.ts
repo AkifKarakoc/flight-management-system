@@ -173,8 +173,13 @@ const router: Router = createRouter({
 })
 
 // Global Navigation Guards
+// Global Navigation Guards
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
+
+  console.log(`Navigating from ${from.path} to ${to.path}`)
+  console.log('Is authenticated:', authStore.isAuthenticated)
+  console.log('Route requires auth:', to.meta?.requiresAuth)
 
   // Set page title
   if (to.meta?.title) {
@@ -183,9 +188,17 @@ router.beforeEach(async (to, from, next) => {
     document.title = 'Flight Management System'
   }
 
-  // Check if route requires authentication
-  if (to.meta?.requiresAuth !== false) {
+  // Auth pages'e authenticated user gitmeye çalışıyorsa
+  if (to.path.startsWith('/auth') && authStore.isAuthenticated) {
+    console.log('Already authenticated, redirecting to dashboard')
+    next('/dashboard')
+    return
+  }
+
+  // Protected route kontrolü
+  if (to.meta?.requiresAuth !== false && to.path !== '/auth/login') {
     if (!authStore.isAuthenticated) {
+      console.log('Not authenticated, redirecting to login')
       ElMessage.warning('Bu sayfaya erişmek için giriş yapmalısınız')
       next({
         path: '/auth/login',
@@ -193,38 +206,6 @@ router.beforeEach(async (to, from, next) => {
       })
       return
     }
-
-    // Check permissions if specified
-    if (to.meta?.permissions && to.meta.permissions.length > 0) {
-      const hasPermission = to.meta.permissions.some((permission: string) =>
-        authStore.hasPermission(permission)
-      )
-
-      if (!hasPermission) {
-        ElMessage.error('Bu sayfaya erişim yetkiniz bulunmamaktadır')
-        next('/dashboard')
-        return
-      }
-    }
-
-    // Check roles if specified
-    if (to.meta?.roles && to.meta.roles.length > 0) {
-      const hasRole = to.meta.roles.some((role: string) =>
-        authStore.hasRole(role)
-      )
-
-      if (!hasRole) {
-        ElMessage.error('Bu sayfaya erişim yetkiniz bulunmamaktadır')
-        next('/dashboard')
-        return
-      }
-    }
-  }
-
-  // If user is authenticated and trying to access auth pages, redirect to dashboard
-  if (to.path.startsWith('/auth') && authStore.isAuthenticated) {
-    next('/dashboard')
-    return
   }
 
   next()
