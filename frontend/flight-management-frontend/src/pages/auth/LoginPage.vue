@@ -172,10 +172,10 @@ const handleLogin = async () => {
   backendError.value = ''
 
   try {
-    console.log('🔑 Login deneniyor:', credentials.value.username)
+    console.log('🔑 Login deneniyor:', credentials.username)
 
     // Auth store'un login metodunu kullan
-    await authStore.login(credentials.value)
+    await authStore.login(credentials)
 
     // Login başarılı - auth store zaten yönlendirme yapacak
 

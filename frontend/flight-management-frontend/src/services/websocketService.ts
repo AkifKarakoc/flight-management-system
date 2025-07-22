@@ -1,8 +1,15 @@
 /**
  * WebSocket Service for Real-time Flight Management
  * Handles real-time updates for flights, system status, and notifications
+ * Updated to support STOMP protocol with SockJS fallback
  */
+if (typeof (globalThis as any).global === 'undefined') {
+  (globalThis as any).global = globalThis;
+}
 
+import { useAuthStore } from '@/stores/auth'
+import { Client, StompConfig, type Frame } from '@stomp/stompjs'
+import SockJS from 'sockjs-client'
 import type {
   Flight,
   KpiData,
@@ -22,13 +29,21 @@ type MessageType =
   | 'subscribe'
   | 'flight_status_update'
   | 'user_activity'
+  | 'STATUS_CHANGE'
+  | 'CREATE'
+  | 'UPDATE'
+  | 'DELETE'
+  | 'BULK_UPDATE'
+  | 'SUBSCRIPTION_CONFIRMED'
+  | 'SPECIFIC_SUBSCRIPTION_CONFIRMED'
+  | 'PONG'
 
 // WebSocket connection options interface
 interface WebSocketOptions {
-  onMessage?: (data: WebSocketMessage) => void
-  onError?: (error: Event) => void
-  onOpen?: (event: Event) => void
-  onClose?: (event: CloseEvent) => void
+  onMessage?: (data: any) => void
+  onError?: (error: Event | Frame) => void
+  onOpen?: (event: Event | Frame) => void
+  onClose?: (event: CloseEvent | Frame) => void
   autoReconnect?: boolean
   heartbeat?: boolean
 }
@@ -36,19 +51,25 @@ interface WebSocketOptions {
 // WebSocket message structure
 interface WebSocketMessage {
   type: MessageType
+  entity?: string
   payload?: any
+  data?: any
   timestamp?: number
   userId?: string | number
   filters?: any
+  entityId?: number
+  flightNumber?: string
+  status?: string
 }
 
 // Connection info interface
 interface ConnectionInfo {
-  socket: WebSocket
+  client: Client
   endpoint: string
   options: WebSocketOptions
   isConnected: boolean
   lastActivity: number
+  subscriptions: Map<string, any>
 }
 
 // Active connection interface
@@ -56,6 +77,7 @@ interface ActiveConnection {
   id: string
   endpoint: string
   lastActivity: number
+  subscriptions: string[]
 }
 
 // Flight subscription filters
@@ -160,9 +182,9 @@ class WebSocketService {
   }
 
   /**
-   * Create a new WebSocket connection
+   * Create a new STOMP WebSocket connection
    */
-  async connect(endpoint: string, options: WebSocketOptions = {}): Promise<WebSocket> {
+  async connect(endpoint: string, options: WebSocketOptions = {}): Promise<Client> {
     const {
       onMessage = () => {},
       onError = () => {},
@@ -175,73 +197,40 @@ class WebSocketService {
     const wsUrl = this.buildWebSocketUrl(endpoint)
     const connectionId = this.generateConnectionId(endpoint)
 
+    console.log(`Attempting to connect to: ${wsUrl}`)
+
     try {
-      const socket = new WebSocket(wsUrl)
-
-      // Store connection info
-      this.connections.set(connectionId, {
-        socket,
-        endpoint,
-        options,
-        isConnected: false,
-        lastActivity: Date.now()
-      })
-
-      return new Promise<WebSocket>((resolve, reject) => {
-        socket.onopen = (event: Event) => {
-          console.log(`WebSocket connected: ${endpoint}`)
+      const stompConfig: StompConfig = {
+        webSocketFactory: () => new SockJS(wsUrl),
+        reconnectDelay: this.reconnectDelay,
+        heartbeatIncoming: heartbeat ? 4000 : 0,
+        heartbeatOutgoing: heartbeat ? 4000 : 0,
+        onConnect: (frame: Frame) => {
+          console.log(`STOMP Connected to: ${endpoint}`, frame)
           const connection = this.connections.get(connectionId)
           if (connection) {
             connection.isConnected = true
+            connection.lastActivity = Date.now()
           }
           this.resetReconnectAttempts(connectionId)
-
-          if (heartbeat) {
-            this.startHeartbeat(connectionId)
-          }
-
-          onOpen(event)
-          resolve(socket)
-        }
-
-        socket.onmessage = (event: MessageEvent) => {
-          this.updateLastActivity(connectionId)
-
-          try {
-            const data: WebSocketMessage = JSON.parse(event.data)
-
-            // Handle system messages
-            if (data.type === 'ping') {
-              this.sendPong(socket)
-              return
-            }
-
-            if (data.type === 'pong') {
-              console.log(`Heartbeat received: ${endpoint}`)
-              return
-            }
-
-            onMessage(data)
-          } catch (error) {
-            console.error('WebSocket message parsing error:', error)
-            onError(error as Event)
-          }
-        }
-
-        socket.onerror = (error: Event) => {
-          console.error(`WebSocket error: ${endpoint}`, error)
+          this.setupSubscriptions(connectionId, endpoint)
+          onOpen(frame)
+        },
+        onStompError: (frame: Frame) => {
+          console.error(`STOMP Error for ${endpoint}:`, frame)
+          onError(frame)
+        },
+        onWebSocketError: (error: Event) => {
+          console.error(`WebSocket Error for ${endpoint}:`, error)
           onError(error)
-          reject(error)
-        }
-
-        socket.onclose = (event: CloseEvent) => {
-          console.log(`WebSocket closed: ${endpoint}`, event.code, event.reason)
+        },
+        onWebSocketClose: (event: CloseEvent) => {
+          console.log(`WebSocket closed for ${endpoint}:`, event)
           const connection = this.connections.get(connectionId)
           if (connection) {
             connection.isConnected = false
           }
           this.stopHeartbeat(connectionId)
-
           onClose(event)
 
           // Auto-reconnect if enabled and not manually closed
@@ -249,37 +238,246 @@ class WebSocketService {
             this.scheduleReconnect(connectionId)
           }
         }
+      }
+
+      const client = new Client(stompConfig)
+
+      // Store connection info
+      this.connections.set(connectionId, {
+        client,
+        endpoint,
+        options: { ...options, onMessage },
+        isConnected: false,
+        lastActivity: Date.now(),
+        subscriptions: new Map()
+      })
+
+      return new Promise<Client>((resolve, reject) => {
+        const originalOnConnect = stompConfig.onConnect
+        const originalOnStompError = stompConfig.onStompError
+
+        stompConfig.onConnect = (frame: Frame) => {
+          originalOnConnect?.(frame)
+          resolve(client)
+        }
+
+        stompConfig.onStompError = (frame: Frame) => {
+          originalOnStompError?.(frame)
+          reject(new Error(`STOMP connection failed: ${frame.headers['message'] || 'Unknown error'}`))
+        }
+
+        // Add connection timeout
+        const timeout = setTimeout(() => {
+          if (!client.connected) {
+            client.deactivate()
+            reject(new Error(`Connection timeout for ${endpoint}`))
+          }
+        }, 10000)
+
+        client.onConnect = (frame: Frame) => {
+          clearTimeout(timeout)
+          stompConfig.onConnect?.(frame)
+        }
+
+        client.activate()
       })
     } catch (error) {
-      console.error(`Failed to create WebSocket connection: ${endpoint}`, error)
+      console.error(`Failed to create STOMP connection: ${endpoint}`, error)
       throw error
     }
   }
 
   /**
-   * Send message through WebSocket connection
+   * Setup default subscriptions for endpoint
+   */
+  private setupSubscriptions(connectionId: string, endpoint: string): void {
+    const connection = this.connections.get(connectionId)
+    if (!connection || !connection.client.connected) return
+
+    const client = connection.client
+    const onMessage = connection.options.onMessage
+
+    try {
+      // Subscribe based on endpoint type
+      const endpointType = endpoint.split('/')[0]
+
+      switch (endpointType) {
+        case 'flights':
+        case 'dashboard':
+        case 'flight-tracking':
+          // Subscribe to flight-related topics
+          this.subscribeToTopic(connectionId, '/topic/flights', onMessage)
+          this.subscribeToTopic(connectionId, '/topic/flights/status', onMessage)
+          this.subscribeToTopic(connectionId, '/topic/updates', onMessage)
+          this.subscribeToTopic(connectionId, '/topic/flights/bulk', onMessage)
+          break
+
+        case 'notifications':
+          // Subscribe to notification topics
+          this.subscribeToTopic(connectionId, '/topic/notifications', onMessage)
+          this.subscribeToTopic(connectionId, '/topic/alerts', onMessage)
+          break
+
+        case 'system':
+          // Subscribe to system status topics
+          this.subscribeToTopic(connectionId, '/topic/system/status', onMessage)
+          this.subscribeToTopic(connectionId, '/topic/system/health', onMessage)
+          break
+
+        case 'airline':
+        case 'route':
+          // Subscribe to reference data topics
+          this.subscribeToTopic(connectionId, '/topic/airlines', onMessage)
+          this.subscribeToTopic(connectionId, '/topic/routes', onMessage)
+          this.subscribeToTopic(connectionId, '/topic/airports', onMessage)
+          break
+
+        case 'archive':
+          // Subscribe to archive topics
+          this.subscribeToTopic(connectionId, '/topic/archive', onMessage)
+          break
+      }
+
+      // Send initial subscription message
+      this.sendSubscriptionMessage(connectionId, endpoint)
+
+    } catch (error) {
+      console.error(`Failed to setup subscriptions for ${endpoint}:`, error)
+    }
+  }
+
+  /**
+   * Subscribe to specific STOMP topic
+   */
+  private subscribeToTopic(connectionId: string, topic: string, onMessage?: (data: any) => void): void {
+    const connection = this.connections.get(connectionId)
+    if (!connection || !connection.client.connected) return
+
+    try {
+      const subscription = connection.client.subscribe(topic, (message) => {
+        this.updateLastActivity(connectionId)
+
+        try {
+          const data = JSON.parse(message.body)
+          console.log(`Received message from ${topic}:`, data)
+          onMessage?.(data)
+        } catch (error) {
+          console.error(`Error parsing message from ${topic}:`, error)
+        }
+      })
+
+      connection.subscriptions.set(topic, subscription)
+      console.log(`Subscribed to topic: ${topic}`)
+    } catch (error) {
+      console.error(`Failed to subscribe to topic ${topic}:`, error)
+    }
+  }
+
+  /**
+   * Send subscription message to backend
+   */
+  private sendSubscriptionMessage(connectionId: string, endpoint: string): void {
+    const connection = this.connections.get(connectionId)
+    if (!connection || !connection.client.connected) return
+
+    try {
+      const endpointType = endpoint.split('/')[0]
+
+      switch (endpointType) {
+        case 'flights':
+        case 'dashboard':
+        case 'flight-tracking':
+          connection.client.publish({
+            destination: '/app/flights/subscribe',
+            body: JSON.stringify({
+              type: 'SUBSCRIBE',
+              entity: 'FLIGHT',
+              timestamp: new Date().toISOString(),
+              filters: {}
+            })
+          })
+          break
+
+        case 'notifications':
+          connection.client.publish({
+            destination: '/app/notifications/subscribe',
+            body: JSON.stringify({
+              type: 'SUBSCRIBE',
+              entity: 'NOTIFICATION',
+              timestamp: new Date().toISOString()
+            })
+          })
+          break
+      }
+    } catch (error) {
+      console.error(`Failed to send subscription message for ${endpoint}:`, error)
+    }
+  }
+
+  /**
+   * Send message through STOMP connection
    */
   send(endpoint: string, message: WebSocketMessage): boolean {
     const connectionId = this.generateConnectionId(endpoint)
     const connection = this.connections.get(connectionId)
 
-    if (!connection || !connection.isConnected) {
-      console.warn(`WebSocket not connected: ${endpoint}`)
+    if (!connection || !connection.client.connected) {
+      console.warn(`STOMP client not connected: ${endpoint}`)
       return false
     }
 
     try {
-      connection.socket.send(JSON.stringify(message))
+      const destination = this.getDestinationForMessage(endpoint, message.type)
+      const messageBody = JSON.stringify({
+        ...message,
+        timestamp: message.timestamp || new Date().toISOString()
+      })
+
+      connection.client.publish({
+        destination,
+        body: messageBody
+      })
+
       this.updateLastActivity(connectionId)
+      console.log(`Sent message to ${destination}:`, message)
       return true
     } catch (error) {
-      console.error(`Failed to send WebSocket message: ${endpoint}`, error)
+      console.error(`Failed to send STOMP message: ${endpoint}`, error)
       return false
     }
   }
 
   /**
-   * Close WebSocket connection
+   * Get destination path for message type
+   */
+  private getDestinationForMessage(endpoint: string, messageType: MessageType): string {
+    const endpointType = endpoint.split('/')[0]
+
+    switch (endpointType) {
+      case 'flights':
+      case 'dashboard':
+      case 'flight-tracking':
+        if (messageType === 'subscribe') {
+          return '/app/flights/subscribe'
+        }
+        if (messageType === 'ping') {
+          return '/app/flights/ping'
+        }
+        return '/app/flights/update'
+
+      case 'notifications':
+        return '/app/notifications/send'
+
+      case 'system':
+        return '/app/system/update'
+
+      default:
+        return '/app/general'
+    }
+  }
+
+  /**
+   * Close STOMP connection
    */
   disconnect(endpoint: string): void {
     const connectionId = this.generateConnectionId(endpoint)
@@ -287,24 +485,63 @@ class WebSocketService {
 
     if (connection) {
       this.stopHeartbeat(connectionId)
-      if (connection.socket.readyState === WebSocket.OPEN) {
-        connection.socket.close(1000, 'Manual disconnect')
+
+      // Unsubscribe from all topics
+      for (const [topic, subscription] of connection.subscriptions) {
+        try {
+          subscription.unsubscribe()
+          console.log(`Unsubscribed from topic: ${topic}`)
+        } catch (error) {
+          console.error(`Error unsubscribing from topic ${topic}:`, error)
+        }
       }
+      connection.subscriptions.clear()
+
+      // Disconnect STOMP client
+      if (connection.client.connected) {
+        connection.client.deactivate()
+      }
+
       this.connections.delete(connectionId)
+      console.log(`Disconnected from: ${endpoint}`)
     }
   }
 
+  private getAuthToken(): string {
+    // localStorage'dan direkt token al
+    const token = localStorage.getItem('token') || localStorage.getItem('auth_token') || localStorage.getItem('authToken')
+
+    if (!token) {
+      console.warn('No authentication token found for WebSocket connection')
+      return ''
+    }
+
+    console.log('Using token for WebSocket:', token.substring(0, 20) + '...')
+    return token
+  }
+
   /**
-   * Close all WebSocket connections
+   * Close all STOMP connections
    */
   disconnectAll(): void {
     for (const [connectionId, connection] of this.connections) {
       this.stopHeartbeat(connectionId)
-      if (connection.socket.readyState === WebSocket.OPEN) {
-        connection.socket.close(1000, 'Disconnect all')
+
+      // Unsubscribe from all topics
+      for (const [topic, subscription] of connection.subscriptions) {
+        try {
+          subscription.unsubscribe()
+        } catch (error) {
+          console.error(`Error unsubscribing from topic ${topic}:`, error)
+        }
+      }
+
+      if (connection.client.connected) {
+        connection.client.deactivate()
       }
     }
     this.connections.clear()
+    console.log('All STOMP connections disconnected')
   }
 
   /**
@@ -313,7 +550,7 @@ class WebSocketService {
   isConnected(endpoint: string): boolean {
     const connectionId = this.generateConnectionId(endpoint)
     const connection = this.connections.get(connectionId)
-    return connection ? connection.isConnected : false
+    return connection ? connection.isConnected && connection.client.connected : false
   }
 
   /**
@@ -322,11 +559,12 @@ class WebSocketService {
   getActiveConnections(): ActiveConnection[] {
     const active: ActiveConnection[] = []
     for (const [connectionId, connection] of this.connections) {
-      if (connection.isConnected) {
+      if (connection.isConnected && connection.client.connected) {
         active.push({
           id: connectionId,
           endpoint: connection.endpoint,
-          lastActivity: connection.lastActivity
+          lastActivity: connection.lastActivity,
+          subscriptions: Array.from(connection.subscriptions.keys())
         })
       }
     }
@@ -334,45 +572,33 @@ class WebSocketService {
   }
 
   /**
-   * DÜZELTİLMİŞ METOT
-   * Bu metot, endpoint'e göre doğru mikroservis portunu seçer ve
-   * backend'in beklediği doğru URL yapısını oluşturur.
+   * Build WebSocket URL for STOMP connection
    */
   private buildWebSocketUrl(endpoint: string): string {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:'
+    const endpointType = endpoint.split('/')[0]
 
-    // Endpoint'in ilk kısmına göre hangi servise bağlanılacağını belirliyoruz
-    const endpointType = endpoint.split('/')[0];
-
-    // Servis portlarını merkezi bir yerden yönetiyoruz
     const SERVICE_PORTS: { [key: string]: string } = {
-      // Reference Manager Service (Port 8081)
       'notifications': '8081',
       'system': '8081',
       'airline': '8081',
       'route': '8081',
-      // Flight Service (Port 8082)
       'flights': '8082',
       'dashboard': '8082',
       'flight-tracking': '8082',
-      // Archive Service (Port 8083)
       'archive': '8083'
-    };
+    }
 
-    // Endpoint türüne göre portu bul
-    const port = SERVICE_PORTS[endpointType] || '8082';
-    const host = `localhost:${port}`;
-
-    // WebSocket URL'ini oluştur - /ws/sockjs ekle (SockJS için)
-    return `${protocol}//${host}/ws/sockjs`;
+    const port = SERVICE_PORTS[endpointType] || '8082'
+    const token = this.getAuthToken()
+    return `${protocol}//localhost:${port}/ws?token=${encodeURIComponent(token)}`
   }
-
 
   /**
    * Generate unique connection ID
    */
   private generateConnectionId(endpoint: string): string {
-    return `ws_${endpoint.replace(/[^a-zA-Z0-9]/g, '_')}`
+    return `stomp_${endpoint.replace(/[^a-zA-Z0-9]/g, '_')}`
   }
 
   /**
@@ -390,8 +616,8 @@ class WebSocketService {
       return
     }
 
-    const delay = this.reconnectDelay * Math.pow(2, attempts) // Exponential backoff
-    console.log(`Scheduling reconnection attempt ${attempts + 1} for ${connection.endpoint} in ${delay}ms`)
+    const delay = this.reconnectDelay * Math.pow(2, attempts)
+    console.log(`Scheduling STOMP reconnection attempt ${attempts + 1} for ${connection.endpoint} in ${delay}ms`)
 
     setTimeout(async () => {
       if (!this.isOnline) {
@@ -403,7 +629,7 @@ class WebSocketService {
         this.reconnectAttempts.set(connectionId, attempts + 1)
         await this.connect(connection.endpoint, connection.options)
       } catch (error) {
-        console.error(`Reconnection failed for ${connection.endpoint}:`, error)
+        console.error(`STOMP reconnection failed for ${connection.endpoint}:`, error)
         this.scheduleReconnect(connectionId)
       }
     }, delay)
@@ -424,7 +650,7 @@ class WebSocketService {
     if (!connection) return
 
     const timer = setInterval(() => {
-      if (connection.isConnected) {
+      if (connection.isConnected && connection.client.connected) {
         this.send(connection.endpoint, {
           type: 'ping',
           timestamp: Date.now()
@@ -449,18 +675,6 @@ class WebSocketService {
   }
 
   /**
-   * Send pong response
-   */
-  private sendPong(socket: WebSocket): void {
-    if (socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({
-        type: 'pong',
-        timestamp: Date.now()
-      }))
-    }
-  }
-
-  /**
    * Update last activity timestamp
    */
   private updateLastActivity(connectionId: string): void {
@@ -474,10 +688,9 @@ class WebSocketService {
    * Handle online event
    */
   private handleOnline(): void {
-    console.log('Device is back online, reconnecting WebSockets...')
+    console.log('Device is back online, reconnecting STOMP clients...')
     this.isOnline = true
 
-    // Attempt to reconnect all disconnected connections
     for (const [connectionId, connection] of this.connections) {
       if (!connection.isConnected && connection.options.autoReconnect !== false) {
         this.scheduleReconnect(connectionId)
@@ -489,25 +702,24 @@ class WebSocketService {
    * Handle offline event
    */
   private handleOffline(): void {
-    console.log('Device is offline, WebSocket connections will be paused')
+    console.log('Device is offline, STOMP connections will be paused')
     this.isOnline = false
   }
 
   /**
-   * Subscribe to flight updates
+   * Subscribe to flight updates with STOMP
    */
   async subscribeToFlightUpdates(
     onUpdate: (data: FlightUpdatePayload) => void,
     filters: FlightSubscriptionFilters = {}
-  ): Promise<WebSocket> {
+  ): Promise<Client> {
     return this.connect('flights', {
       onMessage: (data: WebSocketMessage) => {
-        if (data.type === 'flight_update') {
-          onUpdate(data.payload as FlightUpdatePayload)
+        if (data.type === 'flight_update' || data.type === 'UPDATE' || data.type === 'STATUS_CHANGE') {
+          onUpdate(data.data as FlightUpdatePayload)
         }
       },
       onOpen: () => {
-        // Send subscription filters
         this.send('flights', {
           type: 'subscribe',
           filters: {
@@ -528,11 +740,11 @@ class WebSocketService {
    */
   async subscribeToSystemStatus(
     onUpdate: (data: SystemStatusPayload) => void
-  ): Promise<WebSocket> {
+  ): Promise<Client> {
     return this.connect('system', {
       onMessage: (data: WebSocketMessage) => {
         if (data.type === 'system_status') {
-          onUpdate(data.payload as SystemStatusPayload)
+          onUpdate(data.data as SystemStatusPayload)
         }
       },
       autoReconnect: true,
@@ -546,11 +758,11 @@ class WebSocketService {
   async subscribeToNotifications(
     onNotification: (data: NotificationPayload) => void,
     userId: string | number | null = null
-  ): Promise<WebSocket> {
+  ): Promise<Client> {
     return this.connect('notifications', {
       onMessage: (data: WebSocketMessage) => {
         if (data.type === 'notification') {
-          onNotification(data.payload as NotificationPayload)
+          onNotification(data.data as NotificationPayload)
         }
       },
       onOpen: () => {
@@ -571,11 +783,11 @@ class WebSocketService {
    */
   async subscribeToDashboardUpdates(
     onUpdate: (data: KpiUpdatePayload | ChartUpdatePayload) => void
-  ): Promise<WebSocket> {
+  ): Promise<Client> {
     return this.connect('dashboard', {
       onMessage: (data: WebSocketMessage) => {
         if (data.type === 'kpi_update' || data.type === 'chart_update') {
-          onUpdate(data.payload as KpiUpdatePayload | ChartUpdatePayload)
+          onUpdate(data.data as KpiUpdatePayload | ChartUpdatePayload)
         }
       },
       autoReconnect: true,
@@ -589,7 +801,7 @@ class WebSocketService {
   sendFlightUpdate(flightUpdate: Partial<FlightUpdatePayload>): boolean {
     return this.send('flights', {
       type: 'flight_status_update',
-      payload: {
+      data: {
         ...flightUpdate,
         timestamp: Date.now()
       }
@@ -602,7 +814,7 @@ class WebSocketService {
   sendUserActivity(userId: string | number, page: string, action?: string): boolean {
     return this.send('notifications', {
       type: 'user_activity',
-      payload: {
+      data: {
         userId,
         page,
         action,
@@ -618,81 +830,24 @@ class WebSocketService {
     flightNumber: string,
     onUpdate: (data: FlightUpdatePayload) => void,
     date?: string
-  ): Promise<WebSocket> {
+  ): Promise<Client> {
     const endpoint = `flight-tracking/${flightNumber}${date ? `?date=${date}` : ''}`
 
     return this.connect(endpoint, {
       onMessage: (data: WebSocketMessage) => {
-        if (data.type === 'flight_update') {
-          onUpdate(data.payload as FlightUpdatePayload)
-        }
-      },
-      autoReconnect: true,
-      heartbeat: true
-    })
-  }
-
-  /**
-   * Subscribe to airline-specific updates
-   */
-  async subscribeToAirlineUpdates(
-    airlineId: number,
-    onUpdate: (data: FlightUpdatePayload) => void
-  ): Promise<WebSocket> {
-    return this.connect(`airline/${airlineId}`, {
-      onMessage: (data: WebSocketMessage) => {
-        if (data.type === 'flight_update') {
-          onUpdate(data.payload as FlightUpdatePayload)
-        }
-      },
-      onOpen: () => {
-        this.send(`airline/${airlineId}`, {
-          type: 'subscribe',
-          filters: { airlineIds: [airlineId] }
-        })
-      },
-      autoReconnect: true,
-      heartbeat: true
-    })
-  }
-
-  /**
-   * Subscribe to route-specific updates
-   */
-  async subscribeToRouteUpdates(
-    originAirportId: number,
-    destinationAirportId: number,
-    onUpdate: (data: FlightUpdatePayload) => void
-  ): Promise<WebSocket> {
-    const endpoint = `route/${originAirportId}-${destinationAirportId}`
-
-    return this.connect(endpoint, {
-      onMessage: (data: WebSocketMessage) => {
-        if (data.type === 'flight_update') {
-          onUpdate(data.payload as FlightUpdatePayload)
+        if (data.type === 'flight_update' || data.type === 'STATUS_CHANGE') {
+          onUpdate(data.data as FlightUpdatePayload)
         }
       },
       onOpen: () => {
         this.send(endpoint, {
           type: 'subscribe',
-          filters: {
-            originAirportIds: [originAirportId],
-            destinationAirportIds: [destinationAirportId]
-          }
+          flightNumber: flightNumber,
+          filters: { flightNumbers: [flightNumber] }
         })
       },
       autoReconnect: true,
       heartbeat: true
-    })
-  }
-
-  /**
-   * Broadcast message to specific endpoint
-   */
-  broadcast(endpoint: string, message: Omit<WebSocketMessage, 'timestamp'>): boolean {
-    return this.send(endpoint, {
-      ...message,
-      timestamp: Date.now()
     })
   }
 
@@ -713,12 +868,12 @@ class WebSocketService {
     let totalLatency = 0
 
     for (const [connectionId, connection] of this.connections) {
-      if (connection.isConnected) {
+      if (connection.isConnected && connection.client.connected) {
         activeCount++
         const latency = now - connection.lastActivity
         totalLatency += latency
 
-        if (latency < 30000) { // Healthy if last activity within 30 seconds
+        if (latency < 30000) {
           healthyCount++
         }
       } else if (this.reconnectAttempts.has(connectionId)) {
@@ -733,6 +888,16 @@ class WebSocketService {
       healthyConnections: healthyCount,
       averageLatency: activeCount > 0 ? totalLatency / activeCount : 0
     }
+  }
+
+  /**
+   * Broadcast message to specific endpoint
+   */
+  broadcast(endpoint: string, message: Omit<WebSocketMessage, 'timestamp'>): boolean {
+    return this.send(endpoint, {
+      ...message,
+      timestamp: Date.now()
+    })
   }
 
   /**
@@ -770,7 +935,8 @@ export type {
   ChartUpdatePayload,
   NotificationPayload,
   UserActivityPayload,
-  ActiveConnection
+  ActiveConnection,
+  ConnectionInfo
 }
 
 // Export class for testing

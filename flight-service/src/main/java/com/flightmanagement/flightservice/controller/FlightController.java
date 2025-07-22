@@ -114,23 +114,4 @@ public class FlightController {
             return ResponseEntity.ok(result);
         }
     }
-
-    @GetMapping("/summary/{date}")
-    public ResponseEntity<Map<String, Object>> getDailySummary(
-            @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
-        return ResponseEntity.ok(flightService.getDailySummary(date));
-    }
-
-    @GetMapping("/daily-chart")
-    public ResponseEntity<FlightChartDataDto> getFlightChartData(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
-        return ResponseEntity.ok(flightService.getFlightChartData(startDate, endDate));
-    }
-
-    @GetMapping("/type-distribution")
-    public ResponseEntity<List<FlightTypeDistributionDto>> getFlightTypeDistribution() {
-        return ResponseEntity.ok(flightService.getFlightTypeDistribution());
-    }
-
 }

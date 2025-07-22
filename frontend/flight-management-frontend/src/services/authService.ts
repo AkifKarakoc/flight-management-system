@@ -53,6 +53,11 @@ const STORAGE_KEYS = {
 
   // Authentication API calls
     async login(credentials: LoginCredentials): Promise<EnhancedAuthResponse> {
+      console.log('AuthService login called with:', credentials)
+
+      if (!credentials || !credentials.username || !credentials.password) {
+        throw new Error('Username and password are required')
+      }
       try {
         // Auth endpoints are on Reference Manager Service
         const response = await apiService.reference.post<any>(

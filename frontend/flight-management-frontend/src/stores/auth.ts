@@ -45,13 +45,20 @@ export const useAuthStore = defineStore('auth', () => {
 
   // Actions
   async function login(credentials: LoginCredentials): Promise<AuthResponse> {
+    console.log('Auth store login called with:', credentials)
+
+    if (!credentials) {
+      throw new Error('Credentials are required')
+    }
+
     loginLoading.value = true
 
     try {
       const response = await authService.login(credentials)
+      console.log('Auth service response:', response)
 
       // Update store state
-      token.value = response.accessToken
+      token.value = response.accessToken || response.token // Backend'den accessToken veya token gelebilir
       refreshToken.value = response.refreshToken || null
       user.value = response.user
 
