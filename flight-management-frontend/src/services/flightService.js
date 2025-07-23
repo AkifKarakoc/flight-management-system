@@ -117,8 +117,39 @@ class FlightService {
   }
 
   async getDashboardStats(date) {
-    const response = await flightAPI.get(`/flights/stats/dashboard/${date}`)
-    return response.data
+    try {
+      const response = await flightAPI.get(`/flights/stats/dashboard/${date}`)
+      return response.data
+    } catch (error) {
+      // Endpoint mevcut değilse temel stats'i manuel olarak hesapla
+      console.warn('Dashboard endpoint not available, calculating basic stats')
+
+      try {
+        const [scheduled, departed, arrived, delayed, cancelled] = await Promise.all([
+          this.getFlightCountByStatusAndDate('SCHEDULED', date),
+          this.getFlightCountByStatusAndDate('DEPARTED', date),
+          this.getFlightCountByStatusAndDate('ARRIVED', date),
+          this.getFlightCountByStatusAndDate('DELAYED', date),
+          this.getFlightCountByStatusAndDate('CANCELLED', date)
+        ])
+
+        const total = scheduled + departed + arrived + delayed + cancelled
+
+        return {
+          totalFlights: total,
+          scheduledFlights: scheduled,
+          departedFlights: departed,
+          arrivedFlights: arrived,
+          delayedFlights: delayed,
+          cancelledFlights: cancelled,
+          onTimePerformance: total > 0 ? ((total - delayed) / total * 100) : 0,
+          cancellationRate: total > 0 ? (cancelled / total * 100) : 0
+        }
+      } catch (fallbackError) {
+        console.error('Error in fallback stats calculation:', fallbackError)
+        throw error
+      }
+    }
   }
 
   async getChartData(startDate, endDate) {
@@ -188,25 +219,44 @@ class FlightService {
   async getDashboardKPIs() {
     try {
       const today = new Date().toISOString().split('T')[0]
+
       const stats = await this.getDashboardStats(today)
 
       return {
-        scheduledFlights: stats.scheduledFlights || 0,
-        activeFlights: (stats.departedFlights || 0) - (stats.arrivedFlights || 0),
-        completedFlights: stats.arrivedFlights || 0,
-        delayedFlights: stats.delayedFlights || 0,
+        scheduledFlights: stats.scheduled || stats.scheduledFlights || 0,
+        activeFlights: (stats.departed || stats.departedFlights || 0) - (stats.arrived || stats.arrivedFlights || 0),
+        completedFlights: stats.arrived || stats.arrivedFlights || 0,
+        delayedFlights: stats.delayed || stats.delayedFlights || 0,
         onTimePerformance: stats.onTimePerformance || 0,
         cancellationRate: stats.cancellationRate || 0
       }
     } catch (error) {
       console.error('Error fetching dashboard KPIs:', error)
-      return {
-        scheduledFlights: 0,
-        activeFlights: 0,
-        completedFlights: 0,
-        delayedFlights: 0,
-        onTimePerformance: 0,
-        cancellationRate: 0
+
+      // Fallback: Tüm uçuşları say
+      try {
+        console.log('Trying fallback: getting all flights')
+        const allFlights = await this.getAllFlights()
+        console.log('All flights count:', allFlights?.length || 0)
+
+        return {
+          scheduledFlights: allFlights?.length || 0,
+          activeFlights: 0,
+          completedFlights: 0,
+          delayedFlights: 0,
+          onTimePerformance: 0,
+          cancellationRate: 0
+        }
+      } catch (fallbackError) {
+        console.error('Fallback also failed:', fallbackError)
+        return {
+          scheduledFlights: 0,
+          activeFlights: 0,
+          completedFlights: 0,
+          delayedFlights: 0,
+          onTimePerformance: 0,
+          cancellationRate: 0
+        }
       }
     }
   }

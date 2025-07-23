@@ -271,6 +271,9 @@ const loadDashboardData = async () => {
     // KPI verilerini yükle
     await flightStore.loadDashboardKPIs()
 
+    // Debug: Tüm uçuşları da yükle
+    await flightStore.loadFlights()
+
     // Reference data'yı cache'le (dropdown'lar için)
     await referenceStore.loadAllReferenceData()
 
