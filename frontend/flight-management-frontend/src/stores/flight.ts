@@ -157,7 +157,6 @@ export const useFlightStore = defineStore('flight', () => {
   async function fetchFlights(params: SearchParams = {}, force: boolean = false): Promise<PaginatedResponse<Flight>> {
     // Check cache
     if (!force && lastFetch.value && Date.now() - lastFetch.value < cacheDuration) {
-      // Cache'den dönerken PaginatedResponse formatında döndür
       return {
         content: flights.value,
         totalElements: totalElements.value,
@@ -189,17 +188,28 @@ export const useFlightStore = defineStore('flight', () => {
 
       const response: PaginatedResponse<Flight> = await flightService.getAll(queryParams)
 
-      // Handle paginated response
-      flights.value = response.content
-      totalElements.value = response.totalElements
-      totalPages.value = response.totalPages
-      currentPage.value = response.number
+      // Güvenli erişim kontrolü
+      if (response?.content && Array.isArray(response.content)) {
+        flights.value = response.content
+        totalElements.value = response.totalElements || 0
+        totalPages.value = response.totalPages || 0
+        currentPage.value = response.number || 0
+      } else {
+        flights.value = []
+        totalElements.value = 0
+        totalPages.value = 0
+        currentPage.value = 0
+        console.warn('API response format unexpected:', response)
+      }
 
       lastFetch.value = Date.now()
-      return response  // ✅ PaginatedResponse döndür
+      return response
 
     } catch (error: any) {
       console.error('Error fetching flights:', error)
+      flights.value = []
+      totalElements.value = 0
+      totalPages.value = 0
       ElMessage.error('Uçuşlar yüklenirken hata oluştu')
       throw error
     } finally {

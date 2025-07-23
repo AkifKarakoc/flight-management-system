@@ -391,6 +391,17 @@ router.afterEach((to, from, failure) => {
 
 // Error handling
 router.onError((error: Error) => {
+  // Vue Router hatalarını kontrol et
+  if (error.name === 'NavigationCancelled' ||
+    error.name === 'NavigationDuplicated' ||
+    error.message.includes('Navigation cancelled') ||
+    error.message.includes('Navigation duplicated')) {
+    // Bu hatalar normal davranış, log olarak kaydet ama kullanıcıya gösterme
+    console.log('ℹ️ Router navigation info:', error.message)
+    return
+  }
+
+  // Gerçek hatalar için
   console.error('❌ Router error:', error)
   ElMessage.error('Sayfa yüklenirken hata oluştu')
 })

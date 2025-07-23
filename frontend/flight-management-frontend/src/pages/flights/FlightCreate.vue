@@ -648,7 +648,7 @@ function trackChanges() {
 
 // Lifecycle
 onMounted(() => {
-  appStore.setPageTitle(isDuplicating.value ? 'Uçuş Kopyala' : 'Yeni Uçuş Oluştur')
+  document.title = 'Yeni Uçuş Oluştur'
 
   // Load duplicate data if provided
   if (isDuplicating.value && route.query.duplicate) {
