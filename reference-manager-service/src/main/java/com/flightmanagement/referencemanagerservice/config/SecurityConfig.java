@@ -49,7 +49,8 @@ public class SecurityConfig {
                 "http://localhost:5173",
                 "http://127.0.0.1:5173"
         ));
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
+        configuration.setAllowedMethods(Arrays.asList(
+                "GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);
@@ -66,7 +67,7 @@ public class SecurityConfig {
                 .exceptionHandling(exception -> exception.authenticationEntryPoint(jwtAuthenticationEntryPoint))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth ->
-                        auth.requestMatchers("/api/v1/auth/**", "/actuator/**", "/ws/**").permitAll()
+                        auth.requestMatchers("/api/v1/auth/**", "/actuator/**", "/ws/**", "/ws/sockjs/**").permitAll()
                                 .anyRequest().authenticated()
                 );
 

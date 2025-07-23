@@ -1,5 +1,5 @@
 import apiService from './api'
-import { API_ENDPOINTS, API_BASE_URLS } from '@/utils/constants'
+import { API_ENDPOINTS } from '@/utils/constants'
 import type {
   LoginCredentials,
   AuthResponse,
@@ -37,90 +37,101 @@ interface RefreshTokenRequest {
 const STORAGE_KEYS = {
   TOKEN: 'auth_token',
   USER: 'auth_user',
-  REFRESH_TOKEN: 'refresh_token'
+  REFRESH_TOKEN: 'refresh_token',
+  LOGIN_TIME: 'login_time',
+  LAST_ACTIVITY: 'last_activity'
 } as const
 
-  class AuthService {
+class AuthService {
   private readonly tokenKey: string
   private readonly userKey: string
   private readonly refreshTokenKey: string
+  private readonly loginTimeKey: string
+  private readonly lastActivityKey: string
+  private readonly maxSessionTime: number = 8 * 60 * 60 * 1000 // 8 saat
+  private readonly tokenRefreshThreshold: number = 5 * 60 * 1000 // 5 dakika
 
   constructor() {
     this.tokenKey = STORAGE_KEYS.TOKEN
     this.userKey = STORAGE_KEYS.USER
     this.refreshTokenKey = STORAGE_KEYS.REFRESH_TOKEN
+    this.loginTimeKey = STORAGE_KEYS.LOGIN_TIME
+    this.lastActivityKey = STORAGE_KEYS.LAST_ACTIVITY
   }
 
-  // Authentication API calls
-    async login(credentials: LoginCredentials): Promise<EnhancedAuthResponse> {
-      console.log('AuthService login called with:', credentials)
+  // Enhanced login with session tracking
+  async login(credentials: LoginCredentials): Promise<EnhancedAuthResponse> {
+    console.log('AuthService login called with:', credentials)
 
-      if (!credentials || !credentials.username || !credentials.password) {
-        throw new Error('Username and password are required')
-      }
-      try {
-        // Auth endpoints are on Reference Manager Service
-        const response = await apiService.reference.post<any>(
-          API_ENDPOINTS.AUTH.LOGIN,
-          credentials
-        )
+    if (!credentials || !credentials.username || !credentials.password) {
+      throw new Error('Username and password are required')
+    }
 
-        console.log('Backend response:', response.data)
+    try {
+      const response = await apiService.reference.post<any>(
+        API_ENDPOINTS.AUTH.LOGIN,
+        credentials
+      )
 
-        if (response.data?.accessToken) {
-          this.setToken(response.data.accessToken)
+      console.log('Backend response:', response.data)
 
-          // Backend'den user objesi gelmiyorsa, token'dan parse et
-          let user: User
-          if (response.data.user) {
-            user = response.data.user
-          } else {
-            // Token'dan kullanıcı bilgilerini çıkar
-            const payload = this.parseToken(response.data.accessToken)
-            if (payload) {
-              user = {
-                id: payload.sub,
-                username: payload.sub,
-                email: `${payload.sub}@flightmanagement.com`,
-                role: payload.roles || 'USER',
-                roles: payload.roles ? [payload.roles] : ['USER'],
-                permissions: [],
-                isActive: true
-              }
-            } else {
-              throw new Error('Invalid token format')
+      if (response.data?.accessToken) {
+        const token = response.data.accessToken
+
+        // Store token and session info
+        this.setToken(token)
+        this.setLoginTime()
+        this.updateLastActivity()
+
+        // Parse user from token or use provided user
+        let user: User
+        if (response.data.user) {
+          user = response.data.user
+        } else {
+          const payload = this.parseToken(token)
+          if (payload) {
+            user = {
+              id: payload.sub,
+              username: payload.sub,
+              email: `${payload.sub}@flightmanagement.com`,
+              role: payload.roles || 'USER',
+              roles: payload.roles ? [payload.roles] : ['USER'],
+              permissions: [],
+              isActive: true
             }
-          }
-
-          // Store refresh token if provided
-          if (response.data.refreshToken) {
-            this.setRefreshToken(response.data.refreshToken)
-          }
-
-          // Store user info
-          this.setUser(user)
-
-          // Return enhanced response
-          return {
-            token: "",
-            accessToken: response.data.accessToken,
-            refreshToken: response.data.refreshToken,
-            tokenType: response.data.tokenType || 'Bearer',
-            expiresIn: response.data.expiresIn || 86400,
-            user: user
+          } else {
+            throw new Error('Invalid token format')
           }
         }
 
-        throw new Error('Invalid response format')
-      } catch (error) {
-        console.error('Login error:', error)
-        throw error
-      }
-    }
+        // Store refresh token if provided
+        if (response.data.refreshToken) {
+          this.setRefreshToken(response.data.refreshToken)
+        }
 
+        // Store user info
+        this.setUser(user)
+
+        return {
+          token: "",
+          accessToken: token,
+          refreshToken: response.data.refreshToken,
+          tokenType: response.data.tokenType || 'Bearer',
+          expiresIn: response.data.expiresIn || 86400,
+          user: user
+        }
+      }
+
+      throw new Error('Invalid response format')
+    } catch (error) {
+      console.error('Login error:', error)
+      throw error
+    }
+  }
+
+  // Enhanced logout with cleanup
   async logout(): Promise<void> {
     try {
-      // Call logout endpoint if token exists
       const token = this.getToken()
       if (token) {
         await apiService.reference.post(API_ENDPOINTS.AUTH.LOGOUT)
@@ -128,58 +139,49 @@ const STORAGE_KEYS = {
     } catch (error: any) {
       console.warn('Logout API call failed:', error.message)
     } finally {
-      // Always clear local storage
       this.clearAuth()
+
+      // Multiple tab sync - diğer tab'lere logout signal gönder
+      localStorage.setItem('auth_force_logout', Date.now().toString())
+      setTimeout(() => {
+        localStorage.removeItem('auth_force_logout')
+      }, 1000)
     }
   }
 
+  // Enhanced token refresh
   async refreshToken(): Promise<string> {
     try {
       const refreshToken = this.getRefreshToken()
       if (!refreshToken) {
-    throw new Error('No refresh token available')
-  }
+        throw new Error('No refresh token available')
+      }
 
-  const requestData: RefreshTokenRequest = { refreshToken }
-  const response = await apiService.reference.post<EnhancedAuthResponse>(
-    API_ENDPOINTS.AUTH.REFRESH,
-      requestData
-  )
+      const requestData: RefreshTokenRequest = { refreshToken }
+      const response = await apiService.reference.post<EnhancedAuthResponse>(
+        API_ENDPOINTS.AUTH.REFRESH,
+        requestData
+      )
 
-  if (response.data?.accessToken) {
-    this.setToken(response.data.accessToken)
+      if (response.data?.accessToken) {
+        this.setToken(response.data.accessToken)
+        this.updateLastActivity()
 
-    if (response.data.refreshToken) {
-      this.setRefreshToken(response.data.refreshToken)
+        if (response.data.refreshToken) {
+          this.setRefreshToken(response.data.refreshToken)
+        }
+
+        return response.data.accessToken
+      }
+
+      throw new Error('Invalid refresh response')
+    } catch (error) {
+      this.clearAuth()
+      throw error
     }
-
-    return response.data.accessToken
   }
 
-  throw new Error('Invalid refresh response')
-} catch (error) {
-    this.clearAuth()
-    throw error
-  }
-}
-
-  async getCurrentUser(): Promise<User | null> {
-    try {
-      const response = await apiService.reference.get<User>(API_ENDPOINTS.AUTH.PROFILE)
-
-      if (response.data) {
-    this.setUser(response.data)
-    return response.data
-  }
-
-  return null
-} catch (error) {
-    console.error('Get current user error:', error)
-    return null
-  }
-}
-
-  // Token management
+  // Token management with enhanced security
   setToken(token: string): void {
     if (token) {
       localStorage.setItem(this.tokenKey, token)
@@ -200,6 +202,25 @@ const STORAGE_KEYS = {
     return localStorage.getItem(this.refreshTokenKey)
   }
 
+  // Session time tracking
+  setLoginTime(): void {
+    localStorage.setItem(this.loginTimeKey, Date.now().toString())
+  }
+
+  getLoginTime(): number | null {
+    const loginTime = localStorage.getItem(this.loginTimeKey)
+    return loginTime ? parseInt(loginTime) : null
+  }
+
+  updateLastActivity(): void {
+    localStorage.setItem(this.lastActivityKey, Date.now().toString())
+  }
+
+  getLastActivity(): number | null {
+    const lastActivity = localStorage.getItem(this.lastActivityKey)
+    return lastActivity ? parseInt(lastActivity) : null
+  }
+
   // User management
   setUser(user: User): void {
     if (user) {
@@ -217,33 +238,108 @@ const STORAGE_KEYS = {
     }
   }
 
-  // Clear all auth data
+  // Enhanced clear auth with session data
   clearAuth(): void {
     localStorage.removeItem(this.tokenKey)
     localStorage.removeItem(this.refreshTokenKey)
     localStorage.removeItem(this.userKey)
+    localStorage.removeItem(this.loginTimeKey)
+    localStorage.removeItem(this.lastActivityKey)
   }
 
-  // Auth state checks
+  // Enhanced authentication check
   isAuthenticated(): boolean {
     const token = this.getToken()
     if (!token) return false
 
     try {
-      // Simple JWT expiry check
-      const payload = JSON.parse(atob(token.split('.')[1])) as JWTPayload
+      // Token format kontrolü
+      const payload = this.parseToken(token)
+      if (!payload) return false
+
       const currentTime = Date.now() / 1000
 
-      return payload.exp > currentTime
+      // Token expired kontrolü
+      if (payload.exp <= currentTime) {
+        console.log('Token expired')
+        this.clearAuth()
+        return false
+      }
+
+      // Session time kontrolü
+      const loginTime = this.getLoginTime()
+      if (loginTime && (Date.now() - loginTime) > this.maxSessionTime) {
+        console.log('Session exceeded maximum time')
+        this.clearAuth()
+        return false
+      }
+
+      // Last activity kontrolü (opsiyonel)
+      const lastActivity = this.getLastActivity()
+      if (lastActivity && (Date.now() - lastActivity) > (30 * 60 * 1000)) { // 30 dakika
+        console.log('Session inactive too long')
+        this.clearAuth()
+        return false
+      }
+
+      // Activity güncelle
+      this.updateLastActivity()
+
+      return true
     } catch (error) {
       console.warn('Invalid token format:', error)
+      this.clearAuth()
       return false
     }
   }
 
+  // Token expiry check
+  isTokenExpiringSoon(): boolean {
+    const token = this.getToken()
+    if (!token) return false
+
+    try {
+      const payload = this.parseToken(token)
+      if (!payload) return false
+
+      const currentTime = Date.now() / 1000
+      const timeToExpiry = (payload.exp - currentTime) * 1000
+
+      return timeToExpiry <= this.tokenRefreshThreshold
+    } catch (error) {
+      return false
+    }
+  }
+
+  // Current user with session validation
+  async getCurrentUser(): Promise<User | null> {
+    try {
+      if (!this.isAuthenticated()) {
+        return null
+      }
+
+      const response = await apiService.reference.get<User>(API_ENDPOINTS.AUTH.PROFILE)
+
+      if (response.data) {
+        this.setUser(response.data)
+        this.updateLastActivity()
+        return response.data
+      }
+
+      return null
+    } catch (error) {
+      console.error('Get current user error:', error)
+      if ((error as any)?.response?.status === 401) {
+        this.clearAuth()
+      }
+      return null
+    }
+  }
+
+  // Role and permission checks
   hasRole(role: string): boolean {
     const user = this.getUser()
-    return user?.role?.includes(role) || false
+    return user?.role?.includes(role) || user?.roles?.includes(role) || false
   }
 
   hasPermission(permission: string): boolean {
@@ -269,149 +365,31 @@ const STORAGE_KEYS = {
   parseToken(token: string): JWTPayload | null {
     try {
       const base64Payload = token.split('.')[1]
+      if (!base64Payload) return null
+
       const payload = JSON.parse(atob(base64Payload))
       return payload as JWTPayload
     } catch (error) {
-      console.error('Error parsing JWT token:', error)
+      console.error('Error parsing token:', error)
       return null
     }
   }
 
-  getTokenExpirationTime(): Date | null {
-    const token = this.getToken()
-    if (!token) return null
-
-    const payload = this.parseToken(token)
-    if (!payload) return null
-
-    return new Date(payload.exp * 1000)
-  }
-
-  isTokenExpired(): boolean {
-    const expirationTime = this.getTokenExpirationTime()
-    if (!expirationTime) return true
-
-    return expirationTime.getTime() <= Date.now()
-  }
-
-  getTokenRemainingTime(): number {
-    const expirationTime = this.getTokenExpirationTime()
-    if (!expirationTime) return 0
-
-    const remainingTime = expirationTime.getTime() - Date.now()
-    return Math.max(0, remainingTime)
-  }
-
-  // Role and permission utilities
-  getRolesFromToken(): string[] {
-    const token = this.getToken()
-    if (!token) return []
-
-    const payload = this.parseToken(token)
-    if (!payload || !payload.roles) return []
-
-    return payload.roles.split(',').map(role => role.trim())
-  }
-
-  hasAnyRole(roles: string[]): boolean {
-    const userRoles = this.getRolesFromToken()
-    return roles.some(role => userRoles.includes(role))
-  }
-
-  hasAllRoles(roles: string[]): boolean {
-    const userRoles = this.getRolesFromToken()
-    return roles.every(role => userRoles.includes(role))
-  }
-
-  hasAnyPermission(permissions: string[]): boolean {
-    return permissions.some(permission => this.hasPermission(permission))
-  }
-
-  hasAllPermissions(permissions: string[]): boolean {
-    return permissions.every(permission => this.hasPermission(permission))
-  }
-
-  // Token validation
-  validateTokenStructure(token: string): boolean {
-    try {
-      const parts = token.split('.')
-      if (parts.length !== 3) {
-        return false
-      }
-
-      // Try to parse header and payload
-      JSON.parse(atob(parts[0]))
-      JSON.parse(atob(parts[1]))
-
-      return true
-    } catch {
+  // Session validation
+  validateSession(): boolean {
+    if (!this.isAuthenticated()) {
+      this.clearAuth()
       return false
     }
-  }
 
-  // Auto refresh token utility
-  shouldRefreshToken(): boolean {
-    const remainingTime = this.getTokenRemainingTime()
-    const fiveMinutes = 5 * 60 * 1000 // 5 minutes in milliseconds
+    // Token expiry check
+    if (this.isTokenExpiringSoon()) {
+      console.log('Token is expiring soon, should refresh')
+      // Burada refresh token işlemi tetiklenebilir
+    }
 
-    return remainingTime > 0 && remainingTime < fiveMinutes
-  }
-
-  // Update user profile (if API supports it)
-  async updateProfile(profileData: Partial<User>): Promise<User | null> {
-    try {
-      // This would be implemented when profile update API is available
-      const response = await apiService.reference.put<User>(
-        `${API_ENDPOINTS.AUTH.PROFILE}`,
-          profileData
-      )
-
-      if (response.data) {
-    this.setUser(response.data)
-    return response.data
-  }
-
-  return null
-} catch (error) {
-    console.error('Update profile error:', error)
-    throw error
+    return true
   }
 }
 
-  // Reset password (if API supports it)
-  async resetPassword(email: string): Promise<boolean> {
-    try {
-      await apiService.reference.post('/api/v1/auth/reset-password', { email })
-      return true
-    } catch (error) {
-      console.error('Reset password error:', error)
-      return false
-    }
-  }
-
-  // Change password (if API supports it)
-  async changePassword(currentPassword: string, newPassword: string): Promise<boolean> {
-    try {
-      await apiService.reference.post('/api/v1/auth/change-password', {
-        currentPassword,
-        newPassword
-      })
-      return true
-    } catch (error) {
-      console.error('Change password error:', error)
-      return false
-    }
-  }
-}
-
-// Create singleton instance
-export const authService = new AuthService()
-export default authService
-
-// Export types for external use
-export type {
-  JWTPayload,
-    UserInfo,
-    EnhancedAuthResponse,
-    RefreshTokenRequest
-}
+export default new AuthService()

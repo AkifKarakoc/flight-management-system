@@ -1,524 +1,392 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { ElMessage } from 'element-plus'
 
-// Types
-interface Notification {
-  id: number
-  type: 'success' | 'warning' | 'error' | 'info'
-  title: string
-  message: string
-  timestamp: Date
-  read: boolean
-  persistent?: boolean
-  actions?: Array<{
-    label: string
-    action: string
-    type?: 'primary' | 'success' | 'warning' | 'danger'
-  }>
-}
-
-interface Breadcrumb {
-  title: string
-  path?: string
-  icon?: string
-}
-
-interface AppError {
-  id: number
-  timestamp: Date
-  message: string
-  code: string
-  stack?: string
-  handled: boolean
-  type?: 'javascript' | 'promise' | 'api' | 'network'
-  filename?: string
-  lineno?: number
-  colno?: number
-  reason?: any
-}
-
-interface WindowSize {
-  width: number
-  height: number
+interface AppTheme {
+  mode: 'light' | 'dark'
+  primaryColor: string
 }
 
 interface AppSettings {
-  showBreadcrumb: boolean
-  showPageHeader: boolean
-  showFooter: boolean
-  animationEnabled: boolean
-  autoSaveEnabled: boolean
-  compactMode: boolean
-  tablePageSize: number
+  language: 'tr' | 'en'
+  timezone: string
   dateFormat: string
-  timeFormat: string
+  autoSave: boolean
+  notifications: boolean
 }
 
-interface CacheConfig {
-  enabled: boolean
-  ttl: number
-  maxSize: number
+interface SystemStatus {
+  services: Record<string, 'UP' | 'DOWN' | 'UNKNOWN'>
+  lastCheck: Date | null
+  isHealthy: boolean
 }
-
-type DeviceType = 'mobile' | 'tablet' | 'desktop'
-type ThemeType = 'light' | 'dark' | 'auto'
-type LanguageType = 'tr' | 'en'
 
 export const useAppStore = defineStore('app', () => {
   // State
-  const sidebarCollapsed = ref<boolean>(false)
-  const loading = ref<boolean>(false)
-  const pageLoading = ref<boolean>(false)
-  const globalLoading = ref<boolean>(false)
-  const notifications = ref<Notification[]>([])
-  const breadcrumbs = ref<Breadcrumb[]>([])
-  const pageTitle = ref<string>('')
-  const theme = ref<ThemeType>('light')
-  const language = ref<LanguageType>('tr')
-  const deviceType = ref<DeviceType>('desktop')
-  const windowSize = ref<WindowSize>({
-    width: typeof window !== 'undefined' ? window.innerWidth : 1024,
-    height: typeof window !== 'undefined' ? window.innerHeight : 768
+  const loading = ref(false)
+  const sidebarCollapsed = ref(false)
+  const theme = ref<AppTheme>({
+    mode: 'light',
+    primaryColor: '#409EFF'
   })
-  let resizeHandler: (() => void) | null = null
 
-  // UI Settings
   const settings = ref<AppSettings>({
-    showBreadcrumb: true,
-    showPageHeader: true,
-    showFooter: true,
-    animationEnabled: true,
-    autoSaveEnabled: true,
-    compactMode: false,
-    tablePageSize: 20,
-    dateFormat: 'DD.MM.YYYY',
-    timeFormat: 'HH:mm'
+    language: 'tr',
+    timezone: 'Europe/Istanbul',
+    dateFormat: 'DD/MM/YYYY',
+    autoSave: true,
+    notifications: true
   })
 
-  // Cache settings
-  const cache = ref<CacheConfig>({
-    enabled: true,
-    ttl: 5 * 60 * 1000, // 5 minutes
-    maxSize: 100
+  const systemStatus = ref<SystemStatus>({
+    services: {
+      'reference-manager': 'UNKNOWN',
+      'flight-service': 'UNKNOWN',
+      'archive-manager': 'UNKNOWN',
+      'kafka': 'UNKNOWN',
+      'redis': 'UNKNOWN'
+    },
+    lastCheck: null,
+    isHealthy: false
   })
 
-  // WebSocket connections
-  const websockets = ref<Map<string, WebSocket>>(new Map())
-
-  // Error state
-  const errors = ref<AppError[]>([])
-  const lastError = ref<AppError | null>(null)
+  const notifications = ref<any[]>([])
+  const breadcrumbs = ref<any[]>([])
 
   // Computed
-  const isMobile = computed<boolean>(() => {
-    return deviceType.value === 'mobile' || windowSize.value.width < 768
+  const isDarkMode = computed(() => theme.value.mode === 'dark')
+
+  const healthyServices = computed(() => {
+    return Object.values(systemStatus.value.services).filter(status => status === 'UP').length
   })
 
-  const isTablet = computed<boolean>(() => {
-    return deviceType.value === 'tablet' || (windowSize.value.width >= 768 && windowSize.value.width < 1024)
+  const totalServices = computed(() => {
+    return Object.keys(systemStatus.value.services).length
   })
 
-  const isDesktop = computed<boolean>(() => {
-    return deviceType.value === 'desktop' || windowSize.value.width >= 1024
-  })
-
-  const unreadNotifications = computed<number>(() => {
-    return notifications.value.filter(n => !n.read).length
-  })
-
-  const hasErrors = computed<boolean>(() => {
-    return errors.value.length > 0
-  })
-
-  const isLoading = computed<boolean>(() => {
-    return loading.value || pageLoading.value || globalLoading.value
+  const systemHealthPercentage = computed(() => {
+    return Math.round((healthyServices.value / totalServices.value) * 100)
   })
 
   // Actions
-  function toggleSidebar(): void {
+  function toggleSidebar() {
     sidebarCollapsed.value = !sidebarCollapsed.value
-    // Save to localStorage
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('sidebar_collapsed', sidebarCollapsed.value.toString())
-    }
+    saveSidebarState()
   }
 
-  function setSidebarCollapsed(collapsed: boolean): void {
+  function setSidebarCollapsed(collapsed: boolean) {
     sidebarCollapsed.value = collapsed
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('sidebar_collapsed', collapsed.toString())
+    saveSidebarState()
+  }
+
+  function saveSidebarState() {
+    try {
+      localStorage.setItem('app_sidebar_collapsed', JSON.stringify(sidebarCollapsed.value))
+    } catch (error) {
+      console.error('Error saving sidebar state:', error)
     }
   }
 
-  function setLoading(isLoading: boolean): void {
-    loading.value = isLoading
-  }
-
-  function setPageLoading(isLoading: boolean): void {
-    pageLoading.value = isLoading
-  }
-
-  function setGlobalLoading(isLoading: boolean): void {
-    globalLoading.value = isLoading
-  }
-
-  function setPageTitle(title: string): void {
-    pageTitle.value = title
-    if (typeof document !== 'undefined') {
-      document.title = title ? `${title} - Flight Management` : 'Flight Management'
+  function loadSidebarState() {
+    try {
+      const saved = localStorage.getItem('app_sidebar_collapsed')
+      if (saved !== null) {
+        sidebarCollapsed.value = JSON.parse(saved)
+      }
+    } catch (error) {
+      console.error('Error loading sidebar state:', error)
+      sidebarCollapsed.value = false
     }
   }
 
-  function setBreadcrumbs(breadcrumbItems: Breadcrumb[]): void {
-    breadcrumbs.value = breadcrumbItems
+  function toggleTheme() {
+    theme.value.mode = theme.value.mode === 'light' ? 'dark' : 'light'
+    applyTheme()
+    saveTheme()
   }
 
-  function addNotification(notification: Omit<Notification, 'id' | 'timestamp' | 'read'>): void {
-    const newNotification: Notification = {
-      id: Date.now() + Math.random(),
-      timestamp: new Date(),
-      read: false,
-      ...notification
+  function setTheme(mode: 'light' | 'dark') {
+    theme.value.mode = mode
+    applyTheme()
+    saveTheme()
+  }
+
+  function applyTheme() {
+    const html = document.documentElement
+
+    if (theme.value.mode === 'dark') {
+      html.classList.add('dark')
+    } else {
+      html.classList.remove('dark')
     }
+
+    // Apply primary color
+    html.style.setProperty('--el-color-primary', theme.value.primaryColor)
+  }
+
+  function saveTheme() {
+    try {
+      localStorage.setItem('app_theme', JSON.stringify(theme.value))
+    } catch (error) {
+      console.error('Error saving theme:', error)
+    }
+  }
+
+  function loadTheme() {
+    try {
+      const saved = localStorage.getItem('app_theme')
+      if (saved) {
+        theme.value = { ...theme.value, ...JSON.parse(saved) }
+      }
+    } catch (error) {
+      console.error('Error loading theme:', error)
+    }
+    applyTheme()
+  }
+
+  function updateSettings(newSettings: Partial<AppSettings>) {
+    settings.value = { ...settings.value, ...newSettings }
+    saveSettings()
+  }
+
+  function saveSettings() {
+    try {
+      localStorage.setItem('app_settings', JSON.stringify(settings.value))
+    } catch (error) {
+      console.error('Error saving settings:', error)
+    }
+  }
+
+  function loadSettings() {
+    try {
+      const saved = localStorage.getItem('app_settings')
+      if (saved) {
+        settings.value = { ...settings.value, ...JSON.parse(saved) }
+      }
+    } catch (error) {
+      console.error('Error loading settings:', error)
+    }
+  }
+
+  async function checkSystemStatus() {
+    try {
+      loading.value = true
+
+      // Mock API calls - replace with actual service health checks
+      const serviceChecks = {
+        'reference-manager': checkService('http://localhost:8081/actuator/health'),
+        'flight-service': checkService('http://localhost:8082/actuator/health'),
+        'archive-manager': checkService('http://localhost:8083/actuator/health'),
+        'kafka': checkKafkaStatus(),
+        'redis': checkRedisStatus()
+      }
+
+      // Wait for all service checks
+      const results = await Promise.allSettled(Object.entries(serviceChecks).map(
+        async ([service, promise]) => {
+          try {
+            const status = await promise
+            return { service, status: status ? 'UP' : 'DOWN' }
+          } catch {
+            return { service, status: 'DOWN' }
+          }
+        }
+      ))
+
+      // Update system status
+      results.forEach(result => {
+        if (result.status === 'fulfilled') {
+          systemStatus.value.services[result.value.service] = result.value.status as 'UP' | 'DOWN'
+        }
+      })
+
+      systemStatus.value.lastCheck = new Date()
+      systemStatus.value.isHealthy = healthyServices.value >= totalServices.value * 0.8 // 80% healthy threshold
+
+      console.log('System status updated:', systemStatus.value)
+
+    } catch (error) {
+      console.error('Error checking system status:', error)
+      ElMessage.error('Sistem durumu kontrol edilirken hata oluştu')
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // Mock service check functions
+  async function checkService(url: string): Promise<boolean> {
+    try {
+      // In real implementation, make actual HTTP calls
+      // const response = await fetch(`${url}`, { method: 'GET', timeout: 5000 })
+      // return response.ok
+
+      // Mock random responses for demo
+      return Math.random() > 0.2 // 80% success rate
+    } catch {
+      return false
+    }
+  }
+
+  async function checkKafkaStatus(): Promise<boolean> {
+    try {
+      // Mock Kafka check - replace with actual implementation
+      return Math.random() > 0.5 // 50% success rate for demo
+    } catch {
+      return false
+    }
+  }
+
+  async function checkRedisStatus(): Promise<boolean> {
+    try {
+      // Mock Redis check - replace with actual implementation
+      return Math.random() > 0.1 // 90% success rate for demo
+    } catch {
+      return false
+    }
+  }
+
+  function addNotification(notification: {
+    type: 'success' | 'warning' | 'error' | 'info'
+    title: string
+    message: string
+    duration?: number
+  }) {
+    const id = Date.now()
+    const newNotification = {
+      id,
+      ...notification,
+      createdAt: new Date(),
+      read: false
+    }
+
     notifications.value.unshift(newNotification)
 
-    // Limit notifications count
-    if (notifications.value.length > 50) {
-      notifications.value = notifications.value.slice(0, 50)
+    // Auto-remove after duration
+    if (notification.duration !== 0) {
+      setTimeout(() => {
+        removeNotification(id)
+      }, notification.duration || 5000)
     }
+
+    return id
   }
 
-  function markNotificationAsRead(notificationId: number): void {
-    const notification = notifications.value.find(n => n.id === notificationId)
-    if (notification) {
-      notification.read = true
-    }
-  }
-
-  function markAllNotificationsAsRead(): void {
-    notifications.value.forEach(notification => {
-      notification.read = true
-    })
-  }
-
-  function removeNotification(notificationId: number): void {
-    const index = notifications.value.findIndex(n => n.id === notificationId)
+  function removeNotification(id: number) {
+    const index = notifications.value.findIndex(n => n.id === id)
     if (index > -1) {
       notifications.value.splice(index, 1)
     }
   }
 
-  function clearNotifications(): void {
+  function markNotificationAsRead(id: number) {
+    const notification = notifications.value.find(n => n.id === id)
+    if (notification) {
+      notification.read = true
+    }
+  }
+
+  function clearAllNotifications() {
     notifications.value = []
   }
 
-  function addError(error: Partial<AppError> & { message: string }): void {
-    const errorObject: AppError = {
-      id: Date.now() + Math.random(),
-      timestamp: new Date(),
-      handled: false,
-      code: 'UNKNOWN',
-      ...error, // Önce error'dan gelen değerleri al
-      // Sonra gerekli default'ları override et
-      message: error.message || 'Bilinmeyen hata'
-    }
-
-    errors.value.push(errorObject)
-    lastError.value = errorObject
-
-    // Add as notification
-    addNotification({
-      type: 'error',
-      title: 'Hata',
-      message: errorObject.message
-    })
+  function setBreadcrumbs(items: any[]) {
+    breadcrumbs.value = items
   }
 
-  function clearErrors(): void {
-    errors.value = []
-    lastError.value = null
+  function addBreadcrumb(item: any) {
+    breadcrumbs.value.push(item)
   }
 
-  function removeError(errorId: number): void {
-    const index = errors.value.findIndex(e => e.id === errorId)
-    if (index > -1) {
-      errors.value.splice(index, 1)
-    }
+  function clearBreadcrumbs() {
+    breadcrumbs.value = []
   }
 
-  function updateSettings(newSettings: Partial<AppSettings>): void {
-    settings.value = { ...settings.value, ...newSettings }
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('app_settings', JSON.stringify(settings.value))
-    }
-  }
-
-  function setTheme(newTheme: ThemeType): void {
-    theme.value = newTheme
-    if (typeof document !== 'undefined') {
-      document.documentElement.setAttribute('data-theme', newTheme)
-    }
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('app_theme', newTheme)
-    }
-  }
-
-  function setLanguage(newLanguage: LanguageType): void {
-    language.value = newLanguage
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('app_language', newLanguage)
-    }
-  }
-
-  function updateWindowSize(size: WindowSize): void {
-    windowSize.value = size
-
-    // Update device type based on window size
-    if (size.width < 768) {
-      deviceType.value = 'mobile'
-    } else if (size.width < 1024) {
-      deviceType.value = 'tablet'
-    } else {
-      deviceType.value = 'desktop'
-    }
-  }
-
-  // WebSocket management
-  function addWebSocket(key: string, socket: WebSocket): void {
-    websockets.value.set(key, socket)
-  }
-
-  function removeWebSocket(key: string): void {
-    const socket = websockets.value.get(key)
-    if (socket) {
-      socket.close()
-      websockets.value.delete(key)
-    }
-  }
-
-  function closeAllWebSockets(): void {
-    websockets.value.forEach((socket, key) => {
-      socket.close()
-    })
-    websockets.value.clear()
-  }
-
-  // Cache management
-  function setCacheConfig(config: Partial<CacheConfig>): void {
-    cache.value = { ...cache.value, ...config }
-  }
-
-  // Initialize app state
-  function initializeApp(): void {
-    if (typeof window === 'undefined') return
-
-    // Load from localStorage
-    const savedSidebarState = localStorage.getItem('sidebar_collapsed')
-    if (savedSidebarState !== null) {
-      sidebarCollapsed.value = savedSidebarState === 'true'
-    }
-
-    const savedTheme = localStorage.getItem('app_theme') as ThemeType
-    if (savedTheme) {
-      setTheme(savedTheme)
-    }
-
-    const savedLanguage = localStorage.getItem('app_language') as LanguageType
-    if (savedLanguage) {
-      language.value = savedLanguage
-    }
-
-    const savedSettings = localStorage.getItem('app_settings')
-    if (savedSettings) {
-      try {
-        settings.value = { ...settings.value, ...JSON.parse(savedSettings) }
-      } catch (error) {
-        console.warn('Failed to parse saved settings:', error)
-      }
-    }
-
-    // Set up window resize listener
-    const handleResize = (): void => {
-      updateWindowSize({
-        width: window.innerWidth,
-        height: window.innerHeight
-      })
-    }
-
-    window.addEventListener('resize', handleResize)
-    handleResize() // Initial call
-
-    // Set up error handling
-    window.addEventListener('error', (event: ErrorEvent) => {
-      addError({
-        message: event.message,
-        filename: event.filename,
-        lineno: event.lineno,
-        colno: event.colno,
-        type: 'javascript'
-      })
-    })
-
-    window.addEventListener('unhandledrejection', (event: PromiseRejectionEvent) => {
-      addError({
-        message: event.reason?.message || 'Unhandled promise rejection',
-        type: 'promise',
-        reason: event.reason
-      })
-    })
-  }
-
-  // Advanced state management
-  function resetToDefaults(): void {
-    sidebarCollapsed.value = false
-    theme.value = 'light'
-    language.value = 'tr'
-    settings.value = {
-      showBreadcrumb: true,
-      showPageHeader: true,
-      showFooter: true,
-      animationEnabled: true,
-      autoSaveEnabled: true,
-      compactMode: false,
-      tablePageSize: 20,
-      dateFormat: 'DD.MM.YYYY',
-      timeFormat: 'HH:mm'
-    }
-
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('sidebar_collapsed')
-      localStorage.removeItem('app_theme')
-      localStorage.removeItem('app_language')
-      localStorage.removeItem('app_settings')
-    }
-  }
-
-  function exportSettings(): string {
-    return JSON.stringify({
-      sidebarCollapsed: sidebarCollapsed.value,
-      theme: theme.value,
-      language: language.value,
-      settings: settings.value
-    }, null, 2)
-  }
-
-  function importSettings(settingsJson: string): void {
+  async function initializeApp() {
     try {
-      const imported = JSON.parse(settingsJson)
+      console.log('🚀 Initializing app store...')
 
-      if (typeof imported.sidebarCollapsed === 'boolean') {
-        setSidebarCollapsed(imported.sidebarCollapsed)
-      }
+      // Load saved preferences
+      loadSidebarState()
+      loadTheme()
+      loadSettings()
 
-      if (imported.theme) {
-        setTheme(imported.theme)
-      }
+      // Check system status
+      await checkSystemStatus()
 
-      if (imported.language) {
-        setLanguage(imported.language)
-      }
+      // Set up periodic health checks
+      setInterval(checkSystemStatus, 30000) // Every 30 seconds
 
-      if (imported.settings) {
-        updateSettings(imported.settings)
-      }
+      console.log('✅ App store initialized successfully')
+
     } catch (error) {
-      addError({
-        message: 'Settings import failed: Invalid JSON format',
-        code: 'IMPORT_ERROR',
-        type: 'api'
-      })
+      console.error('❌ Error initializing app store:', error)
+      throw error
     }
   }
 
-  // Performance monitoring
-  function trackPerformance(metricName: string, value: number, unit: 'ms' | 'kb' | 'count' = 'ms'): void {
-    if (typeof window !== 'undefined' && 'performance' in window) {
-      // This could be extended to send metrics to a monitoring service
-      console.log(`Performance Metric - ${metricName}: ${value}${unit}`)
-    }
+  function cleanup() {
+    // Save current state
+    saveSidebarState()
+    saveTheme()
+    saveSettings()
+
+    console.log('🧹 App store cleanup completed')
   }
 
-  // Cleanup
-  function cleanup(): void {
-    closeAllWebSockets()
-    clearNotifications()
-    clearErrors()
+  // Utility functions
+  function formatFileSize(bytes: number): string {
+    const sizes = ['Bytes', 'KB', 'MB', 'GB']
+    if (bytes === 0) return '0 Bytes'
+    const i = Math.floor(Math.log(bytes) / Math.log(1024))
+    return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i]
+  }
 
-    if (typeof window !== 'undefined' && resizeHandler) {
-      window.removeEventListener('resize', resizeHandler)
-      resizeHandler = null
+  function debounce<T extends (...args: any[]) => any>(
+    func: T,
+    wait: number
+  ): (...args: Parameters<T>) => void {
+    let timeout: NodeJS.Timeout
+    return (...args: Parameters<T>) => {
+      clearTimeout(timeout)
+      timeout = setTimeout(() => func(...args), wait)
     }
   }
 
   return {
     // State
-    sidebarCollapsed,
     loading,
-    pageLoading,
-    globalLoading,
+    sidebarCollapsed,
+    theme,
+    settings,
+    systemStatus,
     notifications,
     breadcrumbs,
-    pageTitle,
-    theme,
-    language,
-    deviceType,
-    windowSize,
-    settings,
-    cache,
-    websockets,
-    errors,
-    lastError,
 
     // Computed
-    isMobile,
-    isTablet,
-    isDesktop,
-    unreadNotifications,
-    hasErrors,
-    isLoading,
+    isDarkMode,
+    healthyServices,
+    totalServices,
+    systemHealthPercentage,
 
     // Actions
     toggleSidebar,
     setSidebarCollapsed,
-    setLoading,
-    setPageLoading,
-    setGlobalLoading,
-    setPageTitle,
-    setBreadcrumbs,
-    addNotification,
-    markNotificationAsRead,
-    markAllNotificationsAsRead,
-    removeNotification,
-    clearNotifications,
-    addError,
-    clearErrors,
-    removeError,
-    updateSettings,
+    toggleTheme,
     setTheme,
-    setLanguage,
-    updateWindowSize,
-    addWebSocket,
-    removeWebSocket,
-    closeAllWebSockets,
-    setCacheConfig,
+    updateSettings,
+    checkSystemStatus,
+    addNotification,
+    removeNotification,
+    markNotificationAsRead,
+    clearAllNotifications,
+    setBreadcrumbs,
+    addBreadcrumb,
+    clearBreadcrumbs,
     initializeApp,
-    resetToDefaults,
-    exportSettings,
-    importSettings,
-    trackPerformance,
-    cleanup
+    cleanup,
+
+    // Utilities
+    formatFileSize,
+    debounce
   }
 })
-
-// Export types for external use
-export type {
-  Notification,
-    Breadcrumb,
-    AppError,
-    WindowSize,
-    AppSettings,
-    CacheConfig,
-    DeviceType,
-    ThemeType,
-    LanguageType
-}

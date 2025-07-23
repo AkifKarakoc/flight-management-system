@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory, type Router } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
+import authService from '@/services/authService'
 import { ElMessage } from 'element-plus'
 
 // Lazy import components
@@ -50,6 +51,7 @@ const routes = [
     path: '/',
     component: MainLayout,
     redirect: '/dashboard',
+    meta: { requiresAuth: true },
     children: [
       {
         path: 'dashboard',
@@ -68,7 +70,8 @@ const routes = [
         component: AirlineManagement,
         meta: {
           title: 'Havayolları',
-          requiresAuth: true
+          requiresAuth: true,
+          roles: ['ADMIN', 'USER'] // Bu sayfaya hangi roller erişebilir
         }
       },
       {
@@ -77,7 +80,8 @@ const routes = [
         component: AirportManagement,
         meta: {
           title: 'Havaalanları',
-          requiresAuth: true
+          requiresAuth: true,
+          roles: ['ADMIN', 'USER']
         }
       },
       {
@@ -86,7 +90,8 @@ const routes = [
         component: AircraftManagement,
         meta: {
           title: 'Uçaklar',
-          requiresAuth: true
+          requiresAuth: true,
+          roles: ['ADMIN', 'USER']
         }
       },
       {
@@ -95,16 +100,18 @@ const routes = [
         component: RouteManagement,
         meta: {
           title: 'Rotalar',
-          requiresAuth: true
+          requiresAuth: true,
+          roles: ['ADMIN', 'USER']
         }
       },
       {
-        path: 'crew-members',
+        path: 'crew',
         name: 'CrewMembers',
         component: CrewManagement,
         meta: {
-          title: 'Mürettebat',
-          requiresAuth: true
+          title: 'Ekip Üyeleri',
+          requiresAuth: true,
+          roles: ['ADMIN']
         }
       },
 
@@ -115,7 +122,8 @@ const routes = [
         component: FlightManagement,
         meta: {
           title: 'Uçuşlar',
-          requiresAuth: true
+          requiresAuth: true,
+          roles: ['ADMIN', 'USER']
         }
       },
       {
@@ -124,16 +132,18 @@ const routes = [
         component: FlightCreate,
         meta: {
           title: 'Yeni Uçuş',
-          requiresAuth: true
+          requiresAuth: true,
+          roles: ['ADMIN']
         }
       },
       {
-        path: 'flights/:id/edit',
+        path: 'flights/edit/:id',
         name: 'FlightEdit',
         component: FlightEdit,
         meta: {
           title: 'Uçuş Düzenle',
-          requiresAuth: true
+          requiresAuth: true,
+          roles: ['ADMIN']
         }
       },
       {
@@ -141,8 +151,93 @@ const routes = [
         name: 'FlightUpload',
         component: FlightUpload,
         meta: {
-          title: 'Toplu Uçuş Yükleme',
-          requiresAuth: true
+          title: 'Uçuş Yükle',
+          requiresAuth: true,
+          roles: ['ADMIN']
+        }
+      },
+      {
+        path: 'flights/active',
+        name: 'FlightActive',
+        component: () => import('@/pages/flights/FlightActive.vue'),
+        meta: {
+          title: 'Aktif Uçuşlar',
+          requiresAuth: true,
+          roles: ['ADMIN', 'USER']
+        }
+      },
+
+      // Reports Routes
+      {
+        path: 'reports',
+        name: 'Reports',
+        redirect: '/reports/flights'
+      },
+      {
+        path: 'reports/flights',
+        name: 'ReportsFlights',
+        component: () => import('@/pages/reports/FlightReports.vue'),
+        meta: {
+          title: 'Uçuş Raporları',
+          requiresAuth: true,
+          roles: ['ADMIN', 'USER']
+        }
+      },
+      {
+        path: 'reports/kpi',
+        name: 'ReportsKPI',
+        component: () => import('@/pages/reports/KPIReports.vue'),
+        meta: {
+          title: 'KPI Raporları',
+          requiresAuth: true,
+          roles: ['ADMIN', 'USER']
+        }
+      },
+      {
+        path: 'reports/analytics',
+        name: 'ReportsAnalytics',
+        component: () => import('@/pages/reports/Analytics.vue'),
+        meta: {
+          title: 'Veri Analizi',
+          requiresAuth: true,
+          roles: ['ADMIN', 'USER']
+        }
+      },
+
+      // System Management Routes (Admin Only)
+      {
+        path: 'system',
+        name: 'System',
+        redirect: '/system/health'
+      },
+      {
+        path: 'system/health',
+        name: 'SystemHealth',
+        component: () => import('@/pages/system/SystemHealth.vue'),
+        meta: {
+          title: 'Sistem Durumu',
+          requiresAuth: true,
+          roles: ['ADMIN']
+        }
+      },
+      {
+        path: 'system/logs',
+        name: 'SystemLogs',
+        component: () => import('@/pages/system/SystemLogs.vue'),
+        meta: {
+          title: 'Sistem Logları',
+          requiresAuth: true,
+          roles: ['ADMIN']
+        }
+      },
+      {
+        path: 'system/settings',
+        name: 'SystemSettings',
+        component: () => import('@/pages/system/SystemSettings.vue'),
+        meta: {
+          title: 'Sistem Ayarları',
+          requiresAuth: true,
+          roles: ['ADMIN']
         }
       }
     ]
@@ -172,14 +267,11 @@ const router: Router = createRouter({
   }
 })
 
-// Global Navigation Guards
-// Global Navigation Guards
+// Enhanced Navigation Guards with Security
 router.beforeEach(async (to, from, next) => {
-  const authStore = useAuthStore()
+  console.log(`🔍 Navigation: ${from.path} → ${to.path}`)
 
-  console.log(`Navigating from ${from.path} to ${to.path}`)
-  console.log('Is authenticated:', authStore.isAuthenticated)
-  console.log('Route requires auth:', to.meta?.requiresAuth)
+  const authStore = useAuthStore()
 
   // Set page title
   if (to.meta?.title) {
@@ -188,35 +280,118 @@ router.beforeEach(async (to, from, next) => {
     document.title = 'Flight Management System'
   }
 
-  // Auth pages'e authenticated user gitmeye çalışıyorsa
-  if (to.path.startsWith('/auth') && authStore.isAuthenticated) {
-    console.log('Already authenticated, redirecting to dashboard')
-    next('/dashboard')
+  // 1. Auth pages kontrolü - authenticated user auth'a gitmeye çalışıyorsa
+  if (to.path.startsWith('/auth')) {
+    if (authStore.isAuthenticated) {
+      console.log('✅ Already authenticated, redirecting to dashboard')
+      next('/dashboard')
+      return
+    }
+    // Auth sayfalarına devam et
+    next()
     return
   }
 
-  // Protected route kontrolü
-  if (to.meta?.requiresAuth !== false && to.path !== '/auth/login') {
-    if (!authStore.isAuthenticated) {
-      console.log('Not authenticated, redirecting to login')
-      ElMessage.warning('Bu sayfaya erişmek için giriş yapmalısınız')
+  // 2. Protected route kontrolü
+  if (to.meta?.requiresAuth !== false) {
+    // Session validation yap
+    if (!authService.validateSession()) {
+      console.log('❌ Session invalid, redirecting to login')
+      ElMessage.warning('Oturumunuz geçersiz. Lütfen tekrar giriş yapın.')
+      authStore.clearSessionTimeout()
+
       next({
         path: '/auth/login',
         query: { redirect: to.fullPath }
       })
       return
     }
+
+    // Store'dan auth durumunu kontrol et
+    if (!authStore.isAuthenticated) {
+      console.log('❌ Not authenticated, redirecting to login')
+      ElMessage.warning('Bu sayfaya erişmek için giriş yapmalısınız')
+
+      next({
+        path: '/auth/login',
+        query: { redirect: to.fullPath }
+      })
+      return
+    }
+
+    // 3. Role-based access control
+    if (to.meta?.roles && Array.isArray(to.meta.roles)) {
+      const userRoles = authStore.userRoles
+      const hasRequiredRole = to.meta.roles.some(role =>
+        userRoles.includes(role) ||
+        userRoles.includes(`ROLE_${role}`) ||
+        authService.hasRole(role)
+      )
+
+      if (!hasRequiredRole) {
+        console.log('❌ Insufficient permissions for route:', to.path)
+        ElMessage.error('Bu sayfaya erişim yetkiniz bulunmuyor')
+
+        // Dashboard'a yönlendir veya önceki sayfaya geri dön
+        next(from.path === '/auth/login' ? '/dashboard' : from.path || '/dashboard')
+        return
+      }
+    }
+
+    // 4. Permission-based access control (opsiyonel)
+    if (to.meta?.permissions && Array.isArray(to.meta.permissions)) {
+      const hasRequiredPermission = to.meta.permissions.some(permission =>
+        authService.hasPermission(permission)
+      )
+
+      if (!hasRequiredPermission) {
+        console.log('❌ Insufficient permissions for route:', to.path)
+        ElMessage.error('Bu işlem için yetkiniz bulunmuyor')
+        next(from.path || '/dashboard')
+        return
+      }
+    }
+
+    // 5. Token expiry check ve refresh
+    if (authService.isTokenExpiringSoon()) {
+      console.log('⚠️ Token expiring soon, attempting refresh...')
+      try {
+        await authStore.refreshAuthToken()
+        console.log('✅ Token refreshed successfully')
+      } catch (error) {
+        console.error('❌ Token refresh failed:', error)
+        ElMessage.error('Oturumunuz sona erdi. Lütfen tekrar giriş yapın.')
+        await authStore.logout()
+        next('/auth/login')
+        return
+      }
+    }
+
+    console.log('✅ Auth check passed, proceeding to route')
   }
 
+  // Tüm kontroller geçti
   next()
 })
 
-router.afterEach((to, from) => {
-  console.log(`Navigation: ${from.path} -> ${to.path}`)
+// After each navigation
+router.afterEach((to, from, failure) => {
+  if (failure) {
+    console.error('❌ Navigation failed:', failure)
+    return
+  }
+
+  console.log(`✅ Navigation completed: ${from.path} → ${to.path}`)
+
+  // Update last activity
+  if (to.meta?.requiresAuth !== false) {
+    authService.updateLastActivity()
+  }
 })
 
+// Error handling
 router.onError((error: Error) => {
-  console.error('Router error:', error)
+  console.error('❌ Router error:', error)
   ElMessage.error('Sayfa yüklenirken hata oluştu')
 })
 

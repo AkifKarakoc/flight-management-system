@@ -17,10 +17,15 @@ export const useAuthStore = defineStore('auth', () => {
   const refreshToken = ref<string | null>(null)
   const loading = ref<boolean>(false)
   const loginLoading = ref<boolean>(false)
+  const sessionTimeout = ref<NodeJS.Timeout | null>(null)
 
   // Computed
   const isAuthenticated = computed((): boolean => {
-    return !!token.value && authService.isAuthenticated()
+    // Token varsa ve geçerli süresi varsa authenticated
+    const currentToken = token.value || authService.getToken()
+    if (!currentToken) return false
+
+    return authService.isAuthenticated()
   })
 
   const userInfo = computed((): User | null => {
@@ -36,14 +41,103 @@ export const useAuthStore = defineStore('auth', () => {
   })
 
   const isAdmin = computed((): boolean => {
-    return userRoles.value.includes('ADMIN')
+    return userRoles.value.includes('ADMIN') || userRoles.value.includes('ROLE_ADMIN')
   })
 
   const isUser = computed((): boolean => {
-    return userRoles.value.includes('USER')
+    return userRoles.value.includes('USER') || userRoles.value.includes('ROLE_USER')
   })
 
-  // Actions
+  // Session management methods
+  function startSessionTimeout(): void {
+    clearSessionTimeout()
+
+    // Token'dan expiry time al
+    const currentToken = token.value || authService.getToken()
+    if (!currentToken) return
+
+    try {
+      const payload = authService.parseToken(currentToken)
+      if (!payload) return
+
+      const expiresIn = payload.exp * 1000 - Date.now() - (5 * 60 * 1000) // 5 dakika önceden uyar
+
+      if (expiresIn > 0) {
+        sessionTimeout.value = setTimeout(() => {
+          ElMessageBox.confirm(
+            'Oturumunuz yakında sona erecek. Devam etmek istiyor musunuz?',
+            'Oturum Uyarısı',
+            {
+              confirmButtonText: 'Evet, devam et',
+              cancelButtonText: 'Çıkış yap',
+              type: 'warning',
+              beforeClose: async (action, instance, done) => {
+                if (action === 'confirm') {
+                  try {
+                    // Token yenileme işlemi
+                    await refreshAuthToken()
+                    done()
+                  } catch (error) {
+                    console.error('Token refresh failed:', error)
+                    await logout()
+                    done()
+                  }
+                } else {
+                  await logout()
+                  done()
+                }
+              }
+            }
+          ).catch(() => {
+            // Cancel pressed or dismissed
+            logout()
+          })
+        }, expiresIn)
+      }
+    } catch (error) {
+      console.error('Error setting session timeout:', error)
+    }
+  }
+
+  function clearSessionTimeout(): void {
+    if (sessionTimeout.value) {
+      clearTimeout(sessionTimeout.value)
+      sessionTimeout.value = null
+    }
+  }
+
+  // Enhanced logout with session cleanup
+  async function logout(): Promise<void> {
+    try {
+      loading.value = true
+      clearSessionTimeout()
+
+      // API'ye logout isteği gönder
+      await authService.logout()
+
+      // Store state'i temizle
+      token.value = null
+      refreshToken.value = null
+      user.value = null
+
+      ElMessage.success('Güvenli bir şekilde çıkış yaptınız')
+
+      // Login sayfasına yönlendir
+      await router.push('/auth/login')
+    } catch (error: any) {
+      console.error('Logout error:', error)
+      // Hata olsa bile state'i temizle
+      token.value = null
+      refreshToken.value = null
+      user.value = null
+      authService.clearAuth()
+      await router.push('/auth/login')
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // Enhanced login with session management
   async function login(credentials: LoginCredentials): Promise<AuthResponse> {
     console.log('Auth store login called with:', credentials)
 
@@ -58,11 +152,14 @@ export const useAuthStore = defineStore('auth', () => {
       console.log('Auth service response:', response)
 
       // Update store state
-      token.value = response.accessToken || response.token // Backend'den accessToken veya token gelebilir
+      token.value = response.accessToken || response.token
       refreshToken.value = response.refreshToken || null
       user.value = response.user
 
-      ElMessage.success(SUCCESS_MESSAGES.LOGIN)
+      // Session timeout başlat
+      startSessionTimeout()
+
+      ElMessage.success(SUCCESS_MESSAGES.LOGIN || 'Başarıyla giriş yaptınız')
 
       // Redirect to dashboard or intended route
       const redirectPath = router.currentRoute.value.query.redirect as string || '/dashboard'
@@ -80,7 +177,7 @@ export const useAuthStore = defineStore('auth', () => {
       } else if (error.response?.status === 429) {
         ElMessage.error('Çok fazla giriş denemesi. Lütfen daha sonra tekrar deneyin.')
       } else {
-        ElMessage.error(error.response?.data?.message || ERROR_MESSAGES.SERVER_ERROR)
+        ElMessage.error(error.message || 'Giriş yapılamadı. Lütfen tekrar deneyin.')
       }
 
       throw error
@@ -89,171 +186,86 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  async function logout(showConfirm: boolean = true): Promise<void> {
-    try {
-      if (showConfirm) {
-        await ElMessageBox.confirm(
-          'Oturumu kapatmak istediğinizden emin misiniz?',
-          'Oturumu Kapat',
-          {
-            confirmButtonText: 'Evet',
-            cancelButtonText: 'Hayır',
-            type: 'warning'
-          }
-        )
-      }
-
-      await authService.logout()
-
-      // Clear store state
-      clearAuth()
-
-      ElMessage.success(SUCCESS_MESSAGES.LOGOUT)
-
-      // Redirect to login
-      await router.push('/login')
-
-    } catch (error: any) {
-      if (error === 'cancel') {
-        return // User cancelled logout
-      }
-
-      console.error('Logout failed:', error)
-
-      // Even if API call fails, clear local state
-      clearAuth()
-      await router.push('/login')
-    }
-  }
-
-  async function refreshAuthToken(): Promise<string> {
+  // Token refresh method
+  async function refreshAuthToken(): Promise<void> {
     try {
       const newToken = await authService.refreshToken()
       token.value = newToken
-      return newToken
-    } catch (error: any) {
+      // Yeni token ile session timeout'u yeniden başlat
+      startSessionTimeout()
+    } catch (error) {
       console.error('Token refresh failed:', error)
-      await logout(false) // Don't show confirmation for automatic logout
+      await logout()
       throw error
     }
   }
 
-  async function fetchCurrentUser(): Promise<User | null> {
-    if (!isAuthenticated.value) return null
-
-    loading.value = true
-
+  // Initialize authentication on app start
+  async function initializeAuth(): Promise<void> {
     try {
-      const userData = await authService.getCurrentUser()
-      user.value = userData
-      return userData
-    } catch (error: any) {
-      console.error('Fetch current user failed:', error)
+      loading.value = true
 
-      if (error.response?.status === 401) {
-        await logout(false)
+      // localStorage'dan token al
+      const storedToken = authService.getToken()
+      const storedUser = authService.getUser()
+
+      if (!storedToken) {
+        console.log('No stored token found')
+        return
       }
 
-      throw error
+      // Token geçerli mi kontrol et
+      if (!authService.isAuthenticated()) {
+        console.log('Stored token is invalid or expired')
+        authService.clearAuth()
+        return
+      }
+
+      // Store state'i güncelle
+      token.value = storedToken
+      user.value = storedUser
+      refreshToken.value = authService.getRefreshToken()
+
+      // Session timeout başlat
+      startSessionTimeout()
+
+      console.log('Authentication initialized successfully')
+    } catch (error) {
+      console.error('Error initializing auth:', error)
+      authService.clearAuth()
     } finally {
       loading.value = false
     }
   }
 
-  function initializeAuth(): void {
-    const savedToken = authService.getToken()
-    const savedUser = authService.getUser()
+  // Force logout - session expired
+  async function forceLogout(reason: string = 'Oturumunuz sona erdi'): Promise<void> {
+    ElMessage.warning(reason)
+    await logout()
+  }
 
-    if (savedToken && savedUser) {
-      token.value = savedToken
-      user.value = savedUser
-
-      // Token geçerliliğini kontrol et
-      if (authService.isTokenExpired()) {
-        clearAuth()
-      }
+  // Check authentication status
+  function checkAuthStatus(): boolean {
+    if (!isAuthenticated.value) {
+      forceLogout('Oturumunuz geçersiz. Lütfen tekrar giriş yapın.')
+      return false
     }
+    return true
   }
 
-  function clearAuth(): void {
-    user.value = null
-    token.value = null
-    refreshToken.value = null
-    authService.clearAuth()
-  }
-
-  // Permission and role checks
+  // Utility methods
   function hasRole(role: string): boolean {
-    if (!userInfo.value) return false
-
-    // role string ise
-    if (typeof userInfo.value.role === 'string') {
-      return userInfo.value.role === role || userInfo.value.role.includes(role)
-    }
-
-    // roles array ise
-    if (Array.isArray(userInfo.value.roles)) {
-      return userInfo.value.roles.includes(role)
-    }
-
-    return false
+    return userRoles.value.includes(role)
   }
 
   function hasPermission(permission: string): boolean {
-    if (!userInfo.value) return false
-
-    // permissions varsa kontrol et
-    if (Array.isArray(userInfo.value.permissions)) {
-      return userInfo.value.permissions.includes(permission)
-    }
-
-    // Admin rolü varsa tüm yetkiler var sayılır
-    if (hasRole('ADMIN')) {
-      return true
-    }
-
-    return false
+    return userPermissions.value.includes(permission)
   }
 
-  function hasAnyRole(roles: string[]): boolean {
-    return roles.some(role => hasRole(role))
+  // Clear all data on browser close
+  function cleanup(): void {
+    clearSessionTimeout()
   }
-
-  function hasAllRoles(roles: string[]): boolean {
-    return roles.every(role => hasRole(role))
-  }
-
-  function hasAnyPermission(permissions: string[]): boolean {
-    return permissions.some(permission => hasPermission(permission))
-  }
-
-  function hasAllPermissions(permissions: string[]): boolean {
-    return permissions.every(permission => hasPermission(permission))
-  }
-
-  // Update user profile
-  async function updateProfile(profileData: Partial<User>): Promise<User | null> {
-    loading.value = true
-
-    try {
-      // This would be implemented when profile update API is available
-      // const updatedUser = await authService.updateProfile(profileData)
-      // user.value = updatedUser
-
-      ElMessage.success('Profil başarıyla güncellendi')
-
-      return user.value
-    } catch (error: any) {
-      console.error('Profile update failed:', error)
-      ElMessage.error('Profil güncellenirken hata oluştu')
-      throw error
-    } finally {
-      loading.value = false
-    }
-  }
-
-  // Initialize auth state on store creation
-  initializeAuth()
 
   return {
     // State
@@ -274,16 +286,14 @@ export const useAuthStore = defineStore('auth', () => {
     // Actions
     login,
     logout,
-    refreshAuthToken,
-    fetchCurrentUser,
+    forceLogout,
     initializeAuth,
-    clearAuth,
+    refreshAuthToken,
+    checkAuthStatus,
     hasRole,
     hasPermission,
-    hasAnyRole,
-    hasAllRoles,
-    hasAnyPermission,
-    hasAllPermissions,
-    updateProfile
+    cleanup,
+    startSessionTimeout,
+    clearSessionTimeout
   }
 })

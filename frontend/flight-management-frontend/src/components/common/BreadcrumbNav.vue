@@ -1,247 +1,185 @@
 <template>
   <div class="breadcrumb-nav">
     <el-breadcrumb separator="/">
-      <el-breadcrumb-item v-for="(item, index) in breadcrumbItems" :key="index">
-        <router-link
-          v-if="item.path && index < breadcrumbItems.length - 1"
-          :to="item.path"
-          class="breadcrumb-link"
-        >
-          <el-icon v-if="item.icon" class="breadcrumb-icon">
-            <component :is="item.icon" />
-          </el-icon>
-          {{ item.title }}
-        </router-link>
+      <el-breadcrumb-item :to="{ path: '/' }">
+        <el-icon><House /></el-icon>
+        <span>Ana Sayfa</span>
+      </el-breadcrumb-item>
 
-        <span v-else class="breadcrumb-current">
-          <el-icon v-if="item.icon" class="breadcrumb-icon">
-            <component :is="item.icon" />
-          </el-icon>
-          {{ item.title }}
-        </span>
+      <el-breadcrumb-item
+        v-for="(item, index) in breadcrumbItems"
+        :key="index"
+        :to="item.path ? { path: item.path } : undefined"
+      >
+        <el-icon v-if="item.icon">
+          <component :is="item.icon" />
+        </el-icon>
+        <span>{{ item.title }}</span>
       </el-breadcrumb-item>
     </el-breadcrumb>
 
-    <!-- Page Actions -->
-    <div class="page-actions" v-if="pageActions.length > 0">
-      <el-button
-        v-for="action in pageActions"
-        :key="action.key"
-        :type="action.type || 'default'"
-        :icon="action.icon"
-        :size="action.size || 'default'"
-        :loading="action.loading"
-        :disabled="action.disabled"
-        @click="handleAction(action)"
-      >
-        {{ action.label }}
-      </el-button>
+    <!-- Page Actions (if any) -->
+    <div class="page-actions" v-if="showActions">
+      <slot name="actions" />
     </div>
   </div>
 </template>
 
-<script setup>
-import { computed } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+<script setup lang="ts">
+import { computed, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import {
-  HomeFilled,
-  Monitor,
-  Setting,
-  Ship,
-  MapLocation,
-  Promotion,
-  Connection,
-  Avatar,
-  Position,
-  List,
-  Plus,
-  Upload,
-  Edit,
-  Document
+  House, Monitor, Setting, Ship, MapLocation, Promotion,
+  Connection, Avatar, Position, List, Plus, Upload,
+  Document, TrendCharts
 } from '@element-plus/icons-vue'
 
-// Router
+interface BreadcrumbItem {
+  title: string
+  path?: string
+  icon?: any
+}
+
+const props = defineProps<{
+  showActions?: boolean
+}>()
+
 const route = useRoute()
-const router = useRouter()
 
-// Icon mapping for routes
-const routeIcons = {
-  '/dashboard': Monitor,
-  '/airlines': Ship,
-  '/airports': MapLocation,
-  '/aircrafts': Promotion,
-  '/routes': Connection,
-  '/crew-members': Avatar,
-  '/flights': Position,
-  '/flights/create': Plus,
-  '/flights/upload': Upload,
-  '/reports': Document
+// Route to breadcrumb mapping
+const routeBreadcrumbs: Record<string, BreadcrumbItem[]> = {
+  '/dashboard': [
+    { title: 'Dashboard', icon: Monitor }
+  ],
+  '/airlines': [
+    { title: 'Referans Yönetimi', path: '/airlines', icon: Setting },
+    { title: 'Havayolları', icon: Ship }
+  ],
+  '/airports': [
+    { title: 'Referans Yönetimi', path: '/airlines', icon: Setting },
+    { title: 'Havaalanları', icon: MapLocation }
+  ],
+  '/aircrafts': [
+    { title: 'Referans Yönetimi', path: '/airlines', icon: Setting },
+    { title: 'Uçaklar', icon: Promotion }
+  ],
+  '/routes': [
+    { title: 'Referans Yönetimi', path: '/airlines', icon: Setting },
+    { title: 'Rotalar', icon: Connection }
+  ],
+  '/crew': [
+    { title: 'Referans Yönetimi', path: '/airlines', icon: Setting },
+    { title: 'Mürettebat', icon: Avatar }
+  ],
+  '/flights': [
+    { title: 'Uçuş Yönetimi', path: '/flights', icon: Position },
+    { title: 'Uçuş Listesi', icon: List }
+  ],
+  '/flights/create': [
+    { title: 'Uçuş Yönetimi', path: '/flights', icon: Position },
+    { title: 'Uçuş Listesi', path: '/flights', icon: List },
+    { title: 'Yeni Uçuş', icon: Plus }
+  ],
+  '/flights/upload': [
+    { title: 'Uçuş Yönetimi', path: '/flights', icon: Position },
+    { title: 'Uçuş Listesi', path: '/flights', icon: List },
+    { title: 'Toplu Yükleme', icon: Upload }
+  ],
+  '/reports/flights': [
+    { title: 'Raporlar', path: '/reports', icon: TrendCharts },
+    { title: 'Uçuş Raporları', icon: Document }
+  ],
+  '/reports/kpi': [
+    { title: 'Raporlar', path: '/reports', icon: TrendCharts },
+    { title: 'KPI Raporları', icon: TrendCharts }
+  ]
 }
 
-// Route title mapping
-const routeTitles = {
-  '/dashboard': 'Dashboard',
-  '/airlines': 'Havayolları',
-  '/airports': 'Havaalanları',
-  '/aircrafts': 'Uçaklar',
-  '/routes': 'Rotalar',
-  '/crew-members': 'Mürettebat',
-  '/flights': 'Uçuş Yönetimi',
-  '/flights/create': 'Yeni Uçuş',
-  '/flights/upload': 'Toplu Yükleme',
-  '/reports': 'Raporlar'
-}
-
-// Computed breadcrumb items
 const breadcrumbItems = computed(() => {
-  const items = []
-  const pathSegments = route.path.split('/').filter(segment => segment)
+  const currentPath = route.path
 
-  // Always start with home
-  items.push({
-    title: 'Ana Sayfa',
-    path: '/dashboard',
-    icon: HomeFilled
-  })
+  // Check for exact match first
+  if (routeBreadcrumbs[currentPath]) {
+    return routeBreadcrumbs[currentPath]
+  }
 
-  // Build breadcrumb based on current route
-  let currentPath = ''
+  // Check for dynamic routes (like /flights/edit/:id)
+  if (currentPath.startsWith('/flights/edit/')) {
+    return [
+      { title: 'Uçuş Yönetimi', path: '/flights', icon: Position },
+      { title: 'Uçuş Listesi', path: '/flights', icon: List },
+      { title: 'Uçuş Düzenle', icon: Setting }
+    ]
+  }
 
-  pathSegments.forEach((segment, index) => {
-    currentPath += `/${segment}`
+  // Generate breadcrumbs from route meta or path segments
+  const segments = currentPath.split('/').filter(Boolean)
+  const items: BreadcrumbItem[] = []
 
-    // Skip if it's a parameter (like :id)
-    if (segment.match(/^\d+$/)) {
-      return
-    }
+  let currentSegmentPath = ''
+  for (let i = 0; i < segments.length; i++) {
+    currentSegmentPath += '/' + segments[i]
 
-    // Handle special cases
-    let title = routeTitles[currentPath] || segment
-    let icon = routeIcons[currentPath]
-
-    // Custom titles from route meta
-    if (route.meta?.breadcrumb) {
-      title = route.meta.breadcrumb
-    } else if (route.meta?.title) {
-      title = route.meta.title
-    }
-
-    // Handle dynamic segments
-    if (route.params.id && currentPath.includes(':id')) {
-      currentPath = currentPath.replace(':id', route.params.id)
-    }
+    // Get title from route meta or segment name
+    const title = getSegmentTitle(segments[i], currentSegmentPath)
+    const icon = getSegmentIcon(segments[i])
 
     items.push({
       title,
-      path: currentPath,
+      path: i < segments.length - 1 ? currentSegmentPath : undefined,
       icon
     })
-  })
-
-  // Handle edit pages
-  if (route.name?.includes('Edit')) {
-    const lastItem = items[items.length - 1]
-    lastItem.title = route.meta?.breadcrumb || 'Düzenle'
-    lastItem.icon = Edit
   }
 
   return items
 })
 
-// Page actions based on current route
-const pageActions = computed(() => {
-  const actions = []
-
-  switch (route.name) {
-    case 'Dashboard':
-      actions.push({
-        key: 'refresh',
-        label: 'Yenile',
-        icon: 'Refresh',
-        type: 'default'
-      })
-      break
-
-    case 'Airlines':
-    case 'Airports':
-    case 'Aircrafts':
-    case 'Routes':
-    case 'CrewMembers':
-      actions.push({
-        key: 'create',
-        label: 'Yeni Ekle',
-        icon: Plus,
-        type: 'primary'
-      })
-      break
-
-    case 'Flights':
-      actions.push(
-        {
-          key: 'create',
-          label: 'Yeni Uçuş',
-          icon: Plus,
-          type: 'primary'
-        },
-        {
-          key: 'upload',
-          label: 'Toplu Yükle',
-          icon: Upload,
-          type: 'default'
-        }
-      )
-      break
-
-    case 'FlightCreate':
-    case 'FlightEdit':
-      actions.push({
-        key: 'back',
-        label: 'Geri Dön',
-        icon: 'ArrowLeft',
-        type: 'default'
-      })
-      break
+function getSegmentTitle(segment: string, path: string): string {
+  // Custom title mappings
+  const titleMappings: Record<string, string> = {
+    'airlines': 'Havayolları',
+    'airports': 'Havaalanları',
+    'aircrafts': 'Uçaklar',
+    'routes': 'Rotalar',
+    'crew': 'Mürettebat',
+    'flights': 'Uçuşlar',
+    'create': 'Yeni',
+    'edit': 'Düzenle',
+    'upload': 'Yükle',
+    'reports': 'Raporlar',
+    'dashboard': 'Dashboard'
   }
 
-  return actions
-})
-
-// Methods
-function handleAction(action) {
-  switch (action.key) {
-    case 'refresh':
-      window.location.reload()
-      break
-
-    case 'create':
-      handleCreateAction()
-      break
-
-    case 'upload':
-      router.push('/flights/upload')
-      break
-
-    case 'back':
-      router.go(-1)
-      break
+  // Check route meta title
+  if (route.meta?.title) {
+    return route.meta.title as string
   }
+
+  return titleMappings[segment] || segment.charAt(0).toUpperCase() + segment.slice(1)
 }
 
-function handleCreateAction() {
-  const createRoutes = {
-    'Airlines': '/airlines/create',
-    'Airports': '/airports/create',
-    'Aircrafts': '/aircrafts/create',
-    'Routes': '/routes/create',
-    'CrewMembers': '/crew-members/create',
-    'Flights': '/flights/create'
+function getSegmentIcon(segment: string) {
+  const iconMappings: Record<string, any> = {
+    'airlines': Ship,
+    'airports': MapLocation,
+    'aircrafts': Promotion,
+    'routes': Connection,
+    'crew': Avatar,
+    'flights': Position,
+    'create': Plus,
+    'edit': Setting,
+    'upload': Upload,
+    'reports': TrendCharts,
+    'dashboard': Monitor
   }
 
-  const createRoute = createRoutes[route.name]
-  if (createRoute) {
-    router.push(createRoute)
-  }
+  return iconMappings[segment]
 }
+
+// Watch route changes to update breadcrumbs
+watch(route, (newRoute) => {
+  console.log('Breadcrumb: Route changed to', newRoute.path)
+}, { immediate: true })
 </script>
 
 <style scoped lang="scss">
@@ -249,66 +187,53 @@ function handleCreateAction() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.75rem 0;
-  border-bottom: 1px solid #f0f0f0;
-  margin-bottom: 1rem;
+  width: 100%;
 
-  .el-breadcrumb {
-    flex: 1;
-
-    :deep(.el-breadcrumb__item) {
+  :deep(.el-breadcrumb) {
+    .el-breadcrumb__item {
       .el-breadcrumb__inner {
-        font-weight: 400;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
         color: #606266;
+        font-weight: 500;
 
-        &.is-link {
-          color: #409eff;
+        &:hover {
+          color: #409EFF;
+        }
+
+        a {
+          color: inherit;
+          text-decoration: none;
 
           &:hover {
-            color: #337ecc;
+            color: #409EFF;
           }
         }
       }
 
-      &:last-child .el-breadcrumb__inner {
-        color: #303133;
-        font-weight: 500;
+      &:last-child {
+        .el-breadcrumb__inner {
+          color: #303133;
+          font-weight: 600;
+
+          a {
+            color: inherit;
+            cursor: default;
+            pointer-events: none;
+          }
+        }
       }
     }
-  }
 
-  .breadcrumb-link {
-    display: inline-flex;
-    align-items: center;
-    text-decoration: none;
-    color: #409eff;
-    transition: color 0.3s ease;
-
-    &:hover {
-      color: #337ecc;
-    }
-
-    .breadcrumb-icon {
-      margin-right: 0.25rem;
-      font-size: 0.875rem;
-    }
-  }
-
-  .breadcrumb-current {
-    display: inline-flex;
-    align-items: center;
-    color: #303133;
-    font-weight: 500;
-
-    .breadcrumb-icon {
-      margin-right: 0.25rem;
-      font-size: 0.875rem;
+    .el-breadcrumb__separator {
+      color: #C0C4CC;
+      font-weight: bold;
     }
   }
 
   .page-actions {
-    display: flex;
-    gap: 0.5rem;
+    flex-shrink: 0;
     margin-left: 1rem;
   }
 }
@@ -323,39 +248,37 @@ function handleCreateAction() {
     .page-actions {
       margin-left: 0;
       width: 100%;
-      justify-content: flex-end;
+    }
+  }
+
+  :deep(.el-breadcrumb) {
+    .el-breadcrumb__item {
+      .el-breadcrumb__inner {
+        font-size: 0.9rem;
+      }
     }
   }
 }
 
 @media (max-width: 480px) {
-  .breadcrumb-nav {
-    .el-breadcrumb {
-      :deep(.el-breadcrumb__item) {
-        .el-breadcrumb__inner {
-          font-size: 0.875rem;
+  :deep(.el-breadcrumb) {
+    .el-breadcrumb__item {
+      .el-breadcrumb__inner {
+        span {
+          display: none;
+        }
+
+        // Show only icons on very small screens
+        .el-icon {
+          display: block;
         }
       }
-    }
 
-    .page-actions {
-      flex-wrap: wrap;
-      gap: 0.25rem;
-
-      .el-button {
-        font-size: 0.875rem;
+      &:last-child {
+        .el-breadcrumb__inner span {
+          display: inline;
+        }
       }
-    }
-  }
-}
-
-// Animation for breadcrumb changes
-.breadcrumb-nav {
-  :deep(.el-breadcrumb__item) {
-    transition: all 0.3s ease;
-
-    &:hover {
-      transform: translateY(-1px);
     }
   }
 }

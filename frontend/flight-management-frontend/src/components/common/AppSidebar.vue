@@ -2,7 +2,7 @@
   <div class="app-sidebar" :class="{ 'collapsed': collapsed }">
     <div class="sidebar-content">
       <!-- Logo Section -->
-      <div class="sidebar-logo">
+      <div class="sidebar-logo" @click="goToDashboard">
         <el-icon size="32" color="#409EFF">
           <Position />
         </el-icon>
@@ -11,24 +11,51 @@
         </transition>
       </div>
 
+      <!-- User Info (when not collapsed) -->
+      <div v-if="!collapsed" class="user-info-sidebar">
+        <div class="user-card">
+          <el-avatar :src="userAvatar" :icon="UserFilled" size="small" />
+          <div class="user-details">
+            <span class="user-name">{{ userDisplayName }}</span>
+            <span class="user-role">{{ userRole }}</span>
+          </div>
+          <el-badge
+            v-if="userNotifications > 0"
+            :value="userNotifications"
+            :max="99"
+            class="user-badge"
+          />
+        </div>
+      </div>
+
       <!-- Navigation Menu -->
       <el-menu
         :default-active="activeMenu"
         :collapse="collapsed"
-        :unique-opened="true"
+        :unique-opened="false"
         class="sidebar-menu"
         @select="handleMenuSelect"
+        :router="false"
       >
         <!-- Dashboard -->
-        <el-menu-item index="/dashboard">
+        <el-menu-item index="/dashboard" class="menu-item-dashboard">
           <el-icon>
             <Monitor />
           </el-icon>
-          <template #title>Dashboard</template>
+          <template #title>
+            <span>Dashboard</span>
+            <el-badge
+              v-if="dashboardNotifications > 0"
+              :value="dashboardNotifications"
+              :max="99"
+              size="small"
+              class="menu-badge"
+            />
+          </template>
         </el-menu-item>
 
         <!-- Reference Management -->
-        <el-sub-menu index="reference">
+        <el-sub-menu index="reference" class="reference-submenu">
           <template #title>
             <el-icon>
               <Setting />
@@ -40,76 +67,134 @@
             <el-icon>
               <Ship />
             </el-icon>
-            <template #title>Havayolları</template>
+            <template #title>
+              <span>Havayolları</span>
+              <el-tag v-if="referenceStats.airlines" size="small" class="count-tag">
+                {{ referenceStats.airlines }}
+              </el-tag>
+            </template>
           </el-menu-item>
 
           <el-menu-item index="/airports">
             <el-icon>
               <MapLocation />
             </el-icon>
-            <template #title>Havaalanları</template>
+            <template #title>
+              <span>Havaalanları</span>
+              <el-tag v-if="referenceStats.airports" size="small" class="count-tag">
+                {{ referenceStats.airports }}
+              </el-tag>
+            </template>
           </el-menu-item>
 
           <el-menu-item index="/aircrafts">
             <el-icon>
               <Promotion />
             </el-icon>
-            <template #title>Uçaklar</template>
+            <template #title>
+              <span>Uçaklar</span>
+              <el-tag v-if="referenceStats.aircrafts" size="small" class="count-tag">
+                {{ referenceStats.aircrafts }}
+              </el-tag>
+            </template>
           </el-menu-item>
 
           <el-menu-item index="/routes">
             <el-icon>
               <Connection />
             </el-icon>
-            <template #title>Rotalar</template>
+            <template #title>
+              <span>Rotalar</span>
+              <el-tag v-if="referenceStats.routes" size="small" class="count-tag">
+                {{ referenceStats.routes }}
+              </el-tag>
+            </template>
           </el-menu-item>
 
-          <el-menu-item index="/crew-members">
+          <el-menu-item index="/crew" v-if="hasAdminAccess">
             <el-icon>
               <Avatar />
             </el-icon>
-            <template #title>Mürettebat</template>
+            <template #title>
+              <span>Mürettebat</span>
+              <el-tag v-if="referenceStats.crew" size="small" class="count-tag">
+                {{ referenceStats.crew }}
+              </el-tag>
+            </template>
           </el-menu-item>
         </el-sub-menu>
 
         <!-- Flight Management -->
-        <el-sub-menu index="flights">
+        <el-sub-menu index="flights" class="flights-submenu">
           <template #title>
             <el-icon>
               <Position />
             </el-icon>
             <span>Uçuş Yönetimi</span>
+            <el-badge
+              v-if="flightAlerts > 0"
+              :value="flightAlerts"
+              :max="99"
+              type="warning"
+              size="small"
+              class="submenu-badge"
+            />
           </template>
 
           <el-menu-item index="/flights">
             <el-icon>
               <List />
             </el-icon>
-            <template #title>Uçuş Listesi</template>
+            <template #title>
+              <span>Uçuş Listesi</span>
+              <el-tag v-if="flightStats.total" size="small" class="count-tag">
+                {{ flightStats.total }}
+              </el-tag>
+            </template>
           </el-menu-item>
 
-          <el-menu-item index="/flights/create">
+          <el-menu-item index="/flights/create" v-if="hasCreateAccess">
             <el-icon>
               <Plus />
             </el-icon>
             <template #title>Yeni Uçuş</template>
           </el-menu-item>
 
-          <el-menu-item index="/flights/upload">
+          <el-menu-item index="/flights/upload" v-if="hasAdminAccess">
             <el-icon>
               <Upload />
             </el-icon>
             <template #title>Toplu Yükleme</template>
           </el-menu-item>
+
+          <!-- Active Flights (Real-time) -->
+          <el-menu-item index="/flights/active" class="active-flights">
+            <el-icon>
+              <VideoCameraFilled />
+            </el-icon>
+            <template #title>
+              <span>Aktif Uçuşlar</span>
+              <el-tag
+                v-if="flightStats.active"
+                size="small"
+                type="success"
+                effect="dark"
+                class="count-tag live"
+              >
+                <el-icon size="12"><VideoCameraFilled /></el-icon>
+                {{ flightStats.active }}
+              </el-tag>
+            </template>
+          </el-menu-item>
         </el-sub-menu>
 
-        <!-- Reports (Future) -->
-        <el-sub-menu index="reports" v-if="showReports">
+        <!-- Reports Section -->
+        <el-sub-menu index="reports" v-if="hasReportAccess">
           <template #title>
             <el-icon>
               <DataAnalysis />
             </el-icon>
-            <span>Raporlar</span>
+            <span>Raporlar & Analiz</span>
           </template>
 
           <el-menu-item index="/reports/flights">
@@ -123,20 +208,88 @@
             <el-icon>
               <TrendCharts />
             </el-icon>
-            <template #title>KPI Raporları</template>
+            <template #title>KPI Dashboard</template>
+          </el-menu-item>
+
+          <el-menu-item index="/reports/analytics">
+            <el-icon>
+              <PieChart />
+            </el-icon>
+            <template #title>Veri Analizi</template>
+          </el-menu-item>
+        </el-sub-menu>
+
+        <!-- System Management (Admin Only) -->
+        <el-sub-menu index="system" v-if="hasAdminAccess">
+          <template #title>
+            <el-icon>
+              <Tools />
+            </el-icon>
+            <span>Sistem Yönetimi</span>
+            <el-badge
+              v-if="systemIssues > 0"
+              :value="systemIssues"
+              type="danger"
+              size="small"
+              class="submenu-badge"
+            />
+          </template>
+
+          <el-menu-item index="/system/health">
+            <el-icon>
+              <Monitor />
+            </el-icon>
+            <template #title>Sistem Durumu</template>
+          </el-menu-item>
+
+          <el-menu-item index="/system/logs">
+            <el-icon>
+              <Document />
+            </el-icon>
+            <template #title>Sistem Logları</template>
+          </el-menu-item>
+
+          <el-menu-item index="/system/settings">
+            <el-icon>
+              <Setting />
+            </el-icon>
+            <template #title>Ayarlar</template>
           </el-menu-item>
         </el-sub-menu>
       </el-menu>
 
       <!-- Quick Actions (when collapsed) -->
       <div v-if="collapsed" class="quick-actions">
-        <el-tooltip content="Yeni Uçuş" placement="right">
+        <el-tooltip content="Yeni Uçuş Oluştur" placement="right">
           <el-button
             type="primary"
             :icon="Plus"
             circle
             size="large"
             @click="quickCreateFlight"
+            class="quick-btn"
+          />
+        </el-tooltip>
+
+        <el-tooltip content="Aktif Uçuşlar" placement="right">
+          <el-button
+            :icon="VideoCameraFilled"
+            circle
+            size="large"
+            @click="quickActiveFlights"
+            class="quick-btn"
+            :class="{ 'has-activity': flightStats.active > 0 }"
+          />
+        </el-tooltip>
+
+        <el-tooltip content="Sistem Durumu" placement="right" v-if="hasAdminAccess">
+          <el-button
+            :icon="Monitor"
+            circle
+            size="large"
+            @click="quickSystemStatus"
+            class="quick-btn"
+            :class="{ 'has-warning': systemIssues > 0 }"
           />
         </el-tooltip>
       </div>
@@ -144,14 +297,23 @@
 
     <!-- Sidebar Footer -->
     <div class="sidebar-footer">
-      <div class="version-info">
+      <!-- System Status Indicator -->
+      <div class="system-status-indicator" @click="showSystemStatus">
+        <el-tooltip :content="systemStatusText" placement="top">
+          <div class="status-dot" :class="systemStatusClass"></div>
+        </el-tooltip>
         <transition name="fade">
-          <div v-show="!collapsed" class="version-details">
-            <div class="version-number">v1.0.0</div>
-            <div class="build-info">Build 2025.1</div>
-          </div>
+          <span v-show="!collapsed" class="status-text">{{ systemStatusText }}</span>
         </transition>
       </div>
+
+      <!-- Version Info -->
+      <transition name="fade">
+        <div v-show="!collapsed" class="version-info">
+          <div class="version-number">v1.0.0</div>
+          <div class="build-info">Build {{ buildNumber }}</div>
+        </div>
+      </transition>
 
       <!-- Collapse Toggle -->
       <el-button
@@ -165,104 +327,248 @@
   </div>
 </template>
 
-<script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+<script setup lang="ts">
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
+import { useAppStore } from '@/stores/app'
+import { ElMessage } from 'element-plus'
+
+// Import icons
 import {
-  Monitor,
-  Setting,
-  Ship,
-  MapLocation,
-  Promotion,
-  Connection,
-  Avatar,
-  Position,
-  List,
-  Plus,
-  Upload,
-  DataAnalysis,
-  Document,
-  TrendCharts,
-  Expand,
-  Fold
+  Monitor, Setting, Ship, MapLocation, Promotion, Connection, Avatar,
+  Position, List, Plus, Upload, DataAnalysis, Document, TrendCharts,
+  UserFilled, Expand, Fold, Tools, VideoCameraFilled, PieChart
 } from '@element-plus/icons-vue'
-import { useAuthStore } from '@/stores/auth.js'
 
 // Props
-const props = defineProps({
-  collapsed: {
-    type: Boolean,
-    default: false
-  }
-})
+const props = defineProps<{
+  collapsed?: boolean
+}>()
 
 // Emits
-const emit = defineEmits(['menu-select', 'toggle-collapse'])
+const emit = defineEmits<{
+  'menu-select': [index: string]
+  'toggle-collapse': []
+}>()
 
-// Router & Store
+// Stores
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+const appStore = useAppStore()
 
 // Reactive state
-const showReports = ref(false) // Will be enabled when reports are implemented
+const buildNumber = ref('2025.1.23')
+const autoRefreshInterval = ref<NodeJS.Timeout | null>(null)
 
-// Computed
+// Mock data - replace with real API calls
+const referenceStats = ref({
+  airlines: 15,
+  airports: 250,
+  aircrafts: 45,
+  routes: 120,
+  crew: 180
+})
+
+const flightStats = ref({
+  total: 1250,
+  active: 8,
+  delayed: 3,
+  cancelled: 1
+})
+
+const dashboardNotifications = ref(3)
+const userNotifications = ref(2)
+const flightAlerts = ref(3)
+const systemIssues = ref(1)
+
+// Computed properties
 const activeMenu = computed(() => {
   return route.path
 })
 
+const userDisplayName = computed(() => {
+  return authStore.userInfo?.fullName || authStore.userInfo?.username || 'Kullanıcı'
+})
+
+const userRole = computed(() => {
+  const roles = authStore.userRoles
+  if (roles.includes('ADMIN') || roles.includes('ROLE_ADMIN')) return 'Yönetici'
+  if (roles.includes('USER') || roles.includes('ROLE_USER')) return 'Kullanıcı'
+  return 'Misafir'
+})
+
+const userAvatar = computed(() => {
+  return authStore.userInfo?.avatar || null
+})
+
+const hasAdminAccess = computed(() => {
+  return authStore.isAdmin
+})
+
+const hasCreateAccess = computed(() => {
+  return authStore.isAdmin || authStore.hasPermission('flight:create')
+})
+
+const hasReportAccess = computed(() => {
+  return authStore.isAdmin || authStore.hasPermission('report:read')
+})
+
+const systemStatusClass = computed(() => {
+  if (systemIssues.value === 0) return 'status-healthy'
+  if (systemIssues.value <= 2) return 'status-warning'
+  return 'status-error'
+})
+
+const systemStatusText = computed(() => {
+  if (systemIssues.value === 0) return 'Sistem Sağlıklı'
+  if (systemIssues.value <= 2) return 'Uyarılar Var'
+  return 'Kritik Sorunlar'
+})
+
 // Methods
-function handleMenuSelect(index) {
+function handleMenuSelect(index: string) {
   if (index !== route.path) {
     router.push(index)
   }
   emit('menu-select', index)
+
+  // Close sidebar on mobile after selection
+  if (window.innerWidth < 768) {
+    emit('toggle-collapse')
+  }
 }
 
 function toggleCollapse() {
   emit('toggle-collapse')
 }
 
-function quickCreateFlight() {
-  router.push('/flights/create')
+function goToDashboard() {
+  if (route.path !== '/dashboard') {
+    router.push('/dashboard')
+  }
 }
 
-// Watch for route changes to update active menu
-watch(
-  () => route.path,
-  (newPath) => {
-    // Handle sub-menu opening based on current route
-    const menu = document.querySelector('.sidebar-menu')
-    if (menu) {
-      // Auto-open relevant sub-menus
-      if (newPath.startsWith('/flights')) {
-        menu.querySelector('[index="flights"]')?.click()
-      } else if (['/airlines', '/airports', '/aircrafts', '/routes', '/crew-members'].some(path => newPath.startsWith(path))) {
-        menu.querySelector('[index="reference"]')?.click()
-      }
-    }
-  },
-  { immediate: true }
-)
+function quickCreateFlight() {
+  router.push('/flights/create')
+  ElMessage.success('Yeni uçuş oluşturma sayfasına yönlendiriliyorsunuz')
+}
 
-// Lifecycle
-onMounted(() => {
-  // Set initial sub-menu state based on current route
+function quickActiveFlights() {
+  router.push('/flights/active')
+  ElMessage.info('Aktif uçuşlar sayfasına yönlendiriliyorsunuz')
+}
+
+function quickSystemStatus() {
+  router.push('/system/health')
+  ElMessage.info('Sistem durumu sayfasına yönlendiriliyorsunuz')
+}
+
+function showSystemStatus() {
+  if (hasAdminAccess.value) {
+    router.push('/system/health')
+  } else {
+    ElMessage.info('Sistem durumu: ' + systemStatusText.value)
+  }
+}
+
+// Auto-refresh data
+async function refreshData() {
+  try {
+    // Mock API calls - replace with real implementation
+    await Promise.all([
+      refreshReferenceStats(),
+      refreshFlightStats(),
+      refreshSystemStatus()
+    ])
+  } catch (error) {
+    console.error('Error refreshing sidebar data:', error)
+  }
+}
+
+async function refreshReferenceStats() {
+  // Mock implementation
+  referenceStats.value = {
+    airlines: Math.floor(Math.random() * 20) + 10,
+    airports: Math.floor(Math.random() * 50) + 200,
+    aircrafts: Math.floor(Math.random() * 20) + 40,
+    routes: Math.floor(Math.random() * 30) + 100,
+    crew: Math.floor(Math.random() * 50) + 150
+  }
+}
+
+async function refreshFlightStats() {
+  // Mock implementation
+  flightStats.value = {
+    total: Math.floor(Math.random() * 500) + 1000,
+    active: Math.floor(Math.random() * 15) + 5,
+    delayed: Math.floor(Math.random() * 5),
+    cancelled: Math.floor(Math.random() * 3)
+  }
+
+  flightAlerts.value = flightStats.value.delayed + flightStats.value.cancelled
+}
+
+async function refreshSystemStatus() {
+  // Mock implementation
+  systemIssues.value = Math.floor(Math.random() * 3)
+}
+
+// Auto-expand relevant submenu based on current route
+function autoExpandSubmenu() {
+  const currentPath = route.path
+
   setTimeout(() => {
-    const currentPath = route.path
     if (currentPath.startsWith('/flights')) {
-      const flightsSubmenu = document.querySelector('[index="flights"]')
+      const flightsSubmenu = document.querySelector('.flights-submenu') as HTMLElement
       if (flightsSubmenu && !flightsSubmenu.classList.contains('is-opened')) {
-        flightsSubmenu.click()
+        const title = flightsSubmenu.querySelector('.el-sub-menu__title') as HTMLElement
+        title?.click()
       }
-    } else if (['/airlines', '/airports', '/aircrafts', '/routes', '/crew-members'].some(path => currentPath.startsWith(path))) {
-      const referenceSubmenu = document.querySelector('[index="reference"]')
+    } else if (['/airlines', '/airports', '/aircrafts', '/routes', '/crew'].some(path => currentPath.startsWith(path))) {
+      const referenceSubmenu = document.querySelector('.reference-submenu') as HTMLElement
       if (referenceSubmenu && !referenceSubmenu.classList.contains('is-opened')) {
-        referenceSubmenu.click()
+        const title = referenceSubmenu.querySelector('.el-sub-menu__title') as HTMLElement
+        title?.click()
+      }
+    } else if (currentPath.startsWith('/reports')) {
+      const reportsSubmenu = document.querySelector('[index="reports"]') as HTMLElement
+      if (reportsSubmenu && !reportsSubmenu.classList.contains('is-opened')) {
+        const title = reportsSubmenu.querySelector('.el-sub-menu__title') as HTMLElement
+        title?.click()
+      }
+    } else if (currentPath.startsWith('/system')) {
+      const systemSubmenu = document.querySelector('[index="system"]') as HTMLElement
+      if (systemSubmenu && !systemSubmenu.classList.contains('is-opened')) {
+        const title = systemSubmenu.querySelector('.el-sub-menu__title') as HTMLElement
+        title?.click()
       }
     }
   }, 100)
+}
+
+// Watch route changes
+watch(route, (newRoute) => {
+  autoExpandSubmenu()
+}, { immediate: true })
+
+// Lifecycle
+onMounted(() => {
+  // Initial data load
+  refreshData()
+
+  // Set up auto-refresh
+  autoRefreshInterval.value = setInterval(refreshData, 30000) // Every 30 seconds
+
+  // Auto-expand current submenu
+  autoExpandSubmenu()
+})
+
+onUnmounted(() => {
+  if (autoRefreshInterval.value) {
+    clearInterval(autoRefreshInterval.value)
+  }
 })
 </script>
 
@@ -277,13 +583,12 @@ onMounted(() => {
   overflow: hidden;
 
   &.collapsed {
-    .sidebar-content {
-      .sidebar-logo {
-        justify-content: center;
+    .sidebar-content .sidebar-logo {
+      justify-content: center;
+      cursor: pointer;
 
-        .logo-text {
-          display: none;
-        }
+      .logo-text {
+        display: none;
       }
     }
   }
@@ -301,6 +606,11 @@ onMounted(() => {
     padding: 1rem;
     border-bottom: 1px solid #f0f0f0;
     transition: all 0.3s ease;
+    cursor: pointer;
+
+    &:hover {
+      background-color: #f5f7fa;
+    }
 
     .logo-text {
       font-size: 1.1rem;
@@ -310,8 +620,52 @@ onMounted(() => {
     }
   }
 
+  .user-info-sidebar {
+    padding: 1rem;
+    border-bottom: 1px solid #f0f0f0;
+
+    .user-card {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem;
+      background-color: #f8f9fa;
+      border-radius: 8px;
+      position: relative;
+
+      .user-details {
+        flex: 1;
+        min-width: 0;
+
+        .user-name {
+          display: block;
+          font-size: 0.9rem;
+          font-weight: 600;
+          color: #303133;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .user-role {
+          display: block;
+          font-size: 0.75rem;
+          color: #909399;
+          margin-top: 2px;
+        }
+      }
+
+      .user-badge {
+        position: absolute;
+        top: -5px;
+        right: -5px;
+      }
+    }
+  }
+
   .sidebar-menu {
     border: none;
+    flex: 1;
 
     :deep(.el-menu-item) {
       padding-left: 1.5rem !important;
@@ -320,6 +674,7 @@ onMounted(() => {
       border-radius: 0;
       margin: 0 0.5rem;
       transition: all 0.3s ease;
+      position: relative;
 
       &:hover {
         background-color: #ecf5ff;
@@ -334,11 +689,46 @@ onMounted(() => {
         &::before {
           display: none;
         }
+
+        .count-tag {
+          background-color: rgba(255, 255, 255, 0.2);
+          color: white;
+          border-color: transparent;
+        }
       }
 
       .el-icon {
         width: 20px;
         margin-right: 8px;
+      }
+
+      .count-tag {
+        margin-left: auto;
+        background-color: #f0f2f5;
+        color: #606266;
+        border: none;
+        font-size: 0.75rem;
+
+        &.live {
+          background-color: #67c23a;
+          color: white;
+          animation: pulse 2s infinite;
+        }
+      }
+
+      .menu-badge {
+        position: absolute;
+        right: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+      }
+
+      &.active-flights {
+        .count-tag.live {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+        }
       }
     }
 
@@ -350,6 +740,7 @@ onMounted(() => {
         margin: 0 0.5rem;
         border-radius: 6px;
         transition: all 0.3s ease;
+        position: relative;
 
         &:hover {
           background-color: #f5f7fa;
@@ -359,6 +750,13 @@ onMounted(() => {
         .el-icon {
           width: 20px;
           margin-right: 8px;
+        }
+
+        .submenu-badge {
+          position: absolute;
+          right: 30px;
+          top: 50%;
+          transform: translateY(-50%);
         }
       }
 
@@ -381,8 +779,25 @@ onMounted(() => {
 
   .quick-actions {
     padding: 1rem;
-    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
     border-top: 1px solid #f0f0f0;
+
+    .quick-btn {
+      &.has-activity {
+        background-color: #67c23a;
+        border-color: #67c23a;
+        color: white;
+        animation: pulse 2s infinite;
+      }
+
+      &.has-warning {
+        background-color: #e6a23c;
+        border-color: #e6a23c;
+        color: white;
+      }
+    }
   }
 }
 
@@ -393,34 +808,86 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 0.5rem;
+
+  .system-status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+
+    &:hover {
+      color: #409eff;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      transition: all 0.3s ease;
+
+      &.status-healthy {
+        background-color: #67c23a;
+        box-shadow: 0 0 6px rgba(103, 194, 58, 0.5);
+      }
+
+      &.status-warning {
+        background-color: #e6a23c;
+        box-shadow: 0 0 6px rgba(230, 162, 60, 0.5);
+      }
+
+      &.status-error {
+        background-color: #f56c6c;
+        box-shadow: 0 0 6px rgba(245, 108, 108, 0.5);
+        animation: pulse 2s infinite;
+      }
+    }
+
+    .status-text {
+      font-size: 0.8rem;
+      color: #606266;
+    }
+  }
 
   .version-info {
     flex: 1;
 
-    .version-details {
-      .version-number {
-        font-size: 0.85rem;
-        font-weight: 600;
-        color: #409eff;
-        line-height: 1;
-      }
+    .version-number {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #409eff;
+      line-height: 1;
+    }
 
-      .build-info {
-        font-size: 0.75rem;
-        color: #909399;
-        line-height: 1;
-        margin-top: 2px;
-      }
+    .build-info {
+      font-size: 0.75rem;
+      color: #909399;
+      line-height: 1;
+      margin-top: 2px;
     }
   }
 
   .collapse-btn {
-    margin-left: 0.5rem;
+    flex-shrink: 0;
 
     &:hover {
       background-color: #ecf5ff;
       color: #409eff;
     }
+  }
+}
+
+// Animations
+@keyframes pulse {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 1;
   }
 }
 
@@ -465,17 +932,27 @@ onMounted(() => {
   }
 }
 
-// Dark mode support (future)
-@media (prefers-color-scheme: dark) {
+// Dark mode support
+:deep(.dark) {
   .app-sidebar {
     background: #1f2937;
     border-right-color: #374151;
 
-    .sidebar-content .sidebar-logo {
-      border-bottom-color: #374151;
+    .sidebar-content {
+      .sidebar-logo {
+        border-bottom-color: #374151;
 
-      .logo-text {
-        color: #f9fafb;
+        .logo-text {
+          color: #f9fafb;
+        }
+      }
+
+      .user-info-sidebar .user-card {
+        background-color: #374151;
+
+        .user-name {
+          color: #f9fafb;
+        }
       }
     }
 
