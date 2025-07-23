@@ -65,7 +65,7 @@ public class FlightStatsController {
         return ResponseEntity.ok(response);
     }
 
-    @GetMapping("/summary/{date}")
+    @GetMapping("/dashboard/{date}")
     public ResponseEntity<Map<String, Object>> getDailySummary(
             @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         return ResponseEntity.ok(flightService.getDailySummary(date));
