@@ -264,6 +264,9 @@ class FlightService {
   /**
    * Search flights with filters
    */
+  /**
+   * Search flights with filters using existing endpoints
+   */
   async searchFlights(filters = {}) {
     const {
       flightNumber,
@@ -271,28 +274,89 @@ class FlightService {
       originAirportId,
       destinationAirportId,
       status,
-      startDate,
-      endDate,
+      flightDate,
       page = 0,
-      size = 20,
-      sort
+      size = 20
     } = filters
 
-    const params = {}
+    try {
+      let flights = []
 
-    if (flightNumber) params.flightNumber = flightNumber
-    if (airlineId) params.airlineId = airlineId
-    if (originAirportId) params.originAirportId = originAirportId
-    if (destinationAirportId) params.destinationAirportId = destinationAirportId
-    if (status) params.status = status
-    if (startDate) params.startDate = startDate
-    if (endDate) params.endDate = endDate
-    if (page !== undefined) params.page = page
-    if (size !== undefined) params.size = size
-    if (sort) params.sort = sort
+      // Filtreleme öncelik sırası:
+      // 1. Tarih filtresine göre getir (en spesifik)
+      if (flightDate) {
+        flights = await this.getFlightsByDate(flightDate)
+      }
+      // 2. Havayolu filtresine göre getir
+      else if (airlineId) {
+        flights = await this.getFlightsByAirline(parseInt(airlineId))
+      }
+      // 3. Havaalanı filtresine göre getir
+      else if (originAirportId || destinationAirportId) {
+        const airportId = originAirportId || destinationAirportId
+        flights = await this.getFlightsByAirport(parseInt(airportId))
+      }
+      // 4. Durum filtresine göre getir
+      else if (status) {
+        const statusArray = status.split(',')
+        if (statusArray.length === 1) {
+          flights = await this.getFlightsByStatus(statusArray[0])
+        } else {
+          // Multiple status - get all and filter client-side
+          flights = await this.getAllFlights()
+          flights = flights.filter(flight => statusArray.includes(flight.status))
+        }
+      }
+      // 5. Hiç filtre yoksa tümünü getir
+      else {
+        flights = await this.getAllFlights()
+      }
 
-    const response = await flightAPI.get('/flights/search', { params })
-    return response.data
+      // Client-side filtering for additional filters
+      if (flightNumber) {
+        flights = flights.filter(flight =>
+          flight.flightNumber?.toLowerCase().includes(flightNumber.toLowerCase())
+        )
+      }
+
+      // Havayolu filtresi - eğer tarih ile beraber kullanılıyorsa
+      if (airlineId && flightDate) {
+        flights = flights.filter(flight => flight.airlineId === parseInt(airlineId))
+      }
+
+      // Origin/Destination airport filters - diğer filtrelerle beraber kullanılıyorsa
+      if (originAirportId && (flightDate || airlineId || status)) {
+        flights = flights.filter(flight => flight.originAirportId === parseInt(originAirportId))
+      }
+
+      if (destinationAirportId && (flightDate || airlineId || status)) {
+        flights = flights.filter(flight => flight.destinationAirportId === parseInt(destinationAirportId))
+      }
+
+      // Status filter - diğer filtrelerle beraber kullanılıyorsa
+      if (status && (flightDate || airlineId)) {
+        const statusArray = status.split(',')
+        flights = flights.filter(flight => statusArray.includes(flight.status))
+      }
+
+      // Client-side pagination
+      const total = flights.length
+      const startIndex = page * size
+      const endIndex = startIndex + size
+      const paginatedFlights = flights.slice(startIndex, endIndex)
+
+      return {
+        content: paginatedFlights,
+        totalElements: total,
+        totalPages: Math.ceil(total / size),
+        size: size,
+        number: page
+      }
+
+    } catch (error) {
+      console.error('Error searching flights:', error)
+      throw error
+    }
   }
 
   /**

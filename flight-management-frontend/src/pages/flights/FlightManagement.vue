@@ -45,7 +45,7 @@
               </template>
             </el-input>
           </el-col>
-          <el-col :xs="24" :sm="6" :md="4">
+          <el-col :xs="24" :sm="8" :md="6">
             <el-select
               v-model="filterAirline"
               placeholder="Havayolu"
@@ -54,7 +54,7 @@
               @change="handleSearch"
             >
               <el-option
-                v-for="airline in referenceStore.airlineOptions"
+                v-for="airline in airlineOptions"
                 :key="airline.value"
                 :label="airline.label"
                 :value="airline.value"
@@ -126,7 +126,11 @@
           class="data-table"
           @sort-change="handleSortChange"
         >
-          <el-table-column type="index" width="60" />
+          <el-table-column label="#" width="60">
+            <template #default="{ $index }">
+              {{ (flightStore.pagination.page * flightStore.pagination.size) + $index + 1 }}
+            </template>
+          </el-table-column>
 
           <el-table-column
             prop="flightNumber"
@@ -139,31 +143,25 @@
             </template>
           </el-table-column>
 
-          <el-table-column
-            label="Rota"
-            min-width="180"
-          >
+          <el-table-column label="Rota" min-width="200">
             <template #default="{ row }">
               <div class="route-info">
                 <div class="route-path">
-                  <span class="airport-code">{{ getAirportCode(row.originAirportId) }}</span>
-                  <el-icon class="route-arrow"><Right /></el-icon>
-                  <span class="airport-code">{{ getAirportCode(row.destinationAirportId) }}</span>
+                  {{ getRouteDisplay(row) }}
                 </div>
-                <div class="route-time">
+                <div class="route-time text-xs text-gray-500">
                   {{ formatTime(row.scheduledDeparture) }} - {{ formatTime(row.scheduledArrival) }}
                 </div>
               </div>
             </template>
           </el-table-column>
 
-          <el-table-column
-            label="Havayolu"
-            width="150"
-          >
+          <!-- Havayolu sütunu -->
+          <el-table-column label="Havayolu" width="120">
             <template #default="{ row }">
               <div class="airline-info">
-                <strong>{{ getAirlineName(row.airlineId) }}</strong>
+                <div class="airline-name">{{ getAirlineName(row.airlineId) }}</div>
+                <div class="airline-code text-xs text-gray-500">{{ getAirlineCode(row.airlineId) }}</div>
               </div>
             </template>
           </el-table-column>
@@ -253,7 +251,7 @@
         <!-- Pagination -->
         <div class="pagination-section">
           <el-pagination
-            v-model:current-page="flightStore.pagination.page"
+            v-model:current-page="currentPageForDisplay"
             v-model:page-size="flightStore.pagination.size"
             :total="flightStore.pagination.total"
             :page-sizes="[10, 20, 50, 100]"
@@ -303,13 +301,11 @@
             <el-form-item label="Havayolu" prop="airlineId">
               <el-select
                 v-model="flightForm.airlineId"
-                placeholder="Havayolu seçiniz"
+                placeholder="Havayolu seçin"
                 filterable
-                style="width: 100%"
-                @change="handleAirlineChange"
               >
                 <el-option
-                  v-for="airline in referenceStore.airlineOptions"
+                  v-for="airline in airlineOptions"
                   :key="airline.value"
                   :label="airline.label"
                   :value="airline.value"
@@ -321,13 +317,11 @@
             <el-form-item label="Uçak" prop="aircraftId">
               <el-select
                 v-model="flightForm.aircraftId"
-                placeholder="Uçak seçiniz"
+                placeholder="Uçak seçin"
                 filterable
-                style="width: 100%"
-                :disabled="!flightForm.airlineId"
               >
                 <el-option
-                  v-for="aircraft in availableAircraft"
+                  v-for="aircraft in aircraftOptions"
                   :key="aircraft.value"
                   :label="aircraft.label"
                   :value="aircraft.value"
@@ -342,12 +336,11 @@
             <el-form-item label="Kalkış Havalimanı" prop="originAirportId">
               <el-select
                 v-model="flightForm.originAirportId"
-                placeholder="Kalkış havalimanı"
+                placeholder="Kalkış havalimanı seçin"
                 filterable
-                style="width: 100%"
               >
                 <el-option
-                  v-for="airport in referenceStore.airportOptions"
+                  v-for="airport in airportOptions"
                   :key="airport.value"
                   :label="airport.label"
                   :value="airport.value"
@@ -359,12 +352,11 @@
             <el-form-item label="Varış Havalimanı" prop="destinationAirportId">
               <el-select
                 v-model="flightForm.destinationAirportId"
-                placeholder="Varış havalimanı"
+                placeholder="Varış havalimanı seçin"
                 filterable
-                style="width: 100%"
               >
                 <el-option
-                  v-for="airport in referenceStore.airportOptions"
+                  v-for="airport in airportOptions"
                   :key="airport.value"
                   :label="airport.label"
                   :value="airport.value"
@@ -793,20 +785,36 @@ const loadData = async () => {
 }
 
 const refreshData = async () => {
-  await loadData()
-  ElMessage.success('Veriler yenilendi')
+  try {
+    console.log('refreshData called')
+    await flightStore.refreshFlights()
+    ElMessage.success('Veriler yenilendi')
+  } catch (error) {
+    console.error('Refresh error:', error)
+    ElMessage.error('Yenileme sırasında hata oluştu')
+  }
 }
 
 const handleSearch = async () => {
-  const filters = {
-    flightNumber: searchQuery.value,
-    airlineId: filterAirline.value,
-    status: filterStatus.value.length > 0 ? filterStatus.value : undefined,
-    flightDate: filterDate.value
-  }
+  try {
+    loading.value = true
 
-  flightStore.setFilters(filters)
-  await flightStore.searchFlights(filters)
+    const filters = {}
+
+    if (searchQuery.value) filters.flightNumber = searchQuery.value
+    if (filterAirline.value) filters.airlineId = filterAirline.value
+    if (filterStatus.value?.length > 0) filters.status = filterStatus.value.join(',')
+    if (filterDate.value) filters.flightDate = filterDate.value
+
+    flightStore.setFilters(filters)
+    flightStore.setPage(0) // Reset to first page
+    await flightStore.searchFlights(filters)
+  } catch (error) {
+    console.error('Search error:', error)
+    ElMessage.error('Arama sırasında hata oluştu')
+  } finally {
+    loading.value = false
+  }
 }
 
 const handleClearFilters = () => {
@@ -814,24 +822,53 @@ const handleClearFilters = () => {
   filterAirline.value = null
   filterStatus.value = []
   filterDate.value = ''
+
+  // Store'daki filtreleri temizle
   flightStore.clearFilters()
+
+  // İlk sayfaya dön ve tüm uçuşları yükle
+  flightStore.setPage(0)
   flightStore.loadFlights()
 }
 
 const handleSortChange = async ({ prop, order }) => {
-  const sortParam = order === 'ascending' ? prop : `-${prop}`
-  await flightStore.loadFlights({ sort: sortParam })
+  try {
+    let sortParam = prop
+    if (order === 'descending') {
+      sortParam = `-${prop}`
+    }
+    await flightStore.loadFlights({ sort: sortParam })
+  } catch (error) {
+    console.error('Sort error:', error)
+  }
 }
 
 const handlePageChange = async (page) => {
-  flightStore.setPage(page - 1) // Backend uses 0-based pagination
-  await flightStore.loadFlights()
+  try {
+    console.log('handlePageChange called with page:', page)
+    // Element Plus uses 1-based, backend uses 0-based
+    await flightStore.setPage(page - 1)
+    console.log('Page change completed')
+  } catch (error) {
+    console.error('Page change error:', error)
+  }
 }
 
 const handleSizeChange = async (size) => {
-  flightStore.setPageSize(size)
-  await flightStore.loadFlights()
+  try {
+    await flightStore.setPageSize(size)
+  } catch (error) {
+    console.error('Size change error:', error)
+  }
 }
+
+const currentPageForDisplay = computed({
+  get: () => flightStore.pagination.page + 1,
+  set: (value) => {
+    // Bu setter pagination component tarafından kullanılacak
+    handlePageChange(value)
+  }
+})
 
 // Quick Filters
 const setTodayFilter = () => {
@@ -850,19 +887,40 @@ const setScheduledFilter = () => {
 }
 
 // Helper Methods
+
+const getRouteDisplay = (flight) => {
+  const originCode = getAirportCode(flight.originAirportId)
+  const destCode = getAirportCode(flight.destinationAirportId)
+
+  if (originCode === 'N/A' || destCode === 'N/A') {
+    return `${flight.originAirportId || 'Bilinmiyor'} → ${flight.destinationAirportId || 'Bilinmiyor'}`
+  }
+
+  return `${originCode} → ${destCode}`
+}
+
 const getAirportCode = (airportId) => {
+  if (!airportId) return 'N/A'
   const airport = referenceStore.airports.find(a => a.id === airportId)
   return airport?.iataCode || 'N/A'
 }
 
 const getAirportName = (airportId) => {
+  if (!airportId) return 'N/A'
   const airport = referenceStore.airports.find(a => a.id === airportId)
   return airport?.name || 'N/A'
 }
 
 const getAirlineName = (airlineId) => {
+  if (!airlineId) return 'N/A'
   const airline = referenceStore.airlines.find(a => a.id === airlineId)
   return airline?.name || 'N/A'
+}
+
+const getAirlineCode = (airlineId) => {
+  if (!airlineId) return 'N/A'
+  const airline = referenceStore.airlines.find(a => a.id === airlineId)
+  return airline?.iataCode || 'N/A'
 }
 
 const getFlightTypeColor = (type) => {
@@ -921,23 +979,33 @@ const viewFlight = (flight) => {
   showViewDialog.value = true
 }
 
-const editFlight = (flight) => {
-  editingFlight.value = flight
-  Object.assign(flightForm, {
-    flightNumber: flight.flightNumber,
-    airlineId: flight.airlineId,
-    aircraftId: flight.aircraftId,
-    originAirportId: flight.originAirportId,
-    destinationAirportId: flight.destinationAirportId,
-    flightDate: flight.flightDate,
-    scheduledDeparture: flight.scheduledDeparture,
-    scheduledArrival: flight.scheduledArrival,
-    type: flight.type,
-    passengerCount: flight.passengerCount,
-    cargoWeight: flight.cargoWeight,
-    notes: flight.notes || ''
-  })
-  showCreateDialog.value = true
+const editFlight = async (flight) => {
+  try {
+    // Load current flight details first
+    await flightStore.loadFlightById(flight.id)
+    editingFlight.value = flight
+
+    // Pre-fill form with current values
+    Object.assign(flightForm, {
+      flightNumber: flight.flightNumber || '',
+      airlineId: flight.airlineId || null,
+      aircraftId: flight.aircraftId || null,
+      originAirportId: flight.originAirportId || null,
+      destinationAirportId: flight.destinationAirportId || null,
+      flightDate: flight.flightDate || '',
+      scheduledDeparture: flight.scheduledDeparture || '',
+      scheduledArrival: flight.scheduledArrival || '',
+      type: flight.type || 'PASSENGER',
+      passengerCount: flight.passengerCount || 0,
+      cargoWeight: flight.cargoWeight || 0,
+      notes: flight.notes || ''
+    })
+
+    showCreateDialog.value = true
+  } catch (error) {
+    console.error('Error loading flight for edit:', error)
+    ElMessage.error('Uçuş bilgileri yüklenirken hata oluştu')
+  }
 }
 
 const handleAirlineChange = () => {
@@ -1093,11 +1161,42 @@ const handleUpload = async () => {
   }
 }
 
+// Reference data computed properties
+const airlineOptions = computed(() => {
+  return referenceStore.airlines.map(airline => ({
+    label: `${airline.name} (${airline.iataCode})`,
+    value: airline.id
+  }))
+})
+
+const airportOptions = computed(() => {
+  return referenceStore.airports.map(airport => ({
+    label: `${airport.name} (${airport.iataCode}) - ${airport.city}`,
+    value: airport.id
+  }))
+})
+
+const aircraftOptions = computed(() => {
+  // Aircraft servisini daha sonra ekleyebiliriz
+  return []
+
+  // Eğer referenceStore'da aircrafts varsa:
+  // return referenceStore.aircrafts?.map(aircraft => ({
+  //   label: `${aircraft.model} - ${aircraft.registration}`,
+  //   value: aircraft.id
+  // })) || []
+})
+
 // Watchers
 watch(showCreateDialog, (newVal) => {
   if (!newVal) {
     resetForm()
   }
+})
+
+// Debug için - geçici olarak ekle
+watch(() => flightStore.pagination.page, (newPage) => {
+  console.log('Page changed to:', newPage, 'Current filters:', flightStore.filters)
 })
 
 watch(showUploadDialog, (newVal) => {
@@ -1107,9 +1206,40 @@ watch(showUploadDialog, (newVal) => {
   }
 })
 
+watch(filterAirline, (newValue) => {
+  if (newValue !== null) {
+    handleSearch()
+  }
+})
+
 // Lifecycle
-onMounted(() => {
-  loadData()
+onMounted(async () => {
+  try {
+    console.log('onMounted starting...')
+
+    // Reference data'yı önce yükle (loadAircrafts'ı kaldır)
+    await Promise.all([
+      referenceStore.loadAirlines(true),
+      referenceStore.loadAirports(true)
+      // referenceStore.loadAircrafts(true) - Bu satırı kaldır
+    ])
+
+    console.log('Reference data loaded')
+    console.log('Airlines:', referenceStore.airlines.length)
+    console.log('Airports:', referenceStore.airports.length)
+
+    // Filtreleri temizle ve flights'ı yükle
+    await flightStore.refreshFlights()
+
+    console.log('Flights loaded')
+
+    await flightStore.loadDashboardKPIs()
+
+    console.log('Dashboard KPIs loaded')
+  } catch (error) {
+    console.error('Error loading initial data:', error)
+    ElMessage.error('Veriler yüklenirken hata oluştu: ' + error.message)
+  }
 })
 </script>
 

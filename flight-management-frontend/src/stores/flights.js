@@ -60,27 +60,55 @@ export const useFlightStore = defineStore('flights', () => {
   const loadFlights = async (params = {}) => {
     loading.value = true
     try {
-      const response = await flightService.getAllFlights({
-        page: pagination.value.page,
-        size: pagination.value.size,
-        ...params
-      })
+      const allFlights = await flightService.getAllFlights()
 
-      // Handle both paginated and non-paginated responses
-      if (response.content) {
-        flights.value = response.content
-        pagination.value.total = response.totalElements
-        pagination.value.totalPages = response.totalPages
-      } else {
-        flights.value = response || []
-        pagination.value.total = flights.value.length
-        pagination.value.totalPages = Math.ceil(flights.value.length / pagination.value.size)
+      if (!allFlights || !Array.isArray(allFlights)) {
+        console.error('Invalid flights data received:', allFlights)
+        flights.value = []
+        pagination.value.total = 0
+        pagination.value.totalPages = 0
+        return []
       }
+
+      // Apply sorting if provided
+      let sortedFlights = [...allFlights]
+      if (params.sort) {
+        const sortField = params.sort.startsWith('-') ? params.sort.slice(1) : params.sort
+        const sortDirection = params.sort.startsWith('-') ? 'desc' : 'asc'
+
+        sortedFlights.sort((a, b) => {
+          const aVal = a[sortField]
+          const bVal = b[sortField]
+
+          if (sortDirection === 'asc') {
+            return aVal > bVal ? 1 : -1
+          } else {
+            return aVal < bVal ? 1 : -1
+          }
+        })
+      }
+
+      console.log('Total flights loaded:', sortedFlights.length)
+      console.log('Current page:', pagination.value.page, 'Size:', pagination.value.size)
+
+      // Client-side pagination
+      const total = sortedFlights.length
+      const startIndex = pagination.value.page * pagination.value.size
+      const endIndex = startIndex + pagination.value.size
+      flights.value = sortedFlights.slice(startIndex, endIndex)
+
+      pagination.value.total = total
+      pagination.value.totalPages = Math.ceil(total / pagination.value.size)
+
+      console.log('Flights after pagination:', flights.value.length)
+      console.log('Pagination:', pagination.value)
 
       return flights.value
     } catch (error) {
       console.error('Error loading flights:', error)
       flights.value = []
+      pagination.value.total = 0
+      pagination.value.totalPages = 0
       return []
     } finally {
       loading.value = false
@@ -191,19 +219,33 @@ export const useFlightStore = defineStore('flights', () => {
   const searchFlights = async (searchFilters = {}) => {
     loading.value = true
     try {
-      const mergedFilters = { ...filters.value, ...searchFilters }
+      // Clean up empty values
+      const cleanFilters = {}
+      Object.keys(searchFilters).forEach(key => {
+        if (searchFilters[key] !== '' && searchFilters[key] !== null && searchFilters[key] !== undefined) {
+          cleanFilters[key] = searchFilters[key]
+        }
+      })
+
+      // Store current filters
+      filters.value = { ...filters.value, ...cleanFilters }
+
       const response = await flightService.searchFlights({
-        ...mergedFilters,
+        ...cleanFilters,
         page: pagination.value.page,
         size: pagination.value.size
       })
 
-      if (response.content) {
+      if (response && response.content) {
         flights.value = response.content
-        pagination.value.total = response.totalElements
-        pagination.value.totalPages = response.totalPages
+        pagination.value.total = response.totalElements || 0
+        pagination.value.totalPages = response.totalPages || 0
+      } else if (Array.isArray(response)) {
+        flights.value = response
+        pagination.value.total = response.length
+        pagination.value.totalPages = Math.ceil(response.length / pagination.value.size)
       } else {
-        flights.value = response || []
+        flights.value = []
       }
 
       return flights.value
@@ -301,24 +343,55 @@ export const useFlightStore = defineStore('flights', () => {
   }
 
   // Actions - Pagination
-  const setPage = (page) => {
+  const setPage = async (page) => {
+    console.log('setPage called with:', page)
     pagination.value.page = page
-  }
 
-  const setPageSize = (size) => {
-    pagination.value.size = size
-    pagination.value.page = 0 // Reset to first page
-  }
+    // Aktif filtre var mı kontrol et
+    const hasActiveFilters = Object.keys(filters.value).some(key =>
+      filters.value[key] !== '' && filters.value[key] !== null && filters.value[key] !== undefined
+    )
 
-  const nextPage = () => {
-    if (pagination.value.page < pagination.value.totalPages - 1) {
-      pagination.value.page++
+    console.log('Has active filters:', hasActiveFilters, 'Filters:', filters.value)
+
+    if (hasActiveFilters) {
+      // Filtreler varsa search kullan
+      console.log('Using searchFlights')
+      await searchFlights(filters.value)
+    } else {
+      // Filtre yoksa normal load
+      console.log('Using loadFlights')
+      await loadFlights()
     }
   }
 
-  const prevPage = () => {
+  const setPageSize = async (size) => {
+    pagination.value.size = size
+    pagination.value.page = 0 // Reset to first page
+
+    // Aktif filtre var mı kontrol et
+    const hasActiveFilters = Object.keys(filters.value).some(key =>
+      filters.value[key] !== '' && filters.value[key] !== null && filters.value[key] !== undefined
+    )
+
+    if (hasActiveFilters) {
+      // Filtreler varsa search kullan
+      await searchFlights(filters.value)
+    } else {
+      // Filtre yoksa normal load
+      await loadFlights()
+    }
+  }
+
+  const nextPage = async () => {
+    if (pagination.value.page < pagination.value.totalPages - 1) {
+      await setPage(pagination.value.page + 1)
+    }
+  }
+
+  const prevPage = async () => {
     if (pagination.value.page > 0) {
-      pagination.value.page--
+      await setPage(pagination.value.page - 1)
     }
   }
 
@@ -343,6 +416,11 @@ export const useFlightStore = defineStore('flights', () => {
 
   // Utility Actions
   const refreshFlights = async () => {
+    console.log('refreshFlights called')
+
+    // Filtreleri temizle ve ilk sayfaya dön
+    clearFilters()
+
     return await loadFlights()
   }
 
