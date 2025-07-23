@@ -505,14 +505,12 @@ import {
   Loading,
   UploadFilled
 } from '@element-plus/icons-vue'
-import { useFlightStore } from '@/stores/flight.js'
-import { useAppStore } from '@/stores/app.js'
+import { useFlightStore } from '@/stores/flight'
 import dayjs from 'dayjs'
 
 // Router and stores
 const router = useRouter()
 const flightStore = useFlightStore()
-const appStore = useAppStore()
 
 // Refs
 const uploadRef = ref(null)
@@ -965,9 +963,9 @@ function formatSeconds(seconds) {
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
 }
 
-// Lifecycle
+// onMounted içinde değiştirin
 onMounted(() => {
-  appStore.setPageTitle('Toplu Uçuş Yükleme')
+  document.title = 'Toplu Uçuş Yükleme - Flight Management System'  // appStore.setPageTitle yerine
 })
 </script>
 

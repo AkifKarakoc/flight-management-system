@@ -37,7 +37,7 @@
                 <el-dropdown-item command="popular" :icon="Star">
                   Popüler İşaretle
                 </el-dropdown-item>
-                <el-dropdown-item command="calculate" :icon="Calculator">
+                <el-dropdown-item command="calculate" :icon="Operation">
                   Mesafe/Süre Hesapla
                 </el-dropdown-item>
                 <el-dropdown-item command="delete" :icon="Delete" divided>
@@ -421,7 +421,7 @@
                     <el-dropdown-item command="flights" :icon="Promotion">
                       Uçuşları Görüntüle
                     </el-dropdown-item>
-                    <el-dropdown-item command="calculate" :icon="Calculator">
+                    <el-dropdown-item command="calculate" :icon="Operation">
                       Hesapla
                     </el-dropdown-item>
                   </el-dropdown-menu>
@@ -640,7 +640,7 @@ import {
   Check,
   Close,
   Star,
-  Calculator,
+  Operation,
   Delete,
   Refresh,
   Download,
@@ -1218,7 +1218,7 @@ function handlePageChange(page) {
 
 // Lifecycle
 onMounted(async () => {
-  appStore.setPageTitle('Rota Yönetimi')
+  document.title = 'Rota Yönetimi'
   await Promise.all([
     loadRoutes(),
     referenceStore.fetchAirports(),

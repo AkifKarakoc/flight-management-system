@@ -1313,7 +1313,7 @@ function handlePageChange(page) {
 
 // Lifecycle
 onMounted(async () => {
-  appStore.setPageTitle('Mürettebat Yönetimi')
+  document.title = 'Mürettebat Yönetimi'
   await Promise.all([
     loadCrewMembers(),
     referenceStore.fetchAirlines()

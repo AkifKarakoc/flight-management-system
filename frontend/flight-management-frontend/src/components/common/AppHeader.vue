@@ -240,7 +240,7 @@ import {
   Expand, Fold, Position, Search, Monitor, Bell, FullScreen, OfficeBuilding,
   Sunny, Moon, UserFilled, User, Setting, InfoFilled, SwitchButton, ArrowDown,
   CircleCheck, Refresh, WarningFilled, SuccessFilled, CircleCloseFilled,
-  CheckCircleFilled
+  CircleCheckFilled
 } from '@element-plus/icons-vue'
 
 // Setup dayjs
@@ -372,7 +372,7 @@ const systemHealthColor = computed(() => {
 })
 
 const systemHealthIcon = computed(() => {
-  if (systemIssues.value === 0) return CheckCircleFilled
+  if (systemIssues.value === 0) return CircleCheckFilled
   if (systemIssues.value <= 2) return WarningFilled
   return CircleCloseFilled
 })

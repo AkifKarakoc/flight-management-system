@@ -405,10 +405,8 @@ import {
   Phone,
   Calendar
 } from '@element-plus/icons-vue'
-import { useReferenceStore } from '@/stores/reference'
 import { useAppStore } from '@/stores/app'
 import AirlineForm from '@/components/forms/AirlineForm.vue'
-import { onMounted } from 'vue'
 import { useReferenceStore } from '@/stores/reference'
 import apiService from '@/services/api'
 
@@ -751,7 +749,7 @@ function handlePageChange(page) {
 
 // Lifecycle
 onMounted(async () => {
-  appStore.setPageTitle('Havayolu Yönetimi')
+  document.title = 'Havayolu Yönetimi'
   await loadAirlines()
 })
 

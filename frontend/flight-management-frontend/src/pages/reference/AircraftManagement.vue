@@ -1012,11 +1012,8 @@ function handlePageChange(page) {
 
 // Lifecycle
 onMounted(async () => {
-  appStore.setPageTitle('Uçak Yönetimi')
-  await Promise.all([
-    loadAircrafts(),
-    referenceStore.fetchAirlines()
-  ])
+  document.title = 'Uçak Yönetimi - Flight Management System'  // appStore.setPageTitle yerine
+  await loadAircrafts()
 })
 
 // Watch for route query changes

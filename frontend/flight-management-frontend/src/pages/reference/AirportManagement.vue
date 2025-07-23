@@ -579,13 +579,11 @@ import {
   Link,
   Phone
 } from '@element-plus/icons-vue'
-import { useReferenceStore } from '@/stores/reference.js'
-import { useAppStore } from '@/stores/app.js'
+import { useReferenceStore } from '@/stores/reference'
 import AirportForm from '@/components/forms/AirportForm.vue'
 
 // Stores
 const referenceStore = useReferenceStore()
-const appStore = useAppStore()
 const router = useRouter()
 
 // Reactive state
@@ -1025,7 +1023,7 @@ function handlePageChange(page) {
 
 // Lifecycle
 onMounted(async () => {
-  appStore.setPageTitle('Havaalanı Yönetimi')
+  document.title = 'Havaalanı Yönetimi - Flight Management System'
   await Promise.all([
     loadAirports(),
     referenceStore.fetchAirlines()

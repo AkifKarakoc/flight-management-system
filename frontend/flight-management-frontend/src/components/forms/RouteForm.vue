@@ -170,7 +170,7 @@
           <el-form-item class="form-item-full" v-if="canCalculateDistance">
             <el-button
               type="primary"
-              :icon="Calculator"
+              :icon="Promotion"
               @click="calculateRouteMetrics"
               :loading="calculating"
               :disabled="submitting"
@@ -345,7 +345,7 @@ import {
   Ship,
   InfoFilled,
   View,
-  Calculator
+  Promotion
 } from '@element-plus/icons-vue'
 import { useReferenceStore } from '@/stores/reference.js'
 
