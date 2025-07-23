@@ -13,6 +13,7 @@ import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/v1/flights/stats")
@@ -20,8 +21,6 @@ import java.util.Map;
 public class FlightStatsController {
 
     private final FlightService flightService;
-
-    // --- ESKİ METOTLARINIZ ---
 
     @GetMapping("/count/date/{date}")
     public ResponseEntity<Map<String, Object>> getFlightCountByDate(
@@ -74,9 +73,14 @@ public class FlightStatsController {
 
     @GetMapping("/daily-chart")
     public ResponseEntity<FlightChartDataDto> getFlightChartData(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
-        return ResponseEntity.ok(flightService.getFlightChartData(startDate, endDate));
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
+
+        // Eğer tarihler frontend'den gelmezse, varsayılan olarak son 7 günü ayarla
+        LocalDate finalEndDate = Optional.ofNullable(endDate).orElse(LocalDate.now());
+        LocalDate finalStartDate = Optional.ofNullable(startDate).orElse(finalEndDate.minusDays(6));
+
+        return ResponseEntity.ok(flightService.getFlightChartData(finalStartDate, finalEndDate));
     }
 
     @GetMapping("/type-distribution")

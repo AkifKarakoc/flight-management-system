@@ -10,6 +10,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 
@@ -21,8 +23,8 @@ public class AircraftController {
     private final AircraftService aircraftService;
 
     @GetMapping
-    public ResponseEntity<List<AircraftResponse>> getAllAircrafts() {
-        return ResponseEntity.ok(aircraftService.getAllAircrafts());
+    public ResponseEntity<Page<AircraftResponse>> getAllAircrafts(Pageable pageable) {
+        return ResponseEntity.ok(aircraftService.getAllAircrafts(pageable));
     }
 
     @GetMapping("/{id}")

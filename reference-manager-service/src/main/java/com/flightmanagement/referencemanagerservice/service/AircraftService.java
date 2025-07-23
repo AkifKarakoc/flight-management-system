@@ -16,6 +16,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -34,11 +36,10 @@ public class AircraftService {
     private final WebSocketMessageService webSocketMessageService;
 
 
-    public List<AircraftResponse> getAllAircrafts() {
-        log.debug("Fetching all aircrafts");
-        return aircraftRepository.findAll().stream()
-                .map(aircraftMapper::toResponse)
-                .collect(Collectors.toList());
+    public Page<AircraftResponse> getAllAircrafts(Pageable pageable) {
+        log.debug("Fetching all aircrafts with pagination");
+        Page<Aircraft> aircraftPage = aircraftRepository.findAll(pageable);
+        return aircraftPage.map(aircraftMapper::toResponse);
     }
 
     public AircraftResponse getAircraftById(Long id) {

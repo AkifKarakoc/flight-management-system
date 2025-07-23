@@ -20,6 +20,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -40,11 +42,10 @@ public class AirportService {
     private final WebSocketMessageService webSocketMessageService;
 
 
-    public List<AirportResponse> getAllAirports() {
-        log.debug("Fetching all airports");
-        return airportRepository.findAll().stream()
-                .map(airportMapper::toResponse)
-                .collect(Collectors.toList());
+    public Page<AirportResponse> getAllAirports(Pageable pageable) {
+        log.debug("Fetching all airports with pagination");
+        Page<Airport> airportPage = airportRepository.findAll(pageable);
+        return airportPage.map(airportMapper::toResponse);
     }
 
     public AirportResponse getAirportById(Long id) {
