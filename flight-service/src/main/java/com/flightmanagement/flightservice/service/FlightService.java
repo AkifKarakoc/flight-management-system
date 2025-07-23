@@ -15,14 +15,22 @@ import com.flightmanagement.flightservice.repository.FlightRepository;
 import com.flightmanagement.flightservice.validator.FlightValidator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.data.web.SpringDataWebProperties;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.flightmanagement.flightservice.dto.response.stats.FlightChartDataDto;
 import com.flightmanagement.flightservice.dto.response.stats.FlightTypeDistributionDto;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.stream.Stream;
 import java.util.Map;
 import java.util.HashMap;
+import com.flightmanagement.flightservice.dto.request.ConnectingFlightRequest;
+import com.flightmanagement.flightservice.dto.request.FlightSegmentRequest;
+import com.flightmanagement.flightservice.entity.FlightConnection;
+import com.flightmanagement.flightservice.repository.FlightConnectionRepository;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -41,6 +49,7 @@ public class FlightService {
     private final ReferenceDataService referenceDataService;
     private final KafkaProducerService kafkaProducerService;
     private final WebSocketMessageService webSocketMessageService;
+    private final FlightConnectionRepository flightConnectionRepository;
 
     public List<FlightResponse> getAllFlights() {
         log.debug("Fetching all flights");
@@ -219,6 +228,206 @@ public class FlightService {
         return flightRepository.countFlightsByStatusAndDate(status, date);
     }
 
+// Yeni metodlar
+
+    /**
+     * Aktarmalı uçuş oluşturur
+     */
+    @Transactional
+    public FlightResponse createConnectingFlight(ConnectingFlightRequest request) {
+        log.info("Creating connecting flight: {}", request.getMainFlightNumber());
+
+        // Ana uçuş oluştur (virtual flight - sadece takip için)
+        Flight mainFlight = createMainFlight(request);
+        Flight savedMainFlight = flightRepository.save(mainFlight);
+
+        // Segment uçuşları oluştur
+        List<Flight> segments = new ArrayList<>();
+        for (int i = 0; i < request.getSegments().size(); i++) {
+            FlightSegmentRequest segmentRequest = request.getSegments().get(i);
+            Flight segment = createSegmentFlight(savedMainFlight, segmentRequest, i + 1);
+            Flight savedSegment = flightRepository.save(segment);
+            segments.add(savedSegment);
+
+            // FlightConnection kaydı oluştur
+            FlightConnection connection = new FlightConnection();
+            connection.setMainFlightId(savedMainFlight.getId());
+            connection.setSegmentFlightId(savedSegment.getId());
+            connection.setSegmentOrder(i + 1);
+            connection.setConnectionTimeMinutes(segmentRequest.getConnectionTimeMinutes());
+            flightConnectionRepository.save(connection);
+        }
+
+        // Response oluştur
+        FlightResponse response = mapToResponse(savedMainFlight); // Mevcut metod kullanıldı
+        response.setConnectingFlights(segments.stream()
+                .map(this::mapToResponse) // this::mapToResponse kullanıldı
+                .collect(Collectors.toList()));
+        response.setTotalSegments(segments.size());
+        response.setFullRoute(buildFullRoute(segments));
+
+        // Kafka event gönder
+        kafkaProducerService.sendFlightEvent("CONNECTING_FLIGHT_CREATED", savedMainFlight);
+
+        log.info("Connecting flight created successfully: {}", savedMainFlight.getId());
+        return response;
+    }
+
+    /**
+     * Ana uçuş için tüm segment'leri getirir
+     */
+    public List<FlightResponse> getConnectingFlights(Long mainFlightId) {
+        log.info("Getting connecting flights for main flight: {}", mainFlightId);
+
+        List<Flight> segments = flightRepository.findByParentFlightIdOrderBySegmentNumber(mainFlightId);
+        return segments.stream()
+                .map(this::mapToResponse) // Mevcut mapToResponse metodunu kullan
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Aktarmalı uçuş detayını getirir
+     */
+    public FlightResponse getConnectingFlightDetails(Long mainFlightId) {
+        log.info("Getting connecting flight details: {}", mainFlightId);
+
+        Flight mainFlight = flightRepository.findById(mainFlightId)
+                .orElseThrow(() -> new ResourceNotFoundException("Flight not found with id: " + mainFlightId));
+
+        if (!mainFlight.getIsConnectingFlight()) {
+            throw new RuntimeException("Flight is not a connecting flight: " + mainFlightId); // InvalidRequestException yerine
+        }
+
+        List<FlightResponse> segments = getConnectingFlights(mainFlightId);
+
+        FlightResponse response = mapToResponse(mainFlight);
+        response.setConnectingFlights(segments);
+        response.setTotalSegments(segments.size());
+        response.setFullRoute(buildFullRouteFromResponses(segments)); // Yeni metod
+
+        return response;
+    }
+
+    /**
+     * Aktarmalı uçuş günceller
+     */
+    @Transactional
+    public FlightResponse updateConnectingFlight(Long mainFlightId, ConnectingFlightRequest request) {
+        log.info("Updating connecting flight: {}", mainFlightId);
+
+        Flight mainFlight = flightRepository.findById(mainFlightId)
+                .orElseThrow(() -> new ResourceNotFoundException("Flight not found with id: " + mainFlightId));
+
+        if (!mainFlight.getIsConnectingFlight()) {
+            throw new RuntimeException("Flight is not a connecting flight: " + mainFlightId);
+        }
+
+        // Mevcut segment'leri sil
+        List<FlightConnection> existingConnections = flightConnectionRepository.findByMainFlightIdOrderBySegmentOrder(mainFlightId);
+        existingConnections.forEach(connection -> {
+            flightRepository.deleteById(connection.getSegmentFlightId());
+            flightConnectionRepository.delete(connection);
+        });
+
+        // Ana uçuş bilgilerini güncelle
+        updateMainFlightFromRequest(mainFlight, request);
+        Flight savedMainFlight = flightRepository.save(mainFlight);
+
+        // Yeni segment'leri oluştur
+        List<Flight> newSegments = new ArrayList<>();
+        for (int i = 0; i < request.getSegments().size(); i++) {
+            FlightSegmentRequest segmentRequest = request.getSegments().get(i);
+            Flight segment = createSegmentFlight(savedMainFlight, segmentRequest, i + 1);
+            Flight savedSegment = flightRepository.save(segment);
+            newSegments.add(savedSegment);
+
+            FlightConnection connection = new FlightConnection();
+            connection.setMainFlightId(savedMainFlight.getId());
+            connection.setSegmentFlightId(savedSegment.getId());
+            connection.setSegmentOrder(i + 1);
+            connection.setConnectionTimeMinutes(segmentRequest.getConnectionTimeMinutes());
+            flightConnectionRepository.save(connection);
+        }
+
+        // Response oluştur
+        FlightResponse response = mapToResponse(savedMainFlight);
+        response.setConnectingFlights(newSegments.stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList()));
+        response.setTotalSegments(newSegments.size());
+        response.setFullRoute(buildFullRoute(newSegments));
+
+        // Kafka event gönder
+        kafkaProducerService.sendFlightEvent("CONNECTING_FLIGHT_UPDATED", savedMainFlight);
+
+        log.info("Connecting flight updated successfully: {}", mainFlightId);
+        return response;
+    }
+
+    /**
+     * Aktarmalı uçuş siler
+     */
+    @Transactional
+    public void deleteConnectingFlight(Long mainFlightId) {
+        log.info("Deleting connecting flight: {}", mainFlightId);
+
+        Flight mainFlight = flightRepository.findById(mainFlightId)
+                .orElseThrow(() -> new ResourceNotFoundException("Flight not found with id: " + mainFlightId));
+
+        if (!mainFlight.getIsConnectingFlight()) {
+            throw new RuntimeException("Flight is not a connecting flight: " + mainFlightId);
+        }
+
+        // Segment'leri ve connection'ları sil
+        List<FlightConnection> connections = flightConnectionRepository.findByMainFlightIdOrderBySegmentOrder(mainFlightId);
+        connections.forEach(connection -> {
+            flightRepository.deleteById(connection.getSegmentFlightId());
+            flightConnectionRepository.delete(connection);
+        });
+
+        // Ana uçuşu sil
+        flightRepository.delete(mainFlight);
+
+        // Kafka event gönder
+        kafkaProducerService.sendFlightEvent("CONNECTING_FLIGHT_DELETED", mainFlight);
+
+        log.info("Connecting flight deleted successfully: {}", mainFlightId);
+    }
+
+
+    /**
+     * Filtreli aktarmalı uçuşları getirir
+     */
+    public Page<FlightResponse> getConnectingFlightsWithFilters(Pageable pageable, Long airlineId, LocalDate flightDate) {
+        log.info("Getting connecting flights with filters - airline: {}, date: {}", airlineId, flightDate);
+
+        // Specification kullanarak dinamik sorgular oluşturabiliriz
+        Page<Flight> flights;
+
+        if (airlineId != null && flightDate != null) {
+            flights = flightRepository.findByIsConnectingFlightTrueAndAirlineIdAndFlightDate(
+                    airlineId, flightDate, (SpringDataWebProperties.Pageable) pageable);
+        } else if (airlineId != null) {
+            flights = flightRepository.findByIsConnectingFlightTrueAndAirlineId(airlineId, (SpringDataWebProperties.Pageable) pageable);
+        } else if (flightDate != null) {
+            flights = flightRepository.findByIsConnectingFlightTrueAndFlightDate(flightDate, (SpringDataWebProperties.Pageable) pageable);
+        } else {
+            flights = flightRepository.findByIsConnectingFlightTrue((SpringDataWebProperties.Pageable) pageable);
+        }
+
+        return flights.map(flight -> {
+            FlightResponse response = mapToResponse(flight);
+
+            // Segment'leri ekle
+            List<FlightResponse> segments = getConnectingFlights(flight.getId());
+            response.setConnectingFlights(segments);
+            response.setTotalSegments(segments.size());
+            response.setFullRoute(buildFullRouteFromResponses(segments));
+
+            return response;
+        });
+    }
+
     private FlightResponse mapToResponse(Flight flight) {
         FlightResponse response = flightMapper.toResponse(flight);
 
@@ -332,5 +541,124 @@ public class FlightService {
         return results.stream()
                 .map(result -> new FlightTypeDistributionDto((FlightType) result[0], (long) result[1]))
                 .collect(Collectors.toList());
+    }
+
+    private Flight createMainFlight(ConnectingFlightRequest request) {
+        Flight mainFlight = new Flight();
+        mainFlight.setFlightNumber(request.getMainFlightNumber());
+        mainFlight.setAirlineId(request.getAirlineId());
+        mainFlight.setAircraftId(request.getAircraftId());
+        mainFlight.setType(request.getType());
+        mainFlight.setPassengerCount(request.getPassengerCount());
+        mainFlight.setCargoWeight(request.getCargoWeight());
+        mainFlight.setNotes(request.getNotes());
+        mainFlight.setActive(request.getActive());
+        mainFlight.setIsConnectingFlight(true);
+        mainFlight.setSegmentNumber(0); // Ana uçuş için 0
+
+        // İlk ve son segment'ten origin/destination alınacak
+        FlightSegmentRequest firstSegment = request.getSegments().get(0);
+        FlightSegmentRequest lastSegment = request.getSegments().get(request.getSegments().size() - 1);
+
+        mainFlight.setOriginAirportId(firstSegment.getOriginAirportId());
+        mainFlight.setDestinationAirportId(lastSegment.getDestinationAirportId());
+        mainFlight.setFlightDate(firstSegment.getScheduledDeparture().toLocalDate());
+        mainFlight.setScheduledDeparture(firstSegment.getScheduledDeparture());
+        mainFlight.setScheduledArrival(lastSegment.getScheduledArrival());
+
+        return mainFlight;
+    }
+
+    private Flight createSegmentFlight(Flight mainFlight, FlightSegmentRequest segmentRequest, int segmentNumber) {
+        Flight segment = new Flight();
+        segment.setFlightNumber(mainFlight.getFlightNumber() + "-" + segmentNumber); // TK123-1, TK123-2
+        segment.setAirlineId(mainFlight.getAirlineId());
+        segment.setAircraftId(mainFlight.getAircraftId());
+        segment.setOriginAirportId(segmentRequest.getOriginAirportId());
+        segment.setDestinationAirportId(segmentRequest.getDestinationAirportId());
+        segment.setFlightDate(segmentRequest.getScheduledDeparture().toLocalDate());
+        segment.setScheduledDeparture(segmentRequest.getScheduledDeparture());
+        segment.setScheduledArrival(segmentRequest.getScheduledArrival());
+        segment.setType(mainFlight.getType());
+        segment.setPassengerCount(mainFlight.getPassengerCount());
+        segment.setCargoWeight(mainFlight.getCargoWeight());
+        segment.setGateNumber(segmentRequest.getGateNumber());
+        segment.setNotes(segmentRequest.getNotes());
+        segment.setActive(mainFlight.getActive());
+
+        // Aktarmalı uçuş bilgileri
+        segment.setParentFlightId(mainFlight.getId());
+        segment.setSegmentNumber(segmentNumber);
+        segment.setIsConnectingFlight(false); // Segment'ler kendileri connecting değil
+        segment.setConnectionTimeMinutes(segmentRequest.getConnectionTimeMinutes());
+
+        return segment;
+    }
+
+    private void updateMainFlightFromRequest(Flight mainFlight, ConnectingFlightRequest request) {
+        mainFlight.setFlightNumber(request.getMainFlightNumber());
+        mainFlight.setAirlineId(request.getAirlineId());
+        mainFlight.setAircraftId(request.getAircraftId());
+        mainFlight.setType(request.getType());
+        mainFlight.setPassengerCount(request.getPassengerCount());
+        mainFlight.setCargoWeight(request.getCargoWeight());
+        mainFlight.setNotes(request.getNotes());
+        mainFlight.setActive(request.getActive());
+
+        // İlk ve son segment'ten origin/destination güncelle
+        FlightSegmentRequest firstSegment = request.getSegments().get(0);
+        FlightSegmentRequest lastSegment = request.getSegments().get(request.getSegments().size() - 1);
+
+        mainFlight.setOriginAirportId(firstSegment.getOriginAirportId());
+        mainFlight.setDestinationAirportId(lastSegment.getDestinationAirportId());
+        mainFlight.setScheduledDeparture(firstSegment.getScheduledDeparture());
+        mainFlight.setScheduledArrival(lastSegment.getScheduledArrival());
+    }
+
+    private String buildFullRoute(List<Flight> segments) {
+        if (segments.isEmpty()) return "";
+
+        StringBuilder route = new StringBuilder();
+
+        // İlk segment'in origin'i ekle
+        route.append(getAirportIataCodeFromId(segments.get(0).getOriginAirportId()));
+
+        // Tüm segment'lerin destination'larını ekle
+        for (Flight segment : segments) {
+            route.append(" → ").append(getAirportIataCodeFromId(segment.getDestinationAirportId()));
+        }
+
+        return route.toString();
+    }
+
+    private String buildFullRouteFromResponses(List<FlightResponse> segments) {
+        if (segments.isEmpty()) return "";
+
+        StringBuilder route = new StringBuilder();
+
+        // İlk segment'in origin'i ekle
+        if (segments.get(0).getOriginAirport() != null) {
+            route.append(segments.get(0).getOriginAirport().getIataCode());
+        }
+
+        // Tüm segment'lerin destination'larını ekle
+        for (FlightResponse segment : segments) {
+            if (segment.getDestinationAirport() != null) {
+                route.append(" → ").append(segment.getDestinationAirport().getIataCode());
+            }
+        }
+
+        return route.toString();
+    }
+
+    private String getAirportIataCodeFromId(Long airportId) {
+        // ReferenceDataService kullanarak airport bilgisini al
+        try {
+            AirportCache airport = referenceDataService.getAirport(airportId);
+            return airport.getIataCode();
+        } catch (Exception e) {
+            log.warn("Could not get airport IATA code for ID: {}", airportId);
+            return "XXX"; // Fallback
+        }
     }
 }

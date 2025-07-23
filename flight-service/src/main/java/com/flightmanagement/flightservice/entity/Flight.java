@@ -11,6 +11,8 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "flights")
@@ -81,11 +83,25 @@ public class Flight {
     @Column
     private Boolean active = true;      // Aktif/Pasif
 
+    @Column(name = "parent_flight_id")
+    private Long parentFlightId;
+
+    @Column(name = "segment_number", nullable = false)
+    private Integer segmentNumber = 1;
+
+    @Column(name = "is_connecting_flight", nullable = false)
+    private Boolean isConnectingFlight = false;
+
+    @Column(name = "connection_time_minutes")
+    private Integer connectionTimeMinutes;
+
     @CreationTimestamp
     private LocalDateTime createdAt;
 
     @UpdateTimestamp
     private LocalDateTime updatedAt;
+
+
 
     // Helper methods
     public boolean isDelayed() {
@@ -105,6 +121,16 @@ public class Flight {
         // Airline kodunu ekleyebiliriz ileride
         return flightNumber;
     }
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_flight_id", insertable = false, updatable = false)
+    private Flight parentFlight;
+
+    @OneToMany(mappedBy = "parentFlight", fetch = FetchType.LAZY)
+    private List<Flight> connectingFlights = new ArrayList<>();
+
+    @OneToMany(mappedBy = "mainFlight", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    private List<FlightConnection> flightConnections = new ArrayList<>();
 
     // Uçuş süresi hesaplama (dakika)
     public Integer getFlightDuration() {

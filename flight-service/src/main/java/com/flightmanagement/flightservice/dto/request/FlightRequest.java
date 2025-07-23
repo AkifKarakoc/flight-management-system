@@ -8,6 +8,7 @@ import lombok.Data;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 public class FlightRequest {
@@ -72,4 +73,19 @@ public class FlightRequest {
     private String delayReason;
 
     private Boolean active = true;
+
+    // Aktarmalı uçuş alanları
+    private Long parentFlightId;
+
+    @Min(value = 1, message = "Segment number must be at least 1")
+    private Integer segmentNumber = 1;
+
+    private Boolean isConnectingFlight = false;
+
+    @Min(value = 0, message = "Connection time cannot be negative")
+    @Max(value = 1440, message = "Connection time cannot exceed 24 hours (1440 minutes)")
+    private Integer connectionTimeMinutes;
+
+    // Aktarmalı uçuş segment'leri için liste
+    private List<FlightSegmentRequest> segments;
 }
