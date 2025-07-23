@@ -28,14 +28,27 @@ import apiService from '@/services/api.js'
 const props = defineProps({
   period: {
     type: String,
-    default: '7d',
-    validator: (value) => ['7d', '30d', '90d'].includes(value)
+    default: '7d'
   },
   height: {
-    type: String,
-    default: '300px'
+    type: Number,
+    default: 300
+  },
+  chartData: {
+    type: Object,
+    default: () => null
+  },
+  loading: {
+    type: Boolean,
+    default: false
   }
 })
+
+watch(() => props.chartData, (newData) => {
+  if (newData) {
+    updateChart(newData)
+  }
+}, { deep: true })
 
 const emit = defineEmits(['dataLoaded', 'error'])
 

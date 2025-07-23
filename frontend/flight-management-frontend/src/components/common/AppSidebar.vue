@@ -333,6 +333,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
 import { ElMessage } from 'element-plus'
+import apiService from '@/services/api'
 
 // Import icons
 import {
@@ -476,7 +477,6 @@ function showSystemStatus() {
 // Auto-refresh data
 async function refreshData() {
   try {
-    // Mock API calls - replace with real implementation
     await Promise.all([
       refreshReferenceStats(),
       refreshFlightStats(),
@@ -488,31 +488,52 @@ async function refreshData() {
 }
 
 async function refreshReferenceStats() {
-  // Mock implementation
-  referenceStats.value = {
-    airlines: Math.floor(Math.random() * 20) + 10,
-    airports: Math.floor(Math.random() * 50) + 200,
-    aircrafts: Math.floor(Math.random() * 20) + 40,
-    routes: Math.floor(Math.random() * 30) + 100,
-    crew: Math.floor(Math.random() * 50) + 150
+  try {
+    const [airlines, airports, aircrafts, routes] = await Promise.all([
+      apiService.getAirlines({ page: 0, size: 1 }),
+      apiService.getAirports({ page: 0, size: 1 }),
+      apiService.getAircrafts({ page: 0, size: 1 }),
+      apiService.getRoutes({ page: 0, size: 1 })
+    ])
+
+    referenceStats.value = {
+      airlines: airlines.totalElements || 0,
+      airports: airports.totalElements || 0,
+      aircrafts: aircrafts.totalElements || 0,
+      routes: routes.totalElements || 0,
+      crew: 0 // Crew endpoints henüz yok
+    }
+  } catch (error) {
+    console.error('Error fetching reference stats:', error)
   }
 }
 
 async function refreshFlightStats() {
-  // Mock implementation
-  flightStats.value = {
-    total: Math.floor(Math.random() * 500) + 1000,
-    active: Math.floor(Math.random() * 15) + 5,
-    delayed: Math.floor(Math.random() * 5),
-    cancelled: Math.floor(Math.random() * 3)
-  }
+  try {
+    const today = new Date().toISOString().split('T')[0]
+    const stats = await apiService.flight.get(`/api/v1/flights/stats/dashboard/${today}`)
 
-  flightAlerts.value = flightStats.value.delayed + flightStats.value.cancelled
+    flightStats.value = {
+      total: stats.data.totalFlights || 0,
+      active: stats.data.scheduled || 0,
+      delayed: stats.data.delayed || 0,
+      cancelled: stats.data.cancelled || 0
+    }
+
+    flightAlerts.value = flightStats.value.delayed + flightStats.value.cancelled
+  } catch (error) {
+    console.error('Error fetching flight stats:', error)
+  }
 }
 
 async function refreshSystemStatus() {
-  // Mock implementation
-  systemIssues.value = Math.floor(Math.random() * 3)
+  try {
+    const services = await apiService.checkSystemHealth()
+    systemIssues.value = services.filter(s => s.status === 'error').length
+  } catch (error) {
+    console.error('Error fetching system status:', error)
+    systemIssues.value = 1 // Assume error if can't check
+  }
 }
 
 // Auto-expand relevant submenu based on current route

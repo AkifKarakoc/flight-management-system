@@ -56,7 +56,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import {ref, reactive, computed, onMounted, onUnmounted, nextTick, watch} from 'vue'
 import * as echarts from 'echarts'
 import apiService from '@/services/api.js'
 
@@ -64,6 +64,14 @@ const props = defineProps({
   height: {
     type: String,
     default: '300px'
+  },
+  typeDistribution: {
+    type: Array,
+    default: () => []
+  },
+  loading: {
+    type: Boolean,
+    default: false
   },
   showLegend: {
     type: Boolean,
@@ -73,6 +81,16 @@ const props = defineProps({
     type: Number,
     default: 1000
   }
+})
+
+watch(() => props.typeDistribution, (newData) => {
+  if (newData && newData.length > 0) {
+    fetchChartData()
+  }
+}, { deep: true, immediate: true })
+
+watch(() => props.loading, (newLoading) => {
+  loading.value = newLoading
 })
 
 const emit = defineEmits(['dataLoaded', 'error', 'chartClick'])
@@ -200,8 +218,10 @@ const fetchChartData = async () => {
   error.value = false
 
   try {
-    // Gerçek backend'den veri çek
-    const data = await apiService.getFlightTypeDistribution()
+    // Props'tan veri geliyorsa onu kullan, yoksa API'den çek
+    const data = props.typeDistribution?.length > 0
+      ? props.typeDistribution
+      : await apiService.getFlightTypeDistribution()
 
     // Transform data for chart
     chartData.length = 0 // Clear existing data

@@ -66,16 +66,6 @@ public class FlightStatsController {
         return ResponseEntity.ok(response);
     }
 
-    @GetMapping("/dashboard/{date}")
-    public ResponseEntity<Map<String, Object>> getDashboardStats(
-            @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
-        // Bu metot, getDailySummary ile neredeyse aynı işi yapıyor.
-        // Kod tekrarını önlemek için onu çağırabiliriz.
-        return ResponseEntity.ok(flightService.getDailySummary(date));
-    }
-
-    // --- YENİ EKLENEN METOTLAR ---
-
     @GetMapping("/summary/{date}")
     public ResponseEntity<Map<String, Object>> getDailySummary(
             @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {

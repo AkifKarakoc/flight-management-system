@@ -132,7 +132,9 @@
               <FlightChart
                 ref="flightChartRef"
                 :period="chartPeriod"
-                @dataLoaded="onFlightChartDataLoaded"
+                :height="300"
+                :chart-data="dashboardData.chartData"
+                :loading="loading"
               />
             </div>
           </div>
@@ -152,8 +154,9 @@
             <div class="chart-content">
               <FlightTypeChart
                 ref="flightTypeChartRef"
-                @dataLoaded="onFlightTypeChartDataLoaded"
-                @chartClick="onFlightTypeClick"
+                :height="300"
+                :type-distribution="dashboardData.typeDistribution"
+                :loading="loading"
               />
             </div>
           </div>
@@ -169,27 +172,38 @@
             <div class="card-header">
               <h3>Son Uçuşlar</h3>
               <div class="activity-controls">
-                <el-badge :value="realtimeUpdates" :hidden="realtimeUpdates === 0" type="success">
-                  <el-button
-                    size="small"
-                    :type="autoRefresh ? 'primary' : ''"
-                    @click="toggleAutoRefresh"
-                    :icon="autoRefresh ? VideoPause : VideoPlay"
-                  >
-                    {{ autoRefresh ? 'Durdur' : 'Başlat' }}
-                  </el-button>
-                </el-badge>
-                <el-link type="primary" @click="$router.push('/flights')">
-                  Tümünü Gör
-                </el-link>
+                <el-button size="small" text @click="refreshRecentFlights">
+                  <el-icon><Refresh /></el-icon>
+                </el-button>
               </div>
             </div>
             <div class="activity-content">
-              <RecentFlightsTable
-                :limit="5"
-                :realtime="autoRefresh"
-                @flightUpdate="onFlightUpdate"
-              />
+              <el-scrollbar max-height="300px">
+                <div v-if="dashboardData.recentFlights?.length > 0">
+                  <div
+                    v-for="flight in dashboardData.recentFlights"
+                    :key="flight.id"
+                    class="flight-item"
+                  >
+                    <div class="flight-info">
+                      <span class="flight-number">{{ flight.flightNumber }}</span>
+                      <span class="flight-route">{{ flight.origin }} → {{ flight.destination }}</span>
+                    </div>
+                    <div class="flight-details">
+                      <span class="flight-time">{{ formatTime(flight.scheduledDeparture) }}</span>
+                      <el-tag
+                        :type="getStatusType(flight.status)"
+                        size="small"
+                      >
+                        {{ flight.status }}
+                      </el-tag>
+                    </div>
+                  </div>
+                </div>
+                <div v-else class="no-data">
+                  <el-empty description="Henüz uçuş verisi yok" />
+                </div>
+              </el-scrollbar>
             </div>
           </div>
         </el-col>
@@ -380,28 +394,32 @@ const connectionStatus = computed(() => {
 })
 
 // Methods
+// fetchKpis() fonksiyonuna chart verilerini de ekle:
 const fetchKpis = async () => {
   loading.value = true
   try {
-    // Gerçek backend'den veri çek
+    // KPI'ları çek
     const data = await apiService.getDashboardKpis()
 
-    // Calculate trends
-    Object.keys(data).forEach(key => {
-      const oldValue = kpis[key]
-      const newValue = data[key]
-      const diff = newValue - oldValue
+    // Chart verilerini çek
+    const [chartData, typeDistribution, recentFlights] = await Promise.all([
+      apiService.getFlightChartData(chartPeriod.value),
+      apiService.getFlightTypeDistribution(),
+      apiService.getRecentFlights(5)
+    ])
 
-      kpiTrends[key] = Math.abs(diff)
-      kpiTrends[`${key}Type`] = diff >= 0 ? 'up' : 'down'
-    })
-
+    // KPI'ları güncelle
     Object.assign(kpis, data)
     dashboardData.kpis = { ...kpis }
 
+    // Dashboard'a diğer verileri de ekle
+    dashboardData.recentFlights = recentFlights
+    dashboardData.chartData = chartData
+    dashboardData.typeDistribution = typeDistribution
+
   } catch (error) {
-    console.error('Error fetching KPIs:', error)
-    ElMessage.error('KPI verileri yüklenirken hata oluştu')
+    console.error('Error fetching dashboard data:', error)
+    ElMessage.error('Dashboard verileri yüklenirken hata oluştu')
   } finally {
     loading.value = false
   }
@@ -450,6 +468,34 @@ const formatLastUpdate = (date) => {
     minute: '2-digit',
     second: '2-digit'
   })
+}
+
+// Bu fonksiyonları ekle:
+const formatTime = (dateString) => {
+  return new Date(dateString).toLocaleTimeString('tr-TR', {
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+const getStatusType = (status) => {
+  switch (status) {
+    case 'SCHEDULED': return ''
+    case 'DEPARTED': return 'success'
+    case 'ARRIVED': return 'success'
+    case 'DELAYED': return 'warning'
+    case 'CANCELLED': return 'danger'
+    default: return 'info'
+  }
+}
+
+const refreshRecentFlights = async () => {
+  try {
+    const recentFlights = await apiService.getRecentFlights(5)
+    dashboardData.recentFlights = recentFlights
+  } catch (error) {
+    ElMessage.error('Son uçuşlar güncellenirken hata oluştu')
+  }
 }
 
 // WebSocket methods
