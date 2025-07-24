@@ -1,0 +1,58 @@
+databaseChangeLog:
+  - changeSet:
+      id: 002-add-connection-time-minutes
+      author: system
+      comment: "Add connection_time_minutes column to flights table"
+      changes:
+        - addColumn:
+            tableName: flights
+            columns:
+              - column:
+                  name: connection_time_minutes
+                  type: INTEGER
+                  constraints:
+                    nullable: true
+
+  - changeSet:
+      id: 002-add-missing-flight-columns
+      author: system
+      comment: "Add other missing columns to flights table"
+      changes:
+        - addColumn:
+            tableName: flights
+            columns:
+              - column:
+                  name: parent_flight_id
+                  type: BIGINT
+                  constraints:
+                    nullable: true
+              - column:
+                  name: segment_number
+                  type: INTEGER
+                  defaultValue: 1
+                  constraints:
+                    nullable: false
+              - column:
+                  name: is_connecting_flight
+                  type: BOOLEAN
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+
+  - changeSet:
+      id: 002-add-connecting-flight-indexes
+      author: system
+      comment: "Add indexes for connecting flight queries"
+      changes:
+        - createIndex:
+            tableName: flights
+            indexName: idx_flights_parent_flight
+            columns:
+              - column:
+                  name: parent_flight_id
+        - createIndex:
+            tableName: flights
+            indexName: idx_flights_connecting
+            columns:
+              - column:
+                  name: is_connecting_flight

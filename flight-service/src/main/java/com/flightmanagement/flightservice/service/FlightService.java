@@ -378,21 +378,6 @@ public class FlightService {
         return stats;
     }
 
-    public List<FlightChartDataDto> getFlightChartData(LocalDate startDate, LocalDate endDate) {
-        log.debug("Fetching flight chart data from {} to {}", startDate, endDate);
-
-        List<FlightChartDataDto> chartData = new ArrayList<>();
-        LocalDate currentDate = startDate;
-
-        while (!currentDate.isAfter(endDate)) {
-            long count = flightRepository.countFlightsByDate(currentDate);
-            chartData.add(new FlightChartDataDto(currentDate, count));
-            currentDate = currentDate.plusDays(1);
-        }
-
-        return chartData;
-    }
-
     public List<FlightTypeDistributionDto> getFlightTypeDistribution() {
         log.debug("Fetching flight type distribution");
         List<Object[]> results = flightRepository.countFlightsGroupedByType();
@@ -832,5 +817,102 @@ public class FlightService {
         }
 
         return route.toString();
+    }
+
+    // ===============================
+    // STATISTICS METHODS
+    // ===============================
+
+    /**
+     * Belirtilen tarihte toplam uçuş sayısını getirir
+     */
+    public Long getFlightCountByDate(LocalDate date) {
+        log.debug("Getting flight count for date: {}", date);
+        return flightRepository.countFlightsByDate(date);
+    }
+
+    /**
+     * Belirtilen havayolu ve tarihte uçuş sayısını getirir
+     */
+    public Long getFlightCountByAirlineAndDate(Long airlineId, LocalDate date) {
+        log.debug("Getting flight count for airline {} and date: {}", airlineId, date);
+        return flightRepository.countFlightsByAirlineAndDate(airlineId, date);
+    }
+
+    /**
+     * Belirtilen durum ve tarihte uçuş sayısını getirir
+     */
+    public Long getFlightCountByStatus(FlightStatus status, LocalDate date) {
+        log.debug("Getting flight count for status {} and date: {}", status, date);
+        return flightRepository.countFlightsByStatusAndDate(status, date);
+    }
+
+    /**
+     * Günlük özet istatistikleri getirir
+     */
+    public Map<String, Object> getDailySummary(LocalDate date) {
+        log.debug("Getting daily summary for date: {}", date);
+        return calculateDailyStats(date);
+    }
+
+    /**
+     * Chart verisi için uçuş sayılarını getirir
+     */
+    public FlightChartDataDto getFlightChartData(LocalDate startDate, LocalDate endDate) {
+        log.debug("Fetching flight chart data from {} to {}", startDate, endDate);
+
+        FlightChartDataDto chartData = new FlightChartDataDto();
+        LocalDate currentDate = startDate;
+
+        while (!currentDate.isAfter(endDate)) {
+            // Her status için count'ları al
+            long scheduledCount = flightRepository.countFlightsByStatusAndDate(FlightStatus.SCHEDULED, currentDate);
+            long departedCount = flightRepository.countFlightsByStatusAndDate(FlightStatus.DEPARTED, currentDate);
+            long arrivedCount = flightRepository.countFlightsByStatusAndDate(FlightStatus.ARRIVED, currentDate);
+            long cancelledCount = flightRepository.countFlightsByStatusAndDate(FlightStatus.CANCELLED, currentDate);
+            long delayedCount = flightRepository.countFlightsByStatusAndDate(FlightStatus.DELAYED, currentDate);
+
+            chartData.addDataPoint(currentDate, scheduledCount, departedCount, arrivedCount, cancelledCount, delayedCount);
+            currentDate = currentDate.plusDays(1);
+        }
+
+        return chartData;
+    }
+
+    /**
+     * Günlük istatistikleri hesaplar
+     */
+    private Map<String, Object> calculateDailyStats(LocalDate date) {
+        log.debug("Calculating daily stats for date: {}", date);
+
+        Map<String, Object> stats = new HashMap<>();
+
+        // Temel sayılar
+        long totalFlights = flightRepository.countFlightsByDate(date);
+        long scheduledFlights = flightRepository.countFlightsByDateAndStatus(date, FlightStatus.SCHEDULED);
+        long departedFlights = flightRepository.countFlightsByDateAndStatus(date, FlightStatus.DEPARTED);
+        long arrivedFlights = flightRepository.countFlightsByDateAndStatus(date, FlightStatus.ARRIVED);
+        long delayedFlights = flightRepository.countFlightsByDateAndStatus(date, FlightStatus.DELAYED);
+        long cancelledFlights = flightRepository.countFlightsByDateAndStatus(date, FlightStatus.CANCELLED);
+
+        stats.put("totalFlights", totalFlights);
+        stats.put("scheduledFlights", scheduledFlights);
+        stats.put("departedFlights", departedFlights);
+        stats.put("arrivedFlights", arrivedFlights);
+        stats.put("delayedFlights", delayedFlights);
+        stats.put("cancelledFlights", cancelledFlights);
+
+        // Yüzdelik hesaplamalar
+        if (totalFlights > 0) {
+            stats.put("onTimePerformance", (double) (arrivedFlights - delayedFlights) / totalFlights * 100);
+            stats.put("cancellationRate", (double) cancelledFlights / totalFlights * 100);
+            stats.put("delayRate", (double) delayedFlights / totalFlights * 100);
+        } else {
+            stats.put("onTimePerformance", 0.0);
+            stats.put("cancellationRate", 0.0);
+            stats.put("delayRate", 0.0);
+        }
+
+        return stats;
     }
 }

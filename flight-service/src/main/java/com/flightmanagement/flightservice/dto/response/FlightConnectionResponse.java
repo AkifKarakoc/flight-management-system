@@ -13,6 +13,12 @@ public class FlightConnectionResponse {
     private Integer segmentOrder;
     private Integer connectionTimeMinutes;
 
+    // Mapper'da kullanılan field'lar
+    private String mainFlightNumber;
+    private String segmentFlightNumber;
+    private String originAirportCode;
+    private String destinationAirportCode;
+
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm")
     private LocalDateTime createdAt;
 

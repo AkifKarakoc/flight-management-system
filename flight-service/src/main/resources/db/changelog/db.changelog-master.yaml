@@ -5,3 +5,6 @@ databaseChangeLog:
   - include:
       file: changes/001-flight-route-migration.yaml
       relativeToChangelogFile: true
+  - include:
+      file: changes/002-add-missing-columns.yaml
+      relativeToChangelogFile: true
