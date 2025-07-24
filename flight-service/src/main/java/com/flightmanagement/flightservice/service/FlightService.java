@@ -171,7 +171,9 @@ public class FlightService {
         kafkaProducerService.sendFlightEvent("FLIGHT_CREATED", flight);
 
         // WebSocket notification
-        webSocketMessageService.sendFlightUpdate("CREATE", buildFlightResponse(flight), null);
+        FlightResponse response = buildFlightResponse(flight);
+        webSocketMessageService.sendFlightUpdate("CREATE", response, flight.getId(), flight.getFlightNumber());
+
 
         return buildFlightResponse(flight);
     }
@@ -197,7 +199,9 @@ public class FlightService {
         kafkaProducerService.sendFlightEvent("FLIGHT_UPDATED", updatedFlight);
 
         FlightResponse newResponse = buildFlightResponse(updatedFlight);
-        webSocketMessageService.sendFlightUpdate("UPDATE", newResponse, oldResponse);
+        webSocketMessageService.sendFlightUpdate("UPDATE", newResponse, updatedFlight.getId(), updatedFlight.getFlightNumber());
+
+
 
         return newResponse;
     }
@@ -231,7 +235,8 @@ public class FlightService {
         kafkaProducerService.sendFlightEvent("FLIGHT_STATUS_CHANGED", flight);
 
         FlightResponse response = buildFlightResponse(flight);
-        webSocketMessageService.sendFlightUpdate("STATUS_CHANGE", response, null);
+        webSocketMessageService.sendFlightUpdate("STATUS_CHANGE", response, flight.getId(), flight.getFlightNumber());
+
 
         return response;
     }
@@ -258,7 +263,8 @@ public class FlightService {
         kafkaProducerService.sendFlightEvent("FLIGHT_DELAYED", flight);
 
         FlightResponse response = buildFlightResponse(flight);
-        webSocketMessageService.sendFlightUpdate("DELAY", response, null);
+        webSocketMessageService.sendFlightUpdate("DELAY", response, flight.getId(), flight.getFlightNumber());
+
 
         return response;
     }
@@ -278,7 +284,8 @@ public class FlightService {
         flightRepository.delete(flight);
 
         kafkaProducerService.sendFlightEvent("FLIGHT_DELETED", flight);
-        webSocketMessageService.sendFlightUpdate("DELETE", null, id);
+        webSocketMessageService.sendFlightUpdate("DELETE", null, id, flight.getFlightNumber());
+
     }
 
     // ===============================

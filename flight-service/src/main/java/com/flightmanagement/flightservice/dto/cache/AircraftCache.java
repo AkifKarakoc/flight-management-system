@@ -39,4 +39,9 @@ public class AircraftCache implements Serializable {
             }
         }
     }
+
+    // FlightValidator için backward compatibility
+    public Integer getPassengerCapacity() {
+        return this.seatCapacity;
+    }
 }
