@@ -50,11 +50,4 @@ public class Airport {
 
     @UpdateTimestamp
     private LocalDateTime updatedAt;
-
-    // Relationships
-    @OneToMany(mappedBy = "originAirport")
-    private List<Route> originRoutes = new ArrayList<>();
-
-    @OneToMany(mappedBy = "destinationAirport")
-    private List<Route> destinationRoutes = new ArrayList<>();
 }

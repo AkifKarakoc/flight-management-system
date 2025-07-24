@@ -13,13 +13,6 @@ import java.util.Optional;
 @Repository
 public interface RouteRepository extends JpaRepository<Route, Long> {
 
-    // Mevcut methodlar (backward compatibility için)
-    List<Route> findByOriginAirportId(Long originAirportId);
-    List<Route> findByDestinationAirportId(Long destinationAirportId);
-    Optional<Route> findByOriginAirportIdAndDestinationAirportId(Long originId, Long destinationId);
-    long countByOriginAirportId(Long originAirportId);
-    long countByDestinationAirportId(Long destinationAirportId);
-
     // User-specific methodlar
     List<Route> findByCreatedByUserId(Long userId);
 

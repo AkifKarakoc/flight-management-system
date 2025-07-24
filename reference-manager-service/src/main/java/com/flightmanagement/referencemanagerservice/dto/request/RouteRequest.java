@@ -22,11 +22,6 @@ public class RouteRequest {
     @Size(max = 200, message = "Route name cannot exceed 200 characters")
     private String routeName;
 
-    // Basit route için (tek segment - backward compatibility)
-    private Long originAirportId;
-
-    private Long destinationAirportId;
-
     @Positive(message = "Distance must be positive")
     private Integer distance;
 
@@ -46,21 +41,6 @@ public class RouteRequest {
 
     private Long airlineId;
 
-    // Multi-segment route için
-    private Boolean isMultiSegment = false;
-
     @Valid
     private List<RouteSegmentRequest> segments;
-
-    // Validation helper methods
-    public boolean isSimpleRoute() {
-        return !Boolean.TRUE.equals(isMultiSegment) &&
-                (segments == null || segments.isEmpty()) &&
-                originAirportId != null && destinationAirportId != null;
-    }
-
-    public boolean isMultiSegmentRoute() {
-        return Boolean.TRUE.equals(isMultiSegment) &&
-                segments != null && segments.size() > 1;
-    }
 }

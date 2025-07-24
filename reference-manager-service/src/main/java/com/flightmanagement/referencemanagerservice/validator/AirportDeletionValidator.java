@@ -4,6 +4,7 @@ import com.flightmanagement.referencemanagerservice.dto.response.DeletionCheckRe
 import com.flightmanagement.referencemanagerservice.exception.BusinessException;
 import com.flightmanagement.referencemanagerservice.repository.CrewMemberRepository;
 import com.flightmanagement.referencemanagerservice.repository.RouteRepository;
+import com.flightmanagement.referencemanagerservice.repository.RouteSegmentRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -18,6 +19,7 @@ public class AirportDeletionValidator {
 
     private final RouteRepository routeRepository;
     private final CrewMemberRepository crewMemberRepository;
+    private final RouteSegmentRepository routeSegmentRepository;
 
     public void validateDeletion(Long airportId) throws BusinessException {
         DeletionCheckResult result = checkDependencies(airportId);
@@ -34,10 +36,7 @@ public class AirportDeletionValidator {
         Map<String, Integer> dependentEntities = new HashMap<>();
 
         // Route kontrolü (origin veya destination olarak kullanılıyor mu?)
-        long originRouteCount = routeRepository.countByOriginAirportId(airportId);
-        long destRouteCount = routeRepository.countByDestinationAirportId(airportId);
-        long totalRoutes = originRouteCount + destRouteCount;
-
+        long totalRoutes = routeSegmentRepository.countByAirportId(airportId);
         if (totalRoutes > 0) {
             blockers.add(String.format("%d active route(s)", totalRoutes));
             dependentEntities.put("routes", (int) totalRoutes);

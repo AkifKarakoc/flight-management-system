@@ -112,44 +112,32 @@ public class RouteService {
         route.setCreatedByUserId(currentUserId);
         route.setVisibility(request.getVisibility());
         route.setAirlineId(request.getAirlineId());
-        route.setIsMultiSegment(request.getIsMultiSegment());
 
-        if (request.isSimpleRoute()) {
-            // Basit route (tek segment)
-            createSimpleRoute(route, request);
-        } else if (request.isMultiSegmentRoute()) {
-            // Multi-segment route
-            createMultiSegmentRoute(route, request);
-        } else {
-            throw new BusinessException("Route must be either simple or multi-segment");
+        // Segmentler üzerinden güzergah oluştur
+        createRouteSegments(route, request.getSegments());
+
+        // Toplam mesafe ve süreyi hesapla
+        int totalDistance = 0;
+        int totalTime = 0;
+        for (RouteSegment segment : route.getSegments()) {
+            if (segment.getDistance() != null) totalDistance += segment.getDistance();
+            if (segment.getEstimatedFlightTime() != null) totalTime += segment.getEstimatedFlightTime();
         }
+        route.setDistance(totalDistance);
+        route.setEstimatedFlightTime(totalTime);
 
         route = routeRepository.save(route);
-
         kafkaProducerService.sendRouteEvent("ROUTE_CREATED", route);
-
         return routeMapper.toResponse(route);
     }
 
     public RouteResponse updateRoute(Long id, RouteRequest request, Long currentUserId, boolean isAdmin) {
         log.debug("Updating route with id: {} by user: {}", id, currentUserId);
-
         Route route = routeRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Route not found with id: " + id));
-
-        // Ownership kontrolü (admin her şeyi güncelleyebilir)
         if (!isAdmin && !route.getCreatedByUserId().equals(currentUserId)) {
             throw new BusinessException("You can only update your own routes");
         }
-
-        validateRouteRequest(request);
-
-        // Route code değişirse unique kontrolü
-        if (!route.getRouteCode().equals(request.getRouteCode()) &&
-                routeRepository.existsByRouteCode(request.getRouteCode())) {
-            throw new DuplicateResourceException("Route with code '" + request.getRouteCode() + "' already exists");
-        }
-
         // Temel bilgileri güncelle
         route.setRouteCode(request.getRouteCode());
         route.setRouteName(request.getRouteName());
@@ -157,33 +145,21 @@ public class RouteService {
         route.setActive(request.getActive());
         route.setVisibility(request.getVisibility());
         route.setAirlineId(request.getAirlineId());
-
-        // Route tipi değişirse segment'leri güncelle
-        if (!route.getIsMultiSegment().equals(request.getIsMultiSegment())) {
-            // Mevcut segment'leri temizle
-            routeSegmentRepository.deleteByRouteId(route.getId());
-            route.getSegments().clear();
-
-            route.setIsMultiSegment(request.getIsMultiSegment());
-
-            if (request.isSimpleRoute()) {
-                updateSimpleRoute(route, request);
-            } else if (request.isMultiSegmentRoute()) {
-                updateMultiSegmentRoute(route, request);
-            }
-        } else {
-            // Aynı tip, sadece detayları güncelle
-            if (request.isSimpleRoute()) {
-                updateSimpleRoute(route, request);
-            } else if (request.isMultiSegmentRoute()) {
-                updateMultiSegmentRoute(route, request);
-            }
+        // Segmentleri güncelle
+        routeSegmentRepository.deleteByRouteId(route.getId());
+        route.getSegments().clear();
+        createRouteSegments(route, request.getSegments());
+        // Toplam mesafe ve süreyi hesapla
+        int totalDistance = 0;
+        int totalTime = 0;
+        for (RouteSegment segment : route.getSegments()) {
+            if (segment.getDistance() != null) totalDistance += segment.getDistance();
+            if (segment.getEstimatedFlightTime() != null) totalTime += segment.getEstimatedFlightTime();
         }
-
+        route.setDistance(totalDistance);
+        route.setEstimatedFlightTime(totalTime);
         route = routeRepository.save(route);
-
         kafkaProducerService.sendRouteEvent("ROUTE_UPDATED", route);
-
         return routeMapper.toResponse(route);
     }
 
@@ -229,107 +205,29 @@ public class RouteService {
 
     // Private helper methods
     private void validateRouteRequest(RouteRequest request) {
-        if (request.isSimpleRoute()) {
-            validateSimpleRoute(request);
-        } else if (request.isMultiSegmentRoute()) {
-            validateMultiSegmentRoute(request);
-        } else {
-            throw new BusinessException("Invalid route configuration");
+        if (request.getSegments() == null || request.getSegments().size() < 1) {
+            throw new BusinessException("Route must have at least 1 segment");
         }
+        // Segmentlerin sıralı ve tutarlı olup olmadığını kontrol et (isteğe bağlı)
     }
 
-    private void validateSimpleRoute(RouteRequest request) {
-        if (request.getOriginAirportId() == null || request.getDestinationAirportId() == null) {
-            throw new BusinessException("Origin and destination airports are required for simple route");
-        }
-
-        if (request.getOriginAirportId().equals(request.getDestinationAirportId())) {
-            throw new BusinessException("Origin and destination airports cannot be the same");
-        }
-    }
-
-    private void validateMultiSegmentRoute(RouteRequest request) {
-        if (request.getSegments() == null || request.getSegments().size() < 2) {
-            throw new BusinessException("Multi-segment route must have at least 2 segments");
-        }
-
-        // Segment'lerin bağlantısını kontrol et
-        for (int i = 0; i < request.getSegments().size() - 1; i++) {
-            RouteSegmentRequest current = request.getSegments().get(i);
-            RouteSegmentRequest next = request.getSegments().get(i + 1);
-
-            if (!current.getDestinationAirportId().equals(next.getOriginAirportId())) {
-                throw new BusinessException("Segment " + (i + 1) + " destination must match segment " + (i + 2) + " origin");
-            }
-        }
-    }
-
-    private void createSimpleRoute(Route route, RouteRequest request) {
-        Airport originAirport = airportRepository.findById(request.getOriginAirportId())
-                .orElseThrow(() -> new ResourceNotFoundException("Origin airport not found"));
-
-        Airport destinationAirport = airportRepository.findById(request.getDestinationAirportId())
-                .orElseThrow(() -> new ResourceNotFoundException("Destination airport not found"));
-
-        route.setOriginAirport(originAirport);
-        route.setDestinationAirport(destinationAirport);
-        route.setDistance(request.getDistance());
-        route.setEstimatedFlightTime(request.getEstimatedFlightTime());
-    }
-
-    private void createMultiSegmentRoute(Route route, RouteRequest request) {
-        int totalDistance = 0;
-        int totalTime = 0;
-
-        for (RouteSegmentRequest segmentRequest : request.getSegments()) {
-            RouteSegment segment = createRouteSegment(route, segmentRequest);
+    private void createRouteSegments(Route route, List<RouteSegmentRequest> segmentRequests) {
+        int order = 1;
+        for (RouteSegmentRequest segmentRequest : segmentRequests) {
+            Airport originAirport = airportRepository.findById(segmentRequest.getOriginAirportId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Origin airport not found for segment"));
+            Airport destinationAirport = airportRepository.findById(segmentRequest.getDestinationAirportId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Destination airport not found for segment"));
+            RouteSegment segment = new RouteSegment();
+            segment.setRoute(route);
+            segment.setSegmentOrder(order++);
+            segment.setOriginAirport(originAirport);
+            segment.setDestinationAirport(destinationAirport);
+            segment.setDistance(segmentRequest.getDistance());
+            segment.setEstimatedFlightTime(segmentRequest.getEstimatedFlightTime());
+            segment.setActive(segmentRequest.getActive());
             route.addSegment(segment);
-
-            if (segment.getDistance() != null) totalDistance += segment.getDistance();
-            if (segment.getEstimatedFlightTime() != null) totalTime += segment.getEstimatedFlightTime();
         }
-
-        route.setDistance(totalDistance);
-        route.setEstimatedFlightTime(totalTime);
-
-        // İlk ve son segment'ten origin/destination belirle
-        RouteSegmentRequest firstSegment = request.getSegments().get(0);
-        RouteSegmentRequest lastSegment = request.getSegments().get(request.getSegments().size() - 1);
-
-        route.setOriginAirport(airportRepository.findById(firstSegment.getOriginAirportId()).orElse(null));
-        route.setDestinationAirport(airportRepository.findById(lastSegment.getDestinationAirportId()).orElse(null));
-    }
-
-    private void updateSimpleRoute(Route route, RouteRequest request) {
-        createSimpleRoute(route, request);
-    }
-
-    private void updateMultiSegmentRoute(Route route, RouteRequest request) {
-        // Mevcut segment'leri temizle
-        routeSegmentRepository.deleteByRouteId(route.getId());
-        route.getSegments().clear();
-
-        // Yeni segment'leri oluştur
-        createMultiSegmentRoute(route, request);
-    }
-
-    private RouteSegment createRouteSegment(Route route, RouteSegmentRequest request) {
-        Airport originAirport = airportRepository.findById(request.getOriginAirportId())
-                .orElseThrow(() -> new ResourceNotFoundException("Origin airport not found for segment"));
-
-        Airport destinationAirport = airportRepository.findById(request.getDestinationAirportId())
-                .orElseThrow(() -> new ResourceNotFoundException("Destination airport not found for segment"));
-
-        RouteSegment segment = new RouteSegment();
-        segment.setRoute(route);
-        segment.setSegmentOrder(request.getSegmentOrder());
-        segment.setOriginAirport(originAirport);
-        segment.setDestinationAirport(destinationAirport);
-        segment.setDistance(request.getDistance());
-        segment.setEstimatedFlightTime(request.getEstimatedFlightTime());
-        segment.setActive(request.getActive());
-
-        return segment;
     }
 
     // Eski createRoute signature için wrapper

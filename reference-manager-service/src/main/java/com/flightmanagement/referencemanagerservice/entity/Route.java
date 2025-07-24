@@ -19,7 +19,7 @@ import java.util.List;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@ToString(exclude = {"originAirport", "destinationAirport", "segments"})
+@ToString(exclude = {"segments"})
 public class Route {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -30,15 +30,6 @@ public class Route {
 
     @Column(nullable = false, length = 200)
     private String routeName;          // "Istanbul-Ankara-Izmir Route"
-
-    // Basit route'lar için (tek segment)
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "origin_airport_id")
-    private Airport originAirport;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "destination_airport_id")
-    private Airport destinationAirport;
 
     @Column
     private Integer distance;          // km (toplam mesafe)
@@ -69,9 +60,6 @@ public class Route {
     @OrderBy("segmentOrder")
     private List<RouteSegment> segments = new ArrayList<>();
 
-    @Column(name = "is_multi_segment")
-    private Boolean isMultiSegment = false;  // Tek segment mi, çoklu segment mi?
-
     @CreationTimestamp
     private LocalDateTime createdAt;
 
@@ -80,11 +68,11 @@ public class Route {
 
     // Helper methods
     public boolean isSimpleRoute() {
-        return !Boolean.TRUE.equals(isMultiSegment) && (segments == null || segments.isEmpty());
+        return segments != null && segments.size() == 1;
     }
 
     public boolean isMultiSegmentRoute() {
-        return Boolean.TRUE.equals(isMultiSegment) && segments != null && segments.size() > 1;
+        return segments != null && segments.size() > 1;
     }
 
     public void addSegment(RouteSegment segment) {
@@ -93,16 +81,12 @@ public class Route {
         }
         segment.setRoute(this);
         segments.add(segment);
-        setIsMultiSegment(true);
     }
 
     public void removeSegment(RouteSegment segment) {
         if (segments != null) {
             segments.remove(segment);
             segment.setRoute(null);
-            if (segments.isEmpty()) {
-                setIsMultiSegment(false);
-            }
         }
     }
 }

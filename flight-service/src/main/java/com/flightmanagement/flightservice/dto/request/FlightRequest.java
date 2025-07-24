@@ -23,16 +23,9 @@ public class FlightRequest {
     @NotNull(message = "Aircraft ID is required")
     private Long aircraftId;
 
-    // YENİ: Route bazlı yaklaşım
+    // YENİ SISTEM: Route bazlı yaklaşım
     @NotNull(message = "Route ID is required")
     private Long routeId;
-
-    // ESKİ ALANLAR: Backward compatibility için (DEPRECATED)
-    @Deprecated
-    private Long originAirportId;       // Route'dan otomatik olarak alınacak
-
-    @Deprecated
-    private Long destinationAirportId;  // Route'dan otomatik olarak alınacak
 
     @NotNull(message = "Flight date is required")
     @FutureOrPresent(message = "Flight date cannot be in the past")
@@ -99,10 +92,6 @@ public class FlightRequest {
         return routeId != null;
     }
 
-    public boolean isLegacyFlight() {
-        return routeId == null && originAirportId != null && destinationAirportId != null;
-    }
-
     public boolean isConnectingFlightRequest() {
         return Boolean.TRUE.equals(isConnectingFlight) && segments != null && !segments.isEmpty();
     }
@@ -119,6 +108,67 @@ public class FlightRequest {
     public boolean areActualTimesValid() {
         if (actualDeparture != null && actualArrival != null) {
             return actualArrival.isAfter(actualDeparture);
+        }
+        return true;
+    }
+
+    // Flight duration calculation helper
+    public Integer getEstimatedDurationMinutes() {
+        if (scheduledDeparture != null && scheduledArrival != null) {
+            return (int) java.time.Duration.between(scheduledDeparture, scheduledArrival).toMinutes();
+        }
+        return null;
+    }
+
+    // Business logic helpers
+    public boolean isCargoFlight() {
+        return FlightType.CARGO.equals(type);
+    }
+
+    public boolean isPassengerFlight() {
+        return FlightType.PASSENGER.equals(type);
+    }
+
+    public boolean isSpecialFlight() {
+        return FlightType.POSITIONING.equals(type) ||
+                FlightType.FERRY.equals(type) ||
+                FlightType.TRAINING.equals(type);
+    }
+
+    // Validation helper for flight type consistency
+    public boolean isFlightTypeConsistent() {
+        switch (type) {
+            case CARGO:
+                return (passengerCount == null || passengerCount == 0) &&
+                        (cargoWeight != null && cargoWeight > 0);
+            case PASSENGER:
+                return passengerCount != null && passengerCount > 0;
+            case POSITIONING:
+            case FERRY:
+            case TRAINING:
+                return passengerCount == null || passengerCount == 0;
+            default:
+                return true;
+        }
+    }
+
+    // For connecting flights
+    public boolean hasValidSegmentSequence() {
+        if (!isConnectingFlightRequest()) {
+            return true;
+        }
+
+        for (int i = 0; i < segments.size() - 1; i++) {
+            FlightSegmentRequest current = segments.get(i);
+            FlightSegmentRequest next = segments.get(i + 1);
+
+            if (!current.getDestinationAirportId().equals(next.getOriginAirportId())) {
+                return false;
+            }
+
+            if (!current.getScheduledArrival().isBefore(next.getScheduledDeparture())) {
+                return false;
+            }
         }
         return true;
     }

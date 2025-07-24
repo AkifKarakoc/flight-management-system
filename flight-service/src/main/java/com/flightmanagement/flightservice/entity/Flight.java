@@ -25,32 +25,32 @@ public class Flight {
     private Long id;
 
     @Column(nullable = false, length = 10)
-    private String flightNumber;        // TK123, PC456
+    private String flightNumber;
 
     @Column(nullable = false)
-    private Long airlineId;             // Reference Manager'dan
+    private Long airlineId;
 
     @Column(nullable = false)
-    private Long aircraftId;            // Reference Manager'dan
+    private Long aircraftId;
 
-    // YENİ: Route bazlı yaklaşım
+    // YENİ SISTEM - Route bazlı yaklaşım
     @Column(nullable = false)
-    private Long routeId;               // Reference Manager'dan route
-
-    @Column(nullable = false)
-    private LocalDate flightDate;       // Uçuş tarihi
+    private Long routeId;
 
     @Column(nullable = false)
-    private LocalDateTime scheduledDeparture;  // Planlanan kalkış
+    private LocalDate flightDate;
 
     @Column(nullable = false)
-    private LocalDateTime scheduledArrival;    // Planlanan varış
+    private LocalDateTime scheduledDeparture;
+
+    @Column(nullable = false)
+    private LocalDateTime scheduledArrival;
 
     @Column
-    private LocalDateTime actualDeparture;     // Gerçek kalkış
+    private LocalDateTime actualDeparture;
 
     @Column
-    private LocalDateTime actualArrival;       // Gerçek varış
+    private LocalDateTime actualArrival;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -61,26 +61,27 @@ public class Flight {
     private FlightType type = FlightType.PASSENGER;
 
     @Column
-    private Integer passengerCount;     // Yolcu sayısı
+    private Integer passengerCount;
 
     @Column
-    private Integer cargoWeight;        // Kargo ağırlığı (kg)
+    private Integer cargoWeight;
 
     @Column(length = 500)
-    private String notes;               // Notlar
+    private String notes;
 
     @Column
-    private String gateNumber;          // Gate numarası
+    private String gateNumber;
 
     @Column
-    private Integer delayMinutes;       // Gecikme dakikası
+    private Integer delayMinutes;
 
     @Column(length = 200)
-    private String delayReason;         // Gecikme nedeni
+    private String delayReason;
 
     @Column
-    private Boolean active = true;      // Aktif/Pasif
+    private Boolean active = true;
 
+    // Aktarmalı uçuş alanları
     @Column(name = "parent_flight_id")
     private Long parentFlightId;
 
@@ -99,25 +100,7 @@ public class Flight {
     @UpdateTimestamp
     private LocalDateTime updatedAt;
 
-    // Helper methods
-    public boolean isDelayed() {
-        return delayMinutes != null && delayMinutes > 0;
-    }
-
-    public boolean isDeparted() {
-        return status == FlightStatus.DEPARTED ||
-                status == FlightStatus.ARRIVED;
-    }
-
-    public boolean isCompleted() {
-        return status == FlightStatus.ARRIVED;
-    }
-
-    public String getFullFlightNumber() {
-        // Airline kodunu ekleyebiliriz ileride
-        return flightNumber;
-    }
-
+    // İlişkiler
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "parent_flight_id", insertable = false, updatable = false)
     private Flight parentFlight;
@@ -126,7 +109,24 @@ public class Flight {
     private List<Flight> connectingFlights = new ArrayList<>();
 
     @OneToMany(mappedBy = "mainFlight", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
-    private List<FlightConnection> flightConnections = new ArrayList<>();
+    private     List<FlightConnection> flightConnections = new ArrayList<>();
+
+    // Helper methods
+    public boolean isDelayed() {
+        return delayMinutes != null && delayMinutes > 0;
+    }
+
+    public boolean isDeparted() {
+        return status == FlightStatus.DEPARTED || status == FlightStatus.ARRIVED;
+    }
+
+    public boolean isCompleted() {
+        return status == FlightStatus.ARRIVED;
+    }
+
+    public String getFullFlightNumber() {
+        return flightNumber;
+    }
 
     // Uçuş süresi hesaplama (dakika)
     public Integer getFlightDuration() {

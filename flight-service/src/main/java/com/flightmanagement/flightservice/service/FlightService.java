@@ -4,6 +4,7 @@ import com.flightmanagement.flightservice.dto.cache.RouteCache;
 import com.flightmanagement.flightservice.dto.request.ConnectingFlightRequest;
 import com.flightmanagement.flightservice.dto.request.FlightRequest;
 import com.flightmanagement.flightservice.dto.response.FlightResponse;
+import com.flightmanagement.flightservice.dto.response.stats.FlightChartDataDto;
 import com.flightmanagement.flightservice.dto.response.stats.FlightTypeDistributionDto;
 import com.flightmanagement.flightservice.entity.Flight;
 import com.flightmanagement.flightservice.entity.enums.FlightStatus;
@@ -54,6 +55,17 @@ public class FlightService {
         return new PageImpl<>(responses, pageable, flights.getTotalElements());
     }
 
+    public Page<FlightResponse> getAllFlightsWithFilters(Pageable pageable, String flightNumber, Long airlineId, LocalDate flightDate) {
+        log.debug("Fetching flights with filters - flightNumber: {}, airlineId: {}, flightDate: {}",
+                flightNumber, airlineId, flightDate);
+
+        Page<Flight> flights = flightRepository.findFlightsWithFilters(flightNumber, airlineId, flightDate, null, pageable);
+        List<FlightResponse> responses = flights.getContent().stream()
+                .map(this::buildFlightResponse)
+                .collect(Collectors.toList());
+        return new PageImpl<>(responses, pageable, flights.getTotalElements());
+    }
+
     public FlightResponse getFlightById(Long id) {
         log.debug("Fetching flight with id: {}", id);
         Flight flight = flightRepository.findById(id)
@@ -93,6 +105,15 @@ public class FlightService {
                 .collect(Collectors.toList());
     }
 
+    public List<FlightResponse> getDelayedFlights(Integer minDelayMinutes) {
+        log.debug("Fetching delayed flights with minimum delay: {} minutes", minDelayMinutes);
+        LocalDate today = LocalDate.now();
+        List<Flight> flights = flightRepository.findDelayedFlightsByDateAndMinutes(today, minDelayMinutes);
+        return flights.stream()
+                .map(this::buildFlightResponse)
+                .collect(Collectors.toList());
+    }
+
     // ===============================
     // ROUTE BASED OPERATIONS
     // ===============================
@@ -121,6 +142,29 @@ public class FlightService {
         return new PageImpl<>(responses, pageable, flights.getTotalElements());
     }
 
+    public List<FlightResponse> getFlightsByAirport(Long airportId) {
+        log.debug("Fetching flights for airport: {}", airportId);
+
+        // Route üzerinden airport'a ait uçuşları bul
+        List<Flight> flights = new ArrayList<>();
+        try {
+            // Tüm aktif route'ları al ve bu airport'u içerenleri filtrele
+            RouteCache[] routes = referenceDataService.getActiveRoutes();
+            for (RouteCache route : routes) {
+                if (route.getOriginAirportId() != null && route.getOriginAirportId().equals(airportId) ||
+                        route.getDestinationAirportId() != null && route.getDestinationAirportId().equals(airportId)) {
+                    flights.addAll(flightRepository.findByRouteId(route.getId()));
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Could not fetch flights by airport through routes: {}", e.getMessage());
+        }
+
+        return flights.stream()
+                .map(this::buildFlightResponse)
+                .collect(Collectors.toList());
+    }
+
     // ===============================
     // FLIGHT CRUD OPERATIONS
     // ===============================
@@ -130,11 +174,6 @@ public class FlightService {
 
         // Validation
         flightValidator.validateFlightRequest(request);
-
-        // Route bilgilerini düzenle
-        if (request.isRouteBasedFlight()) {
-            populateAirportsFromRoute(request);
-        }
 
         // Duplicate check
         if (flightRepository.existsByFlightNumberAndFlightDate(request.getFlightNumber(), request.getFlightDate())) {
@@ -146,6 +185,9 @@ public class FlightService {
                 request.getScheduledDeparture(), request.getScheduledArrival())) {
             throw new BusinessException("Aircraft has conflicting flight schedule");
         }
+
+        // Aircraft-Route compatibility check
+        flightValidator.validateAircraftRouteCompatibility(request.getAircraftId(), request.getRouteId());
 
         Flight flight = flightMapper.toEntity(request);
         flight = flightRepository.save(flight);
@@ -166,10 +208,6 @@ public class FlightService {
 
         flightValidator.validateFlightUpdate(existingFlight, request);
 
-        if (request.isRouteBasedFlight()) {
-            populateAirportsFromRoute(request);
-        }
-
         flightMapper.updateEntity(existingFlight, request);
         Flight updatedFlight = flightRepository.save(existingFlight);
 
@@ -187,6 +225,7 @@ public class FlightService {
         Flight flight = flightRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Flight not found with id: " + id));
 
+        FlightStatus oldStatus = flight.getStatus();
         flight.setStatus(status);
 
         LocalDateTime now = LocalDateTime.now();
@@ -208,7 +247,8 @@ public class FlightService {
         kafkaProducerService.sendFlightEvent("FLIGHT_STATUS_CHANGED", flight);
 
         FlightResponse response = buildFlightResponse(flight);
-        webSocketMessageService.sendFlightUpdate("STATUS_CHANGE", response, flight.getId(), flight.getFlightNumber());
+        webSocketMessageService.sendFlightStatusUpdate(flight.getFlightNumber(), oldStatus.name(),
+                status.name(), response, flight.getId());
 
         return response;
     }
@@ -256,39 +296,113 @@ public class FlightService {
     }
 
     // ===============================
+    // CONNECTING FLIGHTS
+    // ===============================
+
+    public FlightResponse createConnectingFlight(ConnectingFlightRequest request) {
+        log.debug("Creating connecting flight: {}", request.getMainFlightNumber());
+        return connectingFlightService.createConnectingFlight(request);
+    }
+
+    public FlightResponse getConnectingFlightDetails(Long mainFlightId) {
+        log.debug("Getting connecting flight details: {}", mainFlightId);
+        Flight mainFlight = flightRepository.findById(mainFlightId)
+                .orElseThrow(() -> new ResourceNotFoundException("Main flight not found"));
+
+        if (!Boolean.TRUE.equals(mainFlight.getIsConnectingFlight())) {
+            throw new BusinessException("Flight is not a connecting flight");
+        }
+
+        return buildFlightResponse(mainFlight);
+    }
+
+    public List<FlightResponse> getConnectingFlights(Long mainFlightId) {
+        log.debug("Getting connecting flight segments: {}", mainFlightId);
+        List<Flight> segments = flightRepository.findByParentFlightIdOrderBySegmentNumber(mainFlightId);
+        return segments.stream()
+                .map(this::buildFlightResponse)
+                .collect(Collectors.toList());
+    }
+
+    public FlightResponse updateConnectingFlight(Long mainFlightId, ConnectingFlightRequest request) {
+        log.debug("Updating connecting flight: {}", mainFlightId);
+        return connectingFlightService.updateConnectingFlight(mainFlightId, request);
+    }
+
+    public void deleteConnectingFlight(Long mainFlightId) {
+        log.debug("Deleting connecting flight: {}", mainFlightId);
+        connectingFlightService.deleteConnectingFlight(mainFlightId);
+    }
+
+    public Page<FlightResponse> getConnectingFlightsWithFilters(Pageable pageable, Long airlineId, LocalDate flightDate) {
+        log.debug("Getting connecting flights with filters - airlineId: {}, date: {}", airlineId, flightDate);
+        return connectingFlightService.getConnectingFlightsWithFilters(pageable, airlineId, flightDate);
+    }
+
+    // ===============================
     // STATISTICS AND REPORTING
     // ===============================
 
-    public Map<String, Object> getFlightStatistics(LocalDate date) {
-        log.debug("Fetching flight statistics for date: {}", date);
+    public Map<String, Object> getDailySummary(LocalDate date) {
+        log.debug("Fetching daily summary for date: {}", date);
 
-        Map<String, Object> stats = new HashMap<>();
+        Map<String, Object> summary = new HashMap<>();
 
-        long totalFlights = flightRepository.countFlightsByDate(date);
-        long scheduledFlights = flightRepository.countFlightsByDateAndStatus(date, FlightStatus.SCHEDULED);
-        long departedFlights = flightRepository.countFlightsByDateAndStatus(date, FlightStatus.DEPARTED);
-        long arrivedFlights = flightRepository.countFlightsByDateAndStatus(date, FlightStatus.ARRIVED);
-        long delayedFlights = flightRepository.countFlightsByDateAndStatus(date, FlightStatus.DELAYED);
-        long cancelledFlights = flightRepository.countFlightsByDateAndStatus(date, FlightStatus.CANCELLED);
+        Object[] stats = flightRepository.getFlightStatsByDate(date);
+        if (stats != null) {
+            summary.put("totalFlights", ((Number) stats[0]).longValue() + ((Number) stats[1]).longValue() +
+                    ((Number) stats[2]).longValue() + ((Number) stats[3]).longValue() +
+                    ((Number) stats[4]).longValue());
+            summary.put("scheduledFlights", ((Number) stats[0]).longValue());
+            summary.put("departedFlights", ((Number) stats[1]).longValue());
+            summary.put("arrivedFlights", ((Number) stats[2]).longValue());
+            summary.put("cancelledFlights", ((Number) stats[3]).longValue());
+            summary.put("delayedFlights", ((Number) stats[4]).longValue());
 
-        stats.put("totalFlights", totalFlights);
-        stats.put("scheduledFlights", scheduledFlights);
-        stats.put("departedFlights", departedFlights);
-        stats.put("arrivedFlights", arrivedFlights);
-        stats.put("delayedFlights", delayedFlights);
-        stats.put("cancelledFlights", cancelledFlights);
+            long totalFlights = ((Number) summary.get("totalFlights")).longValue();
+            long arrivedFlights = ((Number) summary.get("arrivedFlights")).longValue();
+            long delayedFlights = ((Number) summary.get("delayedFlights")).longValue();
+            long cancelledFlights = ((Number) summary.get("cancelledFlights")).longValue();
 
-        if (totalFlights > 0) {
-            stats.put("onTimePerformance", (double) (arrivedFlights - delayedFlights) / totalFlights * 100);
-            stats.put("cancellationRate", (double) cancelledFlights / totalFlights * 100);
-            stats.put("delayRate", (double) delayedFlights / totalFlights * 100);
-        } else {
-            stats.put("onTimePerformance", 0.0);
-            stats.put("cancellationRate", 0.0);
-            stats.put("delayRate", 0.0);
+            if (totalFlights > 0) {
+                summary.put("onTimePerformance", (double) (arrivedFlights - delayedFlights) / totalFlights * 100);
+                summary.put("cancellationRate", (double) cancelledFlights / totalFlights * 100);
+                summary.put("delayRate", (double) delayedFlights / totalFlights * 100);
+                summary.put("completionRate", (double) arrivedFlights / totalFlights * 100);
+            } else {
+                summary.put("onTimePerformance", 0.0);
+                summary.put("cancellationRate", 0.0);
+                summary.put("delayRate", 0.0);
+                summary.put("completionRate", 0.0);
+            }
+
+            // Average delay
+            Double avgDelay = flightRepository.getAverageDelayByDate(date);
+            summary.put("averageDelayMinutes", avgDelay != null ? avgDelay : 0.0);
         }
 
-        return stats;
+        summary.put("date", date);
+        return summary;
+    }
+
+    public FlightChartDataDto getFlightChartData(LocalDate startDate, LocalDate endDate) {
+        log.debug("Fetching flight chart data from {} to {}", startDate, endDate);
+
+        FlightChartDataDto chartData = new FlightChartDataDto();
+        List<Object[]> results = flightRepository.getFlightChartData(startDate, endDate);
+
+        for (Object[] result : results) {
+            LocalDate date = (LocalDate) result[0];
+            Long scheduled = ((Number) result[1]).longValue();
+            Long departed = ((Number) result[2]).longValue();
+            Long arrived = ((Number) result[3]).longValue();
+            Long cancelled = ((Number) result[4]).longValue();
+            Long delayed = ((Number) result[5]).longValue();
+
+            chartData.addDataPoint(date, scheduled, departed, arrived, cancelled, delayed);
+        }
+
+        return chartData;
     }
 
     public Long getFlightCountByDate(LocalDate date) {
@@ -316,47 +430,66 @@ public class FlightService {
     }
 
     // ===============================
-    // CONNECTING FLIGHTS (SIMPLIFIED)
+    // ROUTE HELPER METHODS
     // ===============================
 
-    public FlightResponse updateConnectingFlight(Long mainFlightId, ConnectingFlightRequest request) {
-        log.debug("Updating connecting flight: {}", mainFlightId);
-        return connectingFlightService.updateConnectingFlight(mainFlightId, request);
+    public FlightResponse createFlightWithNewRoute(FlightRequest request, String routeCode, String routeName) {
+        log.debug("Creating flight with new route: {}", routeCode);
+
+        // Bu method Reference Manager'a yeni route oluşturma isteği gönderebilir
+        // Şimdilik mevcut route ID'nin valid olduğunu varsayıyoruz
+        return createFlight(request);
     }
 
-    public void deleteConnectingFlight(Long mainFlightId) {
-        log.debug("Deleting connecting flight: {}", mainFlightId);
-        connectingFlightService.deleteConnectingFlight(mainFlightId);
+    public Map<String, Object> getFlightRouteInfo(Long id) {
+        log.debug("Getting route info for flight: {}", id);
+
+        Flight flight = flightRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Flight not found with id: " + id));
+
+        Map<String, Object> routeInfo = new HashMap<>();
+        routeInfo.put("flightId", flight.getId());
+        routeInfo.put("flightNumber", flight.getFlightNumber());
+        routeInfo.put("routeId", flight.getRouteId());
+
+        try {
+            RouteCache route = referenceDataService.getRoute(flight.getRouteId());
+            routeInfo.put("route", route);
+        } catch (Exception e) {
+            log.warn("Could not fetch route info: {}", e.getMessage());
+            routeInfo.put("routeError", e.getMessage());
+        }
+
+        return routeInfo;
     }
 
-    public Page<FlightResponse> getConnectingFlightsWithFilters(Pageable pageable, Long airlineId, LocalDate flightDate) {
-        log.debug("Getting connecting flights with filters - airlineId: {}, date: {}", airlineId, flightDate);
-        return connectingFlightService.getConnectingFlightsWithFilters(pageable, airlineId, flightDate);
+    public Map<String, Object> getMigrationStatus() {
+        Map<String, Object> status = new HashMap<>();
+        status.put("migrationCompleted", true);
+        status.put("message", "System is fully route-based. No migration needed.");
+        status.put("routeBasedFlights", flightRepository.count());
+        status.put("lastUpdated", LocalDateTime.now());
+        return status;
+    }
+
+    // Bu method kaldırıldı çünkü artık migration yok
+    public void migrateLegacyFlightsToRoutes() {
+        throw new BusinessException("Migration is not available. System is already route-based.");
     }
 
     // ===============================
     // PRIVATE HELPER METHODS
     // ===============================
 
-    private void populateAirportsFromRoute(FlightRequest request) {
-        try {
-            RouteCache route = referenceDataService.getRoute(request.getRouteId());
-
-            log.debug("Populated airports from route {}: {} -> {}",
-                    route.getRouteCode(), route.getOriginAirportCode(), route.getDestinationAirportCode());
-
-        } catch (Exception e) {
-            throw new BusinessException("Failed to get route information: " + e.getMessage());
-        }
-    }
-
     private FlightResponse buildFlightResponse(Flight flight) {
         FlightResponse response = flightMapper.toResponse(flight);
 
         try {
+            // Reference data'ları cache'ten al
             response.setAirline(referenceDataService.getAirline(flight.getAirlineId()));
             response.setAircraft(referenceDataService.getAircraft(flight.getAircraftId()));
 
+            // Route bilgilerini al
             if (flight.getRouteId() != null) {
                 RouteCache route = referenceDataService.getRoute(flight.getRouteId());
                 response.setRoute(route);
@@ -365,6 +498,7 @@ public class FlightService {
                 response.setRouteEstimatedTime(route.getEstimatedFlightTime());
                 response.setIsMultiSegmentRoute(route.getIsMultiSegment());
 
+                // Route'dan airport bilgilerini al (backward compatibility için)
                 if (route.getOriginAirportId() != null) {
                     response.setOriginAirport(referenceDataService.getAirport(route.getOriginAirportId()));
                 }
@@ -373,8 +507,9 @@ public class FlightService {
                 }
             }
 
+            // Connecting flight segments
             if (Boolean.TRUE.equals(flight.getIsConnectingFlight()) && flight.getParentFlightId() == null) {
-                List<Flight> segments = flightRepository.findByParentFlightId(flight.getId());
+                List<Flight> segments = flightRepository.findByParentFlightIdOrderBySegmentNumber(flight.getId());
                 List<FlightResponse> segmentResponses = segments.stream()
                         .map(this::buildFlightResponse)
                         .collect(Collectors.toList());
@@ -399,13 +534,17 @@ public class FlightService {
             Flight firstSegment = segments.get(0);
             if (firstSegment.getRouteId() != null) {
                 RouteCache firstRoute = referenceDataService.getRoute(firstSegment.getRouteId());
-                route.append(firstRoute.getOriginAirportCode());
+                if (firstRoute.getOriginAirportCode() != null) {
+                    route.append(firstRoute.getOriginAirportCode());
+                }
             }
 
             for (Flight segment : segments) {
                 if (segment.getRouteId() != null) {
                     RouteCache segmentRoute = referenceDataService.getRoute(segment.getRouteId());
-                    route.append(" → ").append(segmentRoute.getDestinationAirportCode());
+                    if (segmentRoute.getDestinationAirportCode() != null) {
+                        route.append(" → ").append(segmentRoute.getDestinationAirportCode());
+                    }
                 }
             }
 

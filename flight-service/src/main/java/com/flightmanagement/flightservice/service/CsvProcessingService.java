@@ -52,6 +52,11 @@ public class CsvProcessingService {
                 throw new BusinessException("CSV file has no data");
             }
 
+            // Validate headers
+            if (records.size() > 0) {
+                validateCsvHeaders(records.get(0));
+            }
+
             // Skip header row
             for (int i = 1; i < records.size(); i++) {
                 String[] row = records.get(i);
@@ -61,8 +66,11 @@ public class CsvProcessingService {
                     FlightRequest flightRequest = parseRowToFlightRequest(row, i + 1);
                     flightService.createFlight(flightRequest);
                     successCount++;
+                    log.debug("Successfully processed row {}: {}", i + 1, flightRequest.getFlightNumber());
                 } catch (Exception e) {
-                    errors.add("Row " + (i + 1) + ": " + e.getMessage());
+                    String errorMsg = "Row " + (i + 1) + ": " + e.getMessage();
+                    errors.add(errorMsg);
+                    log.warn("Failed to process row {}: {}", i + 1, e.getMessage());
                 }
             }
 
@@ -75,44 +83,82 @@ public class CsvProcessingService {
         result.setFailureCount(totalRows - successCount);
         result.setErrors(errors);
 
+        // Success/failure messages
+        if (result.isCompleteSuccess()) {
+            result.setMessage("All flights processed successfully");
+        } else if (result.isPartialSuccess()) {
+            result.setMessage("Partially successful: " + result.getSummary());
+        } else {
+            result.setMessage("All flights failed to process");
+        }
+
         log.info("CSV processing completed: {} successful, {} failed out of {} total rows",
                 successCount, totalRows - successCount, totalRows);
 
         return result;
     }
 
+    private void validateCsvHeaders(String[] headers) {
+        List<String> requiredHeaders = List.of(
+                "flightNumber", "airlineId", "aircraftId", "routeId",
+                "flightDate", "scheduledDeparture", "scheduledArrival", "type"
+        );
+
+        List<String> missingHeaders = new ArrayList<>();
+        for (String required : requiredHeaders) {
+            boolean found = false;
+            for (String header : headers) {
+                if (header.trim().equalsIgnoreCase(required)) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                missingHeaders.add(required);
+            }
+        }
+
+        if (!missingHeaders.isEmpty()) {
+            throw new BusinessException("Missing required CSV headers: " + String.join(", ", missingHeaders));
+        }
+    }
+
     private FlightRequest parseRowToFlightRequest(String[] row, int rowNumber) {
-        if (row.length < 12) {
-            throw new BusinessException("Insufficient columns. Expected at least 12 columns");
+        if (row.length < 8) {
+            throw new BusinessException("Insufficient columns. Expected at least 8 columns");
         }
 
         try {
             FlightRequest request = new FlightRequest();
 
-            // CSV columns: flightNumber, airlineId, aircraftId, originAirportId, destinationAirportId,
-            //              flightDate, scheduledDeparture, scheduledArrival, type, passengerCount, cargoWeight, notes
+            // Required fields - Route bazlı yeni sistem
+            // CSV columns: flightNumber, airlineId, aircraftId, routeId, flightDate,
+            //              scheduledDeparture, scheduledArrival, type, passengerCount, cargoWeight, notes
 
             request.setFlightNumber(parseString(row[0], "Flight Number"));
             request.setAirlineId(parseLong(row[1], "Airline ID"));
             request.setAircraftId(parseLong(row[2], "Aircraft ID"));
-            request.setOriginAirportId(parseLong(row[3], "Origin Airport ID"));
-            request.setDestinationAirportId(parseLong(row[4], "Destination Airport ID"));
-            request.setFlightDate(parseDate(row[5], "Flight Date"));
-            request.setScheduledDeparture(parseDateTime(row[6], "Scheduled Departure"));
-            request.setScheduledArrival(parseDateTime(row[7], "Scheduled Arrival"));
-            request.setType(parseFlightType(row[8], "Flight Type"));
+            request.setRouteId(parseLong(row[3], "Route ID"));  // YENİ: Route ID
+            request.setFlightDate(parseDate(row[4], "Flight Date"));
+            request.setScheduledDeparture(parseDateTime(row[5], "Scheduled Departure"));
+            request.setScheduledArrival(parseDateTime(row[6], "Scheduled Arrival"));
+            request.setType(parseFlightType(row[7], "Flight Type"));
 
             // Optional fields
+            if (row.length > 8 && !row[8].trim().isEmpty()) {
+                request.setPassengerCount(parseInteger(row[8], "Passenger Count"));
+            }
             if (row.length > 9 && !row[9].trim().isEmpty()) {
-                request.setPassengerCount(parseInteger(row[9], "Passenger Count"));
+                request.setCargoWeight(parseInteger(row[9], "Cargo Weight"));
             }
             if (row.length > 10 && !row[10].trim().isEmpty()) {
-                request.setCargoWeight(parseInteger(row[10], "Cargo Weight"));
+                request.setNotes(row[10].trim());
             }
             if (row.length > 11 && !row[11].trim().isEmpty()) {
-                request.setNotes(row[11].trim());
+                request.setGateNumber(row[11].trim());
             }
 
+            // Default values
             request.setStatus(FlightStatus.SCHEDULED);
             request.setActive(true);
 
@@ -173,5 +219,59 @@ public class CsvProcessingService {
         } catch (IllegalArgumentException e) {
             throw new BusinessException(fieldName + " must be one of: PASSENGER, CARGO, POSITIONING, FERRY, TRAINING: " + value);
         }
+    }
+
+    public String generateCsvTemplate() {
+        StringBuilder template = new StringBuilder();
+        template.append("flightNumber,airlineId,aircraftId,routeId,flightDate,scheduledDeparture,scheduledArrival,type,passengerCount,cargoWeight,notes,gateNumber\n");
+        template.append("TK100,1,1,1,2025-07-20,2025-07-20 08:00,2025-07-20 09:30,PASSENGER,180,,Morning flight Istanbul-Ankara,A12\n");
+        template.append("TK200,1,2,2,2025-07-20,2025-07-20 14:00,2025-07-20 16:30,PASSENGER,165,,Afternoon flight Ankara-Izmir,B05\n");
+        template.append("CG100,1,1,3,2025-07-20,2025-07-20 20:00,2025-07-20 21:30,CARGO,,8000,Night cargo flight,C01\n");
+
+        return template.toString();
+    }
+
+    public List<String> validateCsvContent(MultipartFile file) {
+        List<String> validationErrors = new ArrayList<>();
+
+        if (file.isEmpty()) {
+            validationErrors.add("CSV file is empty");
+            return validationErrors;
+        }
+
+        try (CSVReader reader = new CSVReader(new InputStreamReader(file.getInputStream()))) {
+            List<String[]> records = reader.readAll();
+
+            if (records.isEmpty()) {
+                validationErrors.add("CSV file has no data");
+                return validationErrors;
+            }
+
+            // Header validation
+            try {
+                validateCsvHeaders(records.get(0));
+            } catch (BusinessException e) {
+                validationErrors.add("Header validation failed: " + e.getMessage());
+            }
+
+            // Content validation (without saving)
+            for (int i = 1; i < records.size() && i <= 100; i++) { // Limit to first 100 rows for validation
+                String[] row = records.get(i);
+                try {
+                    parseRowToFlightRequest(row, i + 1);
+                } catch (Exception e) {
+                    validationErrors.add("Row " + (i + 1) + ": " + e.getMessage());
+                }
+            }
+
+            if (records.size() > 101) {
+                validationErrors.add("Note: Only first 100 rows were validated. Total rows: " + (records.size() - 1));
+            }
+
+        } catch (IOException | CsvException e) {
+            validationErrors.add("Error reading CSV file: " + e.getMessage());
+        }
+
+        return validationErrors;
     }
 }

@@ -110,23 +110,6 @@ public class KafkaProducerService {
         payload.put("routeType", route.getRouteType());
         payload.put("active", route.getActive());
 
-        // Airport bilgileri için sadece temel bilgiler
-        if (route.getOriginAirport() != null) {
-            Map<String, Object> originInfo = new HashMap<>();
-            originInfo.put("id", route.getOriginAirport().getId());
-            originInfo.put("iataCode", route.getOriginAirport().getIataCode());
-            originInfo.put("name", route.getOriginAirport().getName());
-            payload.put("originAirport", originInfo);
-        }
-
-        if (route.getDestinationAirport() != null) {
-            Map<String, Object> destInfo = new HashMap<>();
-            destInfo.put("id", route.getDestinationAirport().getId());
-            destInfo.put("iataCode", route.getDestinationAirport().getIataCode());
-            destInfo.put("name", route.getDestinationAirport().getName());
-            payload.put("destinationAirport", destInfo);
-        }
-
         ReferenceEvent event = ReferenceEvent.builder()
                 .eventId(UUID.randomUUID().toString())
                 .eventType(eventType)

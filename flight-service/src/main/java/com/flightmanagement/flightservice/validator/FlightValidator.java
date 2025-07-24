@@ -20,14 +20,14 @@ public class FlightValidator {
 
     public void validateFlightRequest(FlightRequest request) {
         validateBasicRules(request);
-        validateRouteOrAirports(request);
+        validateRouteData(request);
         validateReferenceData(request);
         validateBusinessRules(request);
     }
 
     public void validateFlightUpdate(Flight existingFlight, FlightRequest request) {
         validateBasicRules(request);
-        validateRouteOrAirports(request);
+        validateRouteData(request);
         validateReferenceData(request);
         validateBusinessRules(request);
         validateUpdateRules(existingFlight, request);
@@ -50,26 +50,15 @@ public class FlightValidator {
                 throw new BusinessException("Flight date must match scheduled departure date");
             }
         }
-    }
 
-    private void validateRouteOrAirports(FlightRequest request) {
-        if (request.isRouteBasedFlight()) {
-            // Yeni yaklaşım: Route bazlı validation
-            validateRouteBased(request);
-        } else if (request.isLegacyFlight()) {
-            // Eski yaklaşım: Airport bazlı validation (backward compatibility)
-            validateLegacyAirportBased(request);
-        } else {
-            throw new BusinessException("Either routeId or both originAirportId and destinationAirportId must be provided");
-        }
-    }
-
-    private void validateRouteBased(FlightRequest request) {
-        log.debug("Validating route-based flight with route ID: {}", request.getRouteId());
-
+        // Route ID zorunlu kontrolü
         if (request.getRouteId() == null) {
-            throw new BusinessException("Route ID is required for route-based flights");
+            throw new BusinessException("Route ID is required for all flights");
         }
+    }
+
+    private void validateRouteData(FlightRequest request) {
+        log.debug("Validating route-based flight with route ID: {}", request.getRouteId());
 
         // Route'un varlığını kontrol et
         try {
@@ -78,53 +67,57 @@ public class FlightValidator {
                 throw new BusinessException("Route not found with ID: " + request.getRouteId());
             }
 
-            // Route aktif mi?
-            // Bu kontrol ReferenceDataService'te yapılabilir, ama burada da ekstra güvenlik
+            // Route aktif mi kontrol et
+            if (route.getActive() != null && !route.getActive()) {
+                throw new BusinessException("Route is not active: " + request.getRouteId());
+            }
+
             log.debug("Route validation passed for route: {}", route.getRouteCode());
 
         } catch (Exception e) {
+            if (e instanceof BusinessException) {
+                throw e;
+            }
             throw new BusinessException("Invalid route ID: " + request.getRouteId());
-        }
-    }
-
-    private void validateLegacyAirportBased(FlightRequest request) {
-        log.debug("Validating legacy airport-based flight: {} -> {}",
-                request.getOriginAirportId(), request.getDestinationAirportId());
-
-        // Origin ve destination aynı olamaz
-        if (request.getOriginAirportId().equals(request.getDestinationAirportId())) {
-            throw new BusinessException("Origin and destination airports cannot be the same");
         }
     }
 
     private void validateReferenceData(FlightRequest request) {
         // Airline validation
         try {
-            referenceDataService.getAirline(request.getAirlineId());
+            var airline = referenceDataService.getAirline(request.getAirlineId());
+            if (airline == null) {
+                throw new BusinessException("Airline not found with ID: " + request.getAirlineId());
+            }
+            if (airline.getActive() != null && !airline.getActive()) {
+                throw new BusinessException("Airline is not active: " + request.getAirlineId());
+            }
         } catch (Exception e) {
+            if (e instanceof BusinessException) {
+                throw e;
+            }
             throw new BusinessException("Invalid airline ID: " + request.getAirlineId());
         }
 
         // Aircraft validation
         try {
-            referenceDataService.getAircraft(request.getAircraftId());
-        } catch (Exception e) {
-            throw new BusinessException("Invalid aircraft ID: " + request.getAircraftId());
-        }
-
-        // Legacy airport validation (eğer route bazlı değilse)
-        if (request.isLegacyFlight()) {
-            try {
-                referenceDataService.getAirport(request.getOriginAirportId());
-                referenceDataService.getAirport(request.getDestinationAirportId());
-            } catch (Exception e) {
-                throw new BusinessException("Invalid airport ID in legacy flight request");
+            var aircraft = referenceDataService.getAircraft(request.getAircraftId());
+            if (aircraft == null) {
+                throw new BusinessException("Aircraft not found with ID: " + request.getAircraftId());
             }
+            if (aircraft.getStatus() != null && !aircraft.getStatus().equals("ACTIVE")) {
+                throw new BusinessException("Aircraft is not active: " + request.getAircraftId());
+            }
+        } catch (Exception e) {
+            if (e instanceof BusinessException) {
+                throw e;
+            }
+            throw new BusinessException("Invalid aircraft ID: " + request.getAircraftId());
         }
     }
 
     private void validateBusinessRules(FlightRequest request) {
-        // Flight number format kontrolü (regex'i DTO'da var ama ekstra kontrol)
+        // Flight number format kontrolü
         if (request.getFlightNumber() != null &&
                 !request.getFlightNumber().matches("^[A-Z]{2}\\d{1,4}$")) {
             throw new BusinessException("Flight number must be in format: TK123");
@@ -153,9 +146,35 @@ public class FlightValidator {
             throw new BusinessException("Scheduled departure cannot be more than 1 hour in the past");
         }
 
+        // Flight type vs cargo/passenger validation
+        validateFlightTypeConsistency(request);
+
         // Connecting flight validation
         if (request.isConnectingFlightRequest()) {
             validateConnectingFlightSegments(request);
+        }
+    }
+
+    private void validateFlightTypeConsistency(FlightRequest request) {
+        switch (request.getType()) {
+            case CARGO:
+                if (request.getPassengerCount() != null && request.getPassengerCount() > 0) {
+                    throw new BusinessException("CARGO flights cannot have passengers");
+                }
+                if (request.getCargoWeight() == null || request.getCargoWeight() <= 0) {
+                    throw new BusinessException("CARGO flights must have cargo weight");
+                }
+                break;
+            case PASSENGER:
+                if (request.getPassengerCount() == null || request.getPassengerCount() <= 0) {
+                    throw new BusinessException("PASSENGER flights must have passenger count");
+                }
+                break;
+            case POSITIONING:
+            case FERRY:
+            case TRAINING:
+                // Bu tip uçuşlar için özel kurallar eklenebilir
+                break;
         }
     }
 
@@ -166,6 +185,10 @@ public class FlightValidator {
 
         if (request.getSegments().size() < 2) {
             throw new BusinessException("Connecting flight must have at least 2 segments");
+        }
+
+        if (request.getSegments().size() > 10) {
+            throw new BusinessException("Connecting flight cannot have more than 10 segments");
         }
 
         // Segment'lerin bağlantısını kontrol et
@@ -183,6 +206,23 @@ public class FlightValidator {
             if (currentSegment.getScheduledArrival().isAfter(nextSegment.getScheduledDeparture())) {
                 throw new BusinessException(
                         String.format("Segment %d arrival time must be before segment %d departure time", i + 1, i + 2)
+                );
+            }
+
+            // Minimum connection time (30 dakika)
+            long connectionMinutes = java.time.Duration.between(
+                    currentSegment.getScheduledArrival(), nextSegment.getScheduledDeparture()).toMinutes();
+
+            if (connectionMinutes < 30) {
+                throw new BusinessException(
+                        String.format("Minimum 30 minutes connection time required between segments %d and %d", i + 1, i + 2)
+                );
+            }
+
+            // Maximum connection time (24 saat)
+            if (connectionMinutes > 1440) {
+                throw new BusinessException(
+                        String.format("Maximum 24 hours connection time allowed between segments %d and %d", i + 1, i + 2)
                 );
             }
         }
@@ -210,5 +250,67 @@ public class FlightValidator {
                 throw new BusinessException("Cannot change scheduled arrival for completed flights");
             }
         }
+
+        // Cancelled flights güncellenmemeli
+        if (existingFlight.getStatus() != null &&
+                existingFlight.getStatus().name().equals("CANCELLED")) {
+            throw new BusinessException("Cannot update cancelled flights");
+        }
+    }
+
+    // Route availability validation
+    public void validateRouteAvailability(Long routeId, LocalDateTime departure, LocalDateTime arrival) {
+        try {
+            RouteCache route = referenceDataService.getRoute(routeId);
+            if (route == null) {
+                throw new BusinessException("Route not found: " + routeId);
+            }
+
+            // Route'un belirli saatlerde kullanılabilir olup olmadığını kontrol et
+            // Bu business requirement'a göre implement edilebilir
+
+        } catch (Exception e) {
+            if (e instanceof BusinessException) {
+                throw e;
+            }
+            throw new BusinessException("Route availability check failed: " + e.getMessage());
+        }
+    }
+
+    // Aircraft route compatibility validation
+    public void validateAircraftRouteCompatibility(Long aircraftId, Long routeId) {
+        try {
+            var aircraft = referenceDataService.getAircraft(aircraftId);
+            var route = referenceDataService.getRoute(routeId);
+
+            if (aircraft == null || route == null) {
+                return; // Bu kontrol referenceData validation'da yapıldı
+            }
+
+            // Aircraft range vs route distance kontrolü
+            if (aircraft.getMaxRange() != null && route.getDistance() != null) {
+                if (route.getDistance() > aircraft.getMaxRange()) {
+                    throw new BusinessException(
+                            String.format("Aircraft range (%d km) is insufficient for route distance (%d km)",
+                                    aircraft.getMaxRange(), route.getDistance())
+                    );
+                }
+            }
+
+            // Aircraft type vs route type compatibility
+            validateAircraftTypeRouteCompatibility(aircraft, route);
+
+        } catch (Exception e) {
+            if (e instanceof BusinessException) {
+                throw e;
+            }
+            log.warn("Aircraft-route compatibility check failed: {}", e.getMessage());
+        }
+    }
+
+    private void validateAircraftTypeRouteCompatibility(Object aircraft, RouteCache route) {
+        // Bu method aircraft type'a göre route compatibility kontrolü yapar
+        // Örneğin: Domestic aircraft international route'ta uçamaz gibi kurallar
+        // Business requirement'a göre implement edilebilir
     }
 }

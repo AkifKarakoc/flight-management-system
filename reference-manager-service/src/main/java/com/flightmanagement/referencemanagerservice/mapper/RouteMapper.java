@@ -15,8 +15,6 @@ import java.util.stream.Collectors;
 public interface RouteMapper {
 
     @Mapping(target = "id", ignore = true)
-    @Mapping(target = "originAirport", ignore = true)
-    @Mapping(target = "destinationAirport", ignore = true)
     @Mapping(target = "segments", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
@@ -27,13 +25,11 @@ public interface RouteMapper {
     @Mapping(target = "totalEstimatedTime", expression = "java(calculateTotalEstimatedTime(route))")
     @Mapping(target = "routePath", expression = "java(buildRoutePath(route))")
     @Mapping(target = "segmentCount", expression = "java(getSegmentCount(route))")
-    @Mapping(target = "createdByUserName", ignore = true) // Service'te set edilecek
-    @Mapping(target = "airlineName", ignore = true)      // Service'te set edilecek
+    @Mapping(target = "createdByUserName", ignore = true)
+    @Mapping(target = "airlineName", ignore = true)
     RouteResponse toResponse(Route route);
 
     @Mapping(target = "id", ignore = true)
-    @Mapping(target = "originAirport", ignore = true)
-    @Mapping(target = "destinationAirport", ignore = true)
     @Mapping(target = "segments", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
@@ -56,67 +52,44 @@ public interface RouteMapper {
     // Helper methods for calculations
     default Integer calculateTotalDistance(Route route) {
         if (route == null) return null;
-
-        if (Boolean.TRUE.equals(route.getIsMultiSegment()) && route.getSegments() != null) {
+        if (route.getSegments() != null) {
             return route.getSegments().stream()
                     .filter(segment -> segment.getDistance() != null)
                     .mapToInt(RouteSegment::getDistance)
                     .sum();
         }
-
         return route.getDistance();
     }
 
     default Integer calculateTotalEstimatedTime(Route route) {
         if (route == null) return null;
-
-        if (Boolean.TRUE.equals(route.getIsMultiSegment()) && route.getSegments() != null) {
+        if (route.getSegments() != null) {
             return route.getSegments().stream()
                     .filter(segment -> segment.getEstimatedFlightTime() != null)
                     .mapToInt(RouteSegment::getEstimatedFlightTime)
                     .sum();
         }
-
         return route.getEstimatedFlightTime();
     }
 
     default String buildRoutePath(Route route) {
         if (route == null) return null;
-
-        if (Boolean.TRUE.equals(route.getIsMultiSegment()) && route.getSegments() != null && !route.getSegments().isEmpty()) {
-            // Multi-segment route path
+        if (route.getSegments() != null && !route.getSegments().isEmpty()) {
             StringBuilder path = new StringBuilder();
             List<RouteSegment> sortedSegments = route.getSegments().stream()
                     .sorted((s1, s2) -> Integer.compare(s1.getSegmentOrder(), s2.getSegmentOrder()))
                     .collect(Collectors.toList());
-
-            // İlk segment'in origin'ini ekle
             if (!sortedSegments.isEmpty() && sortedSegments.get(0).getOriginAirport() != null) {
                 path.append(sortedSegments.get(0).getOriginAirport().getIataCode());
             }
-
-            // Tüm segment'lerin destination'larını ekle
             for (RouteSegment segment : sortedSegments) {
                 if (segment.getDestinationAirport() != null) {
                     path.append(" → ").append(segment.getDestinationAirport().getIataCode());
                 }
             }
-
-            return path.toString();
-        } else {
-            // Simple route path
-            StringBuilder path = new StringBuilder();
-            if (route.getOriginAirport() != null) {
-                path.append(route.getOriginAirport().getIataCode());
-            }
-            if (route.getDestinationAirport() != null) {
-                if (path.length() > 0) {
-                    path.append(" → ");
-                }
-                path.append(route.getDestinationAirport().getIataCode());
-            }
             return path.toString();
         }
+        return null;
     }
 
     default String buildSegmentPath(RouteSegment segment) {
@@ -137,11 +110,9 @@ public interface RouteMapper {
 
     default Integer getSegmentCount(Route route) {
         if (route == null) return 0;
-
-        if (Boolean.TRUE.equals(route.getIsMultiSegment()) && route.getSegments() != null) {
+        if (route.getSegments() != null) {
             return route.getSegments().size();
         }
-
-        return 1; // Simple route = 1 segment
+        return 0;
     }
 }
