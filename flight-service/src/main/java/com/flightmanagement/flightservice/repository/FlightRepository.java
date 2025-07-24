@@ -3,8 +3,8 @@ package com.flightmanagement.flightservice.repository;
 import com.flightmanagement.flightservice.entity.Flight;
 import com.flightmanagement.flightservice.entity.enums.FlightStatus;
 import com.flightmanagement.flightservice.entity.enums.FlightType;
-import org.springframework.boot.autoconfigure.data.web.SpringDataWebProperties;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -82,7 +82,7 @@ public interface FlightRepository extends JpaRepository<Flight, Long> {
     @Query("SELECT f.type, COUNT(f) FROM Flight f GROUP BY f.type")
     List<Object[]> countFlightsGroupedByType();
 
-    // Aktarmalı uçuş aramaları
+    // AKTARMALI UÇUŞ METODLARI
     List<Flight> findByParentFlightId(Long parentFlightId);
     List<Flight> findByParentFlightIdOrderBySegmentNumber(Long parentFlightId);
 
@@ -105,11 +105,11 @@ public interface FlightRepository extends JpaRepository<Flight, Long> {
     @Query("SELECT f FROM Flight f WHERE f.parentFlightId = :parentFlightId AND f.segmentNumber = :segmentNumber")
     Optional<Flight> findByParentFlightIdAndSegmentNumber(@Param("parentFlightId") Long parentFlightId, @Param("segmentNumber") Integer segmentNumber);
 
-    // Paginated connecting flights
-    Page<Flight> findByIsConnectingFlightTrue(SpringDataWebProperties.Pageable pageable);
-    Page<Flight> findByIsConnectingFlightTrueAndAirlineId(Long airlineId, SpringDataWebProperties.Pageable pageable);
-    Page<Flight> findByIsConnectingFlightTrueAndFlightDate(LocalDate flightDate, SpringDataWebProperties.Pageable pageable);
-    Page<Flight> findByIsConnectingFlightTrueAndAirlineIdAndFlightDate(Long airlineId, LocalDate flightDate, SpringDataWebProperties.Pageable pageable);
+    // Paginated connecting flights - DÜZELTME: Pageable kullanın
+    Page<Flight> findByIsConnectingFlightTrue(Pageable pageable);
+    Page<Flight> findByIsConnectingFlightTrueAndAirlineId(Long airlineId, Pageable pageable);
+    Page<Flight> findByIsConnectingFlightTrueAndFlightDate(LocalDate flightDate, Pageable pageable);
+    Page<Flight> findByIsConnectingFlightTrueAndAirlineIdAndFlightDate(Long airlineId, LocalDate flightDate, Pageable pageable);
 
     // Validation queries
     @Query("SELECT CASE WHEN COUNT(f) > 0 THEN true ELSE false END FROM Flight f WHERE f.flightNumber = :flightNumber AND f.flightDate = :flightDate AND f.parentFlightId IS NULL")

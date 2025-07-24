@@ -86,7 +86,7 @@ databaseChangeLog:
         - addForeignKeyConstraint:
             baseTableName: flight_connections
             baseColumnNames: main_flight_id
-            referencedTableName: flights
+            referencedTableName: flights  # DÜZELTME: "fflight-service" yerine "flights"
             referencedColumnNames: id
             constraintName: fk_flight_connections_main_flight
         - addForeignKeyConstraint:

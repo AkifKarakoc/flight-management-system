@@ -13,7 +13,7 @@ import com.flightmanagement.flightservice.entity.enums.FlightStatus;
 import com.flightmanagement.flightservice.exception.DuplicateResourceException;
 import com.flightmanagement.flightservice.service.CsvProcessingService;
 import com.flightmanagement.flightservice.service.FlightService;
-import com.flightmanagement.flightservice.repository.FlightRepository; // Repository import ekle
+import com.flightmanagement.flightservice.repository.FlightRepository;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -23,15 +23,10 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import lombok.extern.slf4j.Slf4j;
-import com.flightmanagement.flightservice.dto.response.stats.FlightChartDataDto;
-import com.flightmanagement.flightservice.dto.response.stats.FlightTypeDistributionDto;
 
-import java.time.LocalDateTime;
-import java.util.List;
 import java.time.LocalDate;
-import java.util.Map;
+import java.util.List;
 import com.flightmanagement.flightservice.dto.request.ConnectingFlightRequest;
-import com.flightmanagement.flightservice.dto.response.FlightConnectionResponse;
 
 @RestController
 @RequestMapping("/api/v1/flights")
@@ -41,9 +36,9 @@ public class FlightController {
 
     private final FlightService flightService;
     private final CsvProcessingService csvProcessingService;
-    private final FlightRepository flightRepository; // Repository field ekle
+    private final FlightRepository flightRepository;
 
-    // Mevcut metodlar aynı kalacak...
+    // Temel CRUD işlemleri
     @GetMapping
     public ResponseEntity<List<FlightResponse>> getAllFlights() {
         return ResponseEntity.ok(flightService.getAllFlights());
@@ -130,11 +125,7 @@ public class FlightController {
         }
     }
 
-    // AKTARMALI UÇUŞ ENDPOİNTLERİ - DÜZELTİLMİŞ
-
-    /**
-     * Aktarmalı uçuş oluşturur
-     */
+    // AKTARMALI UÇUŞ ENDPOİNTLERİ
     @PostMapping("/connecting")
     @PreAuthorize("hasRole('ADMIN') or hasRole('OPERATOR')")
     public ResponseEntity<FlightResponse> createConnectingFlight(
@@ -155,9 +146,6 @@ public class FlightController {
         }
     }
 
-    /**
-     * Aktarmalı uçuş detayını getirir
-     */
     @GetMapping("/connecting/{mainFlightId}")
     public ResponseEntity<FlightResponse> getConnectingFlightDetails(
             @PathVariable Long mainFlightId) {
@@ -167,9 +155,6 @@ public class FlightController {
         return ResponseEntity.ok(response);
     }
 
-    /**
-     * Ana uçuş için tüm segment'leri getirir
-     */
     @GetMapping("/{mainFlightId}/segments")
     public ResponseEntity<List<FlightResponse>> getFlightSegments(
             @PathVariable Long mainFlightId) {
@@ -179,9 +164,6 @@ public class FlightController {
         return ResponseEntity.ok(segments);
     }
 
-    /**
-     * Aktarmalı uçuş günceller
-     */
     @PutMapping("/connecting/{mainFlightId}")
     @PreAuthorize("hasRole('ADMIN') or hasRole('OPERATOR')")
     public ResponseEntity<FlightResponse> updateConnectingFlight(
@@ -203,9 +185,6 @@ public class FlightController {
         }
     }
 
-    /**
-     * Aktarmalı uçuş siler
-     */
     @DeleteMapping("/connecting/{mainFlightId}")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> deleteConnectingFlight(@PathVariable Long mainFlightId) {
@@ -225,9 +204,6 @@ public class FlightController {
         }
     }
 
-    /**
-     * Tüm aktarmalı uçuşları getirir
-     */
     @GetMapping("/connecting")
     public ResponseEntity<Page<FlightResponse>> getConnectingFlights(
             @RequestParam(defaultValue = "0") int page,
@@ -248,9 +224,6 @@ public class FlightController {
         return ResponseEntity.ok(response);
     }
 
-    /**
-     * Belirli segment'i günceller
-     */
     @PutMapping("/segments/{segmentId}")
     @PreAuthorize("hasRole('ADMIN') or hasRole('OPERATOR')")
     public ResponseEntity<FlightResponse> updateFlightSegment(
@@ -260,7 +233,6 @@ public class FlightController {
         log.info("Updating flight segment: {}", segmentId);
 
         try {
-            // Segment'in parent uçuş olup olmadığını kontrol et
             Flight segment = flightRepository.findById(segmentId)
                     .orElseThrow(() -> new ResourceNotFoundException("Flight segment not found"));
 
@@ -280,9 +252,6 @@ public class FlightController {
         }
     }
 
-    /**
-     * Segment durum günceller
-     */
     @PatchMapping("/segments/{segmentId}/status")
     @PreAuthorize("hasRole('ADMIN') or hasRole('OPERATOR')")
     public ResponseEntity<FlightResponse> updateSegmentStatus(
@@ -293,7 +262,6 @@ public class FlightController {
         log.info("Updating segment status: {} to {}", segmentId, status);
 
         try {
-            // updateFlightStatus metodunu 2 parametre ile çağır
             FlightResponse response = flightService.updateFlightStatus(segmentId, status);
             return ResponseEntity.ok(response);
 
@@ -304,24 +272,5 @@ public class FlightController {
             log.error("Error updating segment status: {}", e.getMessage(), e);
             throw new RuntimeException("Failed to update segment status");
         }
-    }
-
-    // İSTATİSTİK ENDPOİNTLERİ
-    @GetMapping("/stats/daily-summary")
-    public ResponseEntity<Map<String, Object>> getDailySummary(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
-        return ResponseEntity.ok(flightService.getDailySummary(date));
-    }
-
-    @GetMapping("/stats/chart-data")
-    public ResponseEntity<FlightChartDataDto> getFlightChartData(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
-        return ResponseEntity.ok(flightService.getFlightChartData(startDate, endDate));
-    }
-
-    @GetMapping("/stats/type-distribution")
-    public ResponseEntity<List<FlightTypeDistributionDto>> getFlightTypeDistribution() {
-        return ResponseEntity.ok(flightService.getFlightTypeDistribution());
     }
 }

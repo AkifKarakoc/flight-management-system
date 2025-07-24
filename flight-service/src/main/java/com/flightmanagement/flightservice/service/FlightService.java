@@ -406,13 +406,13 @@ public class FlightService {
 
         if (airlineId != null && flightDate != null) {
             flights = flightRepository.findByIsConnectingFlightTrueAndAirlineIdAndFlightDate(
-                    airlineId, flightDate, (SpringDataWebProperties.Pageable) pageable);
+                    airlineId, flightDate, (Pageable) pageable);
         } else if (airlineId != null) {
-            flights = flightRepository.findByIsConnectingFlightTrueAndAirlineId(airlineId, (SpringDataWebProperties.Pageable) pageable);
+            flights = flightRepository.findByIsConnectingFlightTrueAndAirlineId(airlineId, (Pageable) pageable);
         } else if (flightDate != null) {
-            flights = flightRepository.findByIsConnectingFlightTrueAndFlightDate(flightDate, (SpringDataWebProperties.Pageable) pageable);
+            flights = flightRepository.findByIsConnectingFlightTrueAndFlightDate(flightDate, (Pageable) pageable);
         } else {
-            flights = flightRepository.findByIsConnectingFlightTrue((SpringDataWebProperties.Pageable) pageable);
+            flights = flightRepository.findByIsConnectingFlightTrue((Pageable) pageable);
         }
 
         return flights.map(flight -> {
