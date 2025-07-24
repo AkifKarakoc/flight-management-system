@@ -25,7 +25,11 @@ import org.springframework.web.multipart.MultipartFile;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+
 import com.flightmanagement.flightservice.dto.request.ConnectingFlightRequest;
 
 @RestController
@@ -272,5 +276,81 @@ public class FlightController {
             log.error("Error updating segment status: {}", e.getMessage(), e);
             throw new RuntimeException("Failed to update segment status");
         }
+    }
+
+    // YENİ: Route bazlı flight sorgulama
+    @GetMapping("/route/{routeId}")
+    public ResponseEntity<List<FlightResponse>> getFlightsByRoute(
+            @PathVariable Long routeId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+
+        List<FlightResponse> flights = flightService.getFlightsByRoute(routeId, date);
+        return ResponseEntity.ok(flights);
+    }
+
+    // YENİ: Route bazlı sayfalı sorgulama
+    @GetMapping("/route/{routeId}/paged")
+    public ResponseEntity<Page<FlightResponse>> getFlightsByRoutePaged(
+            @PathVariable Long routeId,
+            Pageable pageable) {
+
+        Page<FlightResponse> flights = flightService.getFlightsByRoutePaged(routeId, pageable);
+        return ResponseEntity.ok(flights);
+    }
+
+    // Migration endpoint - sadece admin
+    @PostMapping("/migrate-legacy-to-routes")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> migrateLegacyFlightsToRoutes() {
+        log.info("Starting legacy flights to routes migration");
+
+        try {
+            flightService.migrateLegacyFlightsToRoutes();
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("status", "success");
+            result.put("message", "Legacy flights migrated to routes successfully");
+            result.put("timestamp", LocalDateTime.now());
+
+            return ResponseEntity.ok(result);
+
+        } catch (Exception e) {
+            log.error("Migration failed: {}", e.getMessage(), e);
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("status", "error");
+            result.put("message", "Migration failed: " + e.getMessage());
+            result.put("timestamp", LocalDateTime.now());
+
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(result);
+        }
+    }
+
+    // Migration status kontrolü
+    @GetMapping("/migration-status")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> getMigrationStatus() {
+        Map<String, Object> status = flightService.getMigrationStatus();
+        return ResponseEntity.ok(status);
+    }
+
+    // YENİ: Route creation için helper endpoint
+    @PostMapping("/create-with-new-route")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<FlightResponse> createFlightWithNewRoute(
+            @Valid @RequestBody FlightRequest request,
+            @RequestParam String routeCode,
+            @RequestParam String routeName) {
+
+        FlightResponse response = flightService.createFlightWithNewRoute(request, routeCode, routeName);
+        return new ResponseEntity<>(response, HttpStatus.CREATED);
+    }
+
+    // Debug endpoint - route bilgilerini kontrol et
+    @GetMapping("/{id}/route-info")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> getFlightRouteInfo(@PathVariable Long id) {
+        Map<String, Object> routeInfo = flightService.getFlightRouteInfo(id);
+        return ResponseEntity.ok(routeInfo);
     }
 }

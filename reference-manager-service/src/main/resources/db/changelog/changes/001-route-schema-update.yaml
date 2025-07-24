@@ -1,0 +1,332 @@
+databaseChangeLog:
+  - changeSet:
+      id: 001-add-route-ownership-fields
+      author: system
+      comment: "Add ownership and multi-segment support to routes table"
+      changes:
+        - addColumn:
+            tableName: routes
+            columns:
+              - column:
+                  name: route_code
+                  type: varchar(50)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: route_name
+                  type: varchar(200)
+                  constraints:
+                    nullable: true
+              - column:
+                  name: created_by_user_id
+                  type: bigint
+                  constraints:
+                    nullable: true
+              - column:
+                  name: visibility
+                  type: varchar(20)
+                  defaultValue: "PRIVATE"
+                  constraints:
+                    nullable: true
+              - column:
+                  name: airline_id
+                  type: bigint
+                  constraints:
+                    nullable: true
+              - column:
+                  name: is_multi_segment
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: true
+
+  - changeSet:
+      id: 001-create-route-segments-table
+      author: system
+      comment: "Create route_segments table for multi-segment routes"
+      changes:
+        - createTable:
+            tableName: route_segments
+            columns:
+              - column:
+                  name: id
+                  type: bigint
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: route_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+              - column:
+                  name: segment_order
+                  type: integer
+                  constraints:
+                    nullable: false
+              - column:
+                  name: origin_airport_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+              - column:
+                  name: destination_airport_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+              - column:
+                  name: distance
+                  type: integer
+                  constraints:
+                    nullable: true
+              - column:
+                  name: estimated_flight_time
+                  type: integer
+                  constraints:
+                    nullable: true
+              - column:
+                  name: active
+                  type: boolean
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: timestamp
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: timestamp
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+
+  - changeSet:
+      id: 001-add-route-segments-foreign-keys
+      author: system
+      comment: "Add foreign key constraints for route_segments table"
+      changes:
+        - addForeignKeyConstraint:
+            baseTableName: route_segments
+            baseColumnNames: route_id
+            referencedTableName: routes
+            referencedColumnNames: id
+            constraintName: fk_route_segments_route
+            onDelete: CASCADE
+        - addForeignKeyConstraint:
+            baseTableName: route_segments
+            baseColumnNames: origin_airport_id
+            referencedTableName: airports
+            referencedColumnNames: id
+            constraintName: fk_route_segments_origin_airport
+        - addForeignKeyConstraint:
+            baseTableName: route_segments
+            baseColumnNames: destination_airport_id
+            referencedTableName: airports
+            referencedColumnNames: id
+            constraintName: fk_route_segments_destination_airport
+
+  - changeSet:
+      id: 001-add-route-segments-indexes
+      author: system
+      comment: "Add indexes for route_segments table performance"
+      changes:
+        - createIndex:
+            tableName: route_segments
+            indexName: idx_route_segments_route_id
+            columns:
+              - column:
+                  name: route_id
+        - createIndex:
+            tableName: route_segments
+            indexName: idx_route_segments_order
+            columns:
+              - column:
+                  name: route_id
+              - column:
+                  name: segment_order
+        - createIndex:
+            tableName: route_segments
+            indexName: idx_route_segments_origin_airport
+            columns:
+              - column:
+                  name: origin_airport_id
+        - createIndex:
+            tableName: route_segments
+            indexName: idx_route_segments_destination_airport
+            columns:
+              - column:
+                  name: destination_airport_id
+
+  - changeSet:
+      id: 001-add-routes-table-indexes
+      author: system
+      comment: "Add indexes for routes table new columns"
+      changes:
+        - createIndex:
+            tableName: routes
+            indexName: idx_routes_created_by_user
+            columns:
+              - column:
+                  name: created_by_user_id
+        - createIndex:
+            tableName: routes
+            indexName: idx_routes_visibility
+            columns:
+              - column:
+                  name: visibility
+        - createIndex:
+            tableName: routes
+            indexName: idx_routes_airline
+            columns:
+              - column:
+                  name: airline_id
+        - createIndex:
+            tableName: routes
+            indexName: idx_routes_code
+            columns:
+              - column:
+                  name: route_code
+
+  - changeSet:
+      id: 001-add-route-segments-constraints
+      author: system
+      comment: "Add unique constraints and checks for route_segments"
+      changes:
+        - addUniqueConstraint:
+            tableName: route_segments
+            columnNames: route_id, segment_order
+            constraintName: unique_route_segment_order
+        - sql:
+            sql: >
+              ALTER TABLE route_segments 
+              ADD CONSTRAINT check_positive_distance 
+              CHECK (distance IS NULL OR distance > 0)
+        - sql:
+            sql: >
+              ALTER TABLE route_segments 
+              ADD CONSTRAINT check_positive_flight_time 
+              CHECK (estimated_flight_time IS NULL OR estimated_flight_time > 0)
+        - sql:
+            sql: >
+              ALTER TABLE route_segments 
+              ADD CONSTRAINT check_different_airports 
+              CHECK (origin_airport_id != destination_airport_id)
+
+  - changeSet:
+      id: 001-add-routes-table-constraints
+      author: system
+      comment: "Add constraints to routes table"
+      changes:
+        - sql:
+            sql: >
+              ALTER TABLE routes 
+              ADD CONSTRAINT check_route_type 
+              CHECK (route_type IN ('DOMESTIC', 'INTERNATIONAL', 'CONTINENTAL'))
+        - sql:
+            sql: >
+              ALTER TABLE routes 
+              ADD CONSTRAINT check_visibility 
+              CHECK (visibility IN ('PRIVATE', 'SHARED', 'PUBLIC'))
+
+  - changeSet:
+      id: 001-update-existing-routes-data
+      author: system
+      comment: "Update existing routes with default values"
+      changes:
+        - sql:
+            sql: >
+              UPDATE routes 
+              SET 
+                route_code = CONCAT('LEGACY-', LPAD(CAST(id AS CHAR), 4, '0')),
+                route_name = CONCAT(
+                  COALESCE((SELECT iata_code FROM airports WHERE id = origin_airport_id), 'XXX'),
+                  ' to ',
+                  COALESCE((SELECT iata_code FROM airports WHERE id = destination_airport_id), 'XXX'),
+                  ' Route'
+                ),
+                visibility = 'PUBLIC',
+                is_multi_segment = FALSE
+              WHERE route_code IS NULL
+
+  - changeSet:
+      id: 001-make-route-columns-not-null
+      author: system
+      comment: "Make required columns NOT NULL after setting default values"
+      changes:
+        - addNotNullConstraint:
+            tableName: routes
+            columnName: route_code
+            columnDataType: varchar(50)
+        - addNotNullConstraint:
+            tableName: routes
+            columnName: route_name
+            columnDataType: varchar(200)
+        - addNotNullConstraint:
+            tableName: routes
+            columnName: visibility
+            columnDataType: varchar(20)
+        - addNotNullConstraint:
+            tableName: routes
+            columnName: is_multi_segment
+            columnDataType: boolean
+
+  - changeSet:
+      id: 001-add-route-code-unique-constraint
+      author: system
+      comment: "Add unique constraint for route_code"
+      changes:
+        - addUniqueConstraint:
+            tableName: routes
+            columnNames: route_code
+            constraintName: unique_route_code
+
+  - changeSet:
+      id: 001-create-route-summary-view
+      author: system
+      comment: "Create route summary view for reporting"
+      changes:
+        - createView:
+            viewName: route_summary
+            replaceIfExists: true
+            selectQuery: >
+              SELECT 
+                r.id,
+                r.route_code,
+                r.route_name,
+                r.route_type,
+                r.visibility,
+                r.is_multi_segment,
+                r.created_by_user_id,
+                r.airline_id,
+                r.active,
+              
+                CASE WHEN r.is_multi_segment = FALSE THEN
+                  CONCAT(
+                    COALESCE(oa.iata_code, 'XXX'),
+                    ' → ',
+                    COALESCE(da.iata_code, 'XXX')
+                  )
+                ELSE NULL END as simple_route_path,
+              
+                CASE WHEN r.is_multi_segment = TRUE THEN
+                  (SELECT COUNT(*) FROM route_segments WHERE route_id = r.id)
+                ELSE 1 END as segment_count,
+              
+                CASE WHEN r.is_multi_segment = TRUE THEN
+                  COALESCE((SELECT SUM(distance) FROM route_segments WHERE route_id = r.id), 0)
+                ELSE COALESCE(r.distance, 0) END as total_distance,
+              
+                CASE WHEN r.is_multi_segment = TRUE THEN
+                  COALESCE((SELECT SUM(estimated_flight_time) FROM route_segments WHERE route_id = r.id), 0)
+                ELSE COALESCE(r.estimated_flight_time, 0) END as total_flight_time,
+              
+                r.created_at,
+                r.updated_at
+              
+              FROM routes r
+              LEFT JOIN airports oa ON r.origin_airport_id = oa.id
+              LEFT JOIN airports da ON r.destination_airport_id = da.id

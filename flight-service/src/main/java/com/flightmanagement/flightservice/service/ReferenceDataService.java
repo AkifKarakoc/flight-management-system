@@ -3,15 +3,11 @@ package com.flightmanagement.flightservice.service;
 import com.flightmanagement.flightservice.dto.cache.AircraftCache;
 import com.flightmanagement.flightservice.dto.cache.AirlineCache;
 import com.flightmanagement.flightservice.dto.cache.AirportCache;
-import com.flightmanagement.flightservice.exception.ResourceNotFoundException;
+import com.flightmanagement.flightservice.dto.cache.RouteCache;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.ResponseEntity;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
@@ -20,160 +16,129 @@ import org.springframework.web.client.RestTemplate;
 @Slf4j
 public class ReferenceDataService {
 
-    private final CacheService cacheService;
     private final RestTemplate restTemplate;
-    private final ServiceTokenManager serviceTokenManager; // ServiceTokenManager enjekte edildi
 
-    @Value("${reference-manager.base-url}")
-    private String referenceManagerBaseUrl;
+    @Value("${reference.service.url:http://localhost:8081}")
+    private String referenceServiceUrl;
 
-    private HttpEntity<?> createAuthenticatedRequest() {
-        HttpHeaders headers = new HttpHeaders();
-        String token = serviceTokenManager.getServiceToken(); // getServiceToken çağrısı buradan yapıldı
-        if (token != null) {
-            headers.set("Authorization", "Bearer " + token);
+    @Cacheable("airlines")
+    public AirlineCache getAirline(Long airlineId) {
+        log.debug("Fetching airline data for ID: {}", airlineId);
+        try {
+            String url = referenceServiceUrl + "/api/v1/airlines/" + airlineId;
+            return restTemplate.getForObject(url, AirlineCache.class);
+        } catch (Exception e) {
+            log.error("Error fetching airline {}: {}", airlineId, e.getMessage());
+            throw new RuntimeException("Failed to fetch airline data", e);
         }
-        return new HttpEntity<>(headers);
     }
 
-    public AirlineCache getAirline(Long id) {
-        // First try cache
-        AirlineCache airline = cacheService.getAirlineFromCache(id);
-        if (airline != null) {
-            return airline;
-        }
-
-        // Cache miss - fetch from Reference Manager
+    @Cacheable("airports")
+    public AirportCache getAirport(Long airportId) {
+        log.debug("Fetching airport data for ID: {}", airportId);
         try {
-            String url = referenceManagerBaseUrl + "/api/v1/airlines/" + id;
-            HttpEntity<?> requestEntity = createAuthenticatedRequest();
+            String url = referenceServiceUrl + "/api/v1/airports/" + airportId;
+            return restTemplate.getForObject(url, AirportCache.class);
+        } catch (Exception e) {
+            log.error("Error fetching airport {}: {}", airportId, e.getMessage());
+            throw new RuntimeException("Failed to fetch airport data", e);
+        }
+    }
 
-            ResponseEntity<AirlineCache> response = restTemplate.exchange(
-                    url, HttpMethod.GET, requestEntity, new ParameterizedTypeReference<AirlineCache>() {});
+    @Cacheable("aircraft")
+    public AircraftCache getAircraft(Long aircraftId) {
+        log.debug("Fetching aircraft data for ID: {}", aircraftId);
+        try {
+            String url = referenceServiceUrl + "/api/v1/aircrafts/" + aircraftId;
+            return restTemplate.getForObject(url, AircraftCache.class);
+        } catch (Exception e) {
+            log.error("Error fetching aircraft {}: {}", aircraftId, e.getMessage());
+            throw new RuntimeException("Failed to fetch aircraft data", e);
+        }
+    }
 
-            if (response.getBody() != null) {
-                airline = response.getBody();
-                cacheService.cacheAirline(id, airline);
-                log.debug("Fetched and cached airline: {} from Reference Manager", airline.getName());
-                return airline;
+    // YENİ: Route data service
+    @Cacheable("routes")
+    public RouteCache getRoute(Long routeId) {
+        log.debug("Fetching route data for ID: {}", routeId);
+        try {
+            String url = referenceServiceUrl + "/api/v1/routes/" + routeId;
+            return restTemplate.getForObject(url, RouteCache.class);
+        } catch (Exception e) {
+            log.error("Error fetching route {}: {}", routeId, e.getMessage());
+            throw new RuntimeException("Failed to fetch route data", e);
+        }
+    }
+
+    // Route'dan airport bilgilerini getir (backward compatibility için)
+    public AirportCache getOriginAirportFromRoute(Long routeId) {
+        try {
+            RouteCache route = getRoute(routeId);
+            if (route.getOriginAirportId() != null) {
+                return getAirport(route.getOriginAirportId());
             }
+            return null;
         } catch (Exception e) {
-            log.error("Failed to fetch airline from Reference Manager: {}", e.getMessage());
+            log.error("Error fetching origin airport from route {}: {}", routeId, e.getMessage());
+            return null;
         }
-
-        throw new ResourceNotFoundException("Airline not found with id: " + id);
     }
 
-    public AirportCache getAirport(Long id) {
-        // First try cache
-        AirportCache airport = cacheService.getAirportFromCache(id);
-        if (airport != null) {
-            return airport;
-        }
-
-        // Cache miss - fetch from Reference Manager
+    public AirportCache getDestinationAirportFromRoute(Long routeId) {
         try {
-            String url = referenceManagerBaseUrl + "/api/v1/airports/" + id;
-            HttpEntity<?> requestEntity = createAuthenticatedRequest();
-
-            ResponseEntity<AirportCache> response = restTemplate.exchange(
-                    url, HttpMethod.GET, requestEntity, new ParameterizedTypeReference<AirportCache>() {});
-
-            if (response.getBody() != null) {
-                airport = response.getBody();
-                cacheService.cacheAirport(id, airport);
-                log.debug("Fetched and cached airport: {} from Reference Manager", airport.getName());
-                return airport;
+            RouteCache route = getRoute(routeId);
+            if (route.getDestinationAirportId() != null) {
+                return getAirport(route.getDestinationAirportId());
             }
+            return null;
         } catch (Exception e) {
-            log.error("Failed to fetch airport from Reference Manager: {}", e.getMessage());
+            log.error("Error fetching destination airport from route {}: {}", routeId, e.getMessage());
+            return null;
         }
-
-        throw new ResourceNotFoundException("Airport not found with id: " + id);
     }
 
-    public AircraftCache getAircraft(Long id) {
-        // First try cache
-        AircraftCache aircraft = cacheService.getAircraftFromCache(id);
-        if (aircraft != null) {
-            return aircraft;
-        }
+    // Cache invalidation methods
+    public void invalidateAirlineCache(Long airlineId) {
+        log.debug("Invalidating airline cache for ID: {}", airlineId);
+        // Cache eviction logic here
+    }
 
-        // Cache miss - fetch from Reference Manager
+    public void invalidateAirportCache(Long airportId) {
+        log.debug("Invalidating airport cache for ID: {}", airportId);
+        // Cache eviction logic here
+    }
+
+    public void invalidateAircraftCache(Long aircraftId) {
+        log.debug("Invalidating aircraft cache for ID: {}", aircraftId);
+        // Cache eviction logic here
+    }
+
+    public void invalidateRouteCache(Long routeId) {
+        log.debug("Invalidating route cache for ID: {}", routeId);
+        // Cache eviction logic here
+    }
+
+    // Batch operations for performance
+    public RouteCache[] getRoutesByIds(Long[] routeIds) {
+        log.debug("Fetching multiple routes: {}", routeIds.length);
         try {
-            String url = referenceManagerBaseUrl + "/api/v1/aircrafts/" + id;
-            HttpEntity<?> requestEntity = createAuthenticatedRequest();
-
-            ResponseEntity<AircraftCache> response = restTemplate.exchange(
-                    url, HttpMethod.GET, requestEntity, new ParameterizedTypeReference<AircraftCache>() {});
-
-            if (response.getBody() != null) {
-                aircraft = response.getBody();
-                cacheService.cacheAircraft(id, aircraft);
-                log.debug("Fetched and cached aircraft: {} from Reference Manager", aircraft.getRegistrationNumber());
-                return aircraft;
-            }
+            String url = referenceServiceUrl + "/api/v1/routes/batch";
+            return restTemplate.postForObject(url, routeIds, RouteCache[].class);
         } catch (Exception e) {
-            log.error("Failed to fetch aircraft from Reference Manager: {}", e.getMessage());
+            log.error("Error fetching multiple routes: {}", e.getMessage());
+            throw new RuntimeException("Failed to fetch batch route data", e);
         }
-
-        throw new ResourceNotFoundException("Aircraft not found with id: " + id);
     }
 
-    // Validation methods
-    public boolean isValidAirline(Long airlineId) {
+    // Health check
+    public boolean isReferenceServiceHealthy() {
         try {
-            getAirline(airlineId);
+            String url = referenceServiceUrl + "/actuator/health";
+            restTemplate.getForObject(url, String.class);
             return true;
-        } catch (ResourceNotFoundException e) {
-            return false;
-        }
-    }
-
-    public boolean isValidAirport(Long airportId) {
-        try {
-            getAirport(airportId);
-            return true;
-        } catch (ResourceNotFoundException e) {
-            return false;
-        }
-    }
-
-    public boolean isValidAircraft(Long aircraftId) {
-        try {
-            getAircraft(aircraftId);
-            return true;
-        } catch (ResourceNotFoundException e) {
-            return false;
-        }
-    }
-
-    public boolean isAircraftBelongsToAirline(Long aircraftId, Long airlineId) {
-        try {
-            AircraftCache aircraft = getAircraft(aircraftId);
-            // Null check ekle
-            return aircraft.getAirlineId() != null && aircraft.getAirlineId().equals(airlineId);
-        } catch (ResourceNotFoundException e) {
-            log.warn("Aircraft not found: {}", aircraftId);
-            return false;
         } catch (Exception e) {
-            log.error("Error checking aircraft-airline relationship: {}", e.getMessage());
+            log.warn("Reference service health check failed: {}", e.getMessage());
             return false;
         }
-    }
-
-    // Inner class for login response
-    public static class LoginResponse {
-        private String accessToken;
-        private String tokenType;
-        private long expiresIn;
-
-        // Getters and setters
-        public String getAccessToken() { return accessToken; }
-        public void setAccessToken(String accessToken) { this.accessToken = accessToken; }
-        public String getTokenType() { return tokenType; }
-        public void setTokenType(String tokenType) { this.tokenType = tokenType; }
-        public long getExpiresIn() { return expiresIn; }
-        public void setExpiresIn(long expiresIn) { this.expiresIn = expiresIn; }
     }
 }

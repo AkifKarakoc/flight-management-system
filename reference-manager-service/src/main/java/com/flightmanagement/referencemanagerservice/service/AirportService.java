@@ -150,6 +150,8 @@ public class AirportService {
         webSocketMessageService.sendAirportUpdate("DELETE", null, id);
     }
 
+    // AirportService.java forceDeleteAirport metodundaki düzeltme:
+
     @Transactional
     public void forceDeleteAirport(Long id) {
         log.debug("Force deleting airport with id: {}", id);
@@ -161,11 +163,15 @@ public class AirportService {
         List<Route> originRoutes = routeRepository.findByOriginAirportId(id);
         List<Route> destRoutes = routeRepository.findByDestinationAirportId(id);
 
+        // System user olarak route'ları sil (admin yetkisiyle)
+        Long systemUserId = 0L; // System user ID
+        boolean isAdmin = true;  // System işlemi için admin yetkisi
+
         for (Route route : originRoutes) {
-            routeService.deleteRoute(route.getId());
+            routeService.deleteRoute(route.getId(), systemUserId, isAdmin);
         }
         for (Route route : destRoutes) {
-            routeService.deleteRoute(route.getId());
+            routeService.deleteRoute(route.getId(), systemUserId, isAdmin);
         }
 
         List<Gate> gates = gateRepository.findByAirportId(id);

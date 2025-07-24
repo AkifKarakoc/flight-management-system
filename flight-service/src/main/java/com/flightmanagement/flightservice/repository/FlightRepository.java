@@ -18,100 +18,148 @@ import java.util.Optional;
 @Repository
 public interface FlightRepository extends JpaRepository<Flight, Long> {
 
-    // Flight number ile arama
-    Optional<Flight> findByFlightNumberAndFlightDate(String flightNumber, LocalDate flightDate);
+    // Temel sorgular
     List<Flight> findByFlightNumber(String flightNumber);
 
-    // Airline bazlı aramalar
-    List<Flight> findByAirlineId(Long airlineId);
-    List<Flight> findByAirlineIdAndFlightDate(Long airlineId, LocalDate flightDate);
+    List<Flight> findByFlightNumberAndFlightDate(String flightNumber, LocalDate flightDate);
 
-    // Airport bazlı aramalar
-    List<Flight> findByOriginAirportId(Long originAirportId);
-    List<Flight> findByDestinationAirportId(Long destinationAirportId);
-    List<Flight> findByOriginAirportIdOrDestinationAirportId(Long originId, Long destinationId);
+    Optional<Flight> findByFlightNumberAndFlightDateAndSegmentNumber(
+            String flightNumber, LocalDate flightDate, Integer segmentNumber);
 
-    // Aircraft bazlı aramalar
-    List<Flight> findByAircraftId(Long aircraftId);
+    List<Flight> findByStatus(FlightStatus status);
 
-    // Tarih bazlı aramalar
     List<Flight> findByFlightDate(LocalDate flightDate);
+
     List<Flight> findByFlightDateBetween(LocalDate startDate, LocalDate endDate);
 
-    // Status bazlı aramalar
-    List<Flight> findByStatus(FlightStatus status);
+    // YENİ: Route bazlı sorgular
+    List<Flight> findByRouteId(Long routeId);
+
+    List<Flight> findByRouteIdAndFlightDate(Long routeId, LocalDate flightDate);
+
+    Page<Flight> findByRouteId(Long routeId, Pageable pageable);
+
+    @Query("SELECT COUNT(f) FROM Flight f WHERE f.routeId = :routeId AND f.active = true")
+    long countActiveFlightsByRoute(@Param("routeId") Long routeId);
+
+    // ESKİ: Airport bazlı sorgular (backward compatibility)
+    @Deprecated
+    List<Flight> findByOriginAirportId(Long originAirportId);
+
+    @Deprecated
+    List<Flight> findByDestinationAirportId(Long destinationAirportId);
+
+    @Deprecated
+    List<Flight> findByOriginAirportIdAndDestinationAirportId(Long originId, Long destinationId);
+
+    // Airline bazlı sorgular
+    List<Flight> findByAirlineId(Long airlineId);
+
+    Page<Flight> findByAirlineId(Long airlineId, Pageable pageable);
+
+    List<Flight> findByAirlineIdAndFlightDate(Long airlineId, LocalDate flightDate);
+
+    // Aircraft bazlı sorgular
+    List<Flight> findByAircraftId(Long aircraftId);
+
+    List<Flight> findByAircraftIdAndFlightDate(Long aircraftId, LocalDate flightDate);
+
+    // Status bazlı sorgular
     List<Flight> findByStatusAndFlightDate(FlightStatus status, LocalDate flightDate);
 
-    // Type bazlı aramalar
-    List<Flight> findByType(FlightType type);
+    @Query("SELECT f FROM Flight f WHERE f.status = :status AND f.flightDate BETWEEN :startDate AND :endDate")
+    List<Flight> findByStatusAndDateRange(@Param("status") FlightStatus status,
+                                          @Param("startDate") LocalDate startDate,
+                                          @Param("endDate") LocalDate endDate);
 
-    // Zaman bazlı aramalar
-    List<Flight> findByScheduledDepartureBetween(LocalDateTime start, LocalDateTime end);
-    List<Flight> findByScheduledArrivalBetween(LocalDateTime start, LocalDateTime end);
+    // Gecikme bazlı sorgular
+    @Query("SELECT f FROM Flight f WHERE f.delayMinutes > :minDelay AND f.flightDate = :date")
+    List<Flight> findDelayedFlights(@Param("minDelay") Integer minDelay, @Param("date") LocalDate date);
 
-    // Gecikme aramaları
-    @Query("SELECT f FROM Flight f WHERE f.delayMinutes > :minutes")
-    List<Flight> findDelayedFlights(@Param("minutes") Integer minutes);
+    // Aktarmalı uçuş sorgular
+    List<Flight> findByParentFlightId(Long parentFlightId);
 
-    @Query("SELECT f FROM Flight f WHERE f.status = 'DELAYED' AND f.flightDate = :date")
-    List<Flight> findDelayedFlightsByDate(@Param("date") LocalDate date);
+    List<Flight> findByIsConnectingFlightTrueAndParentFlightId(Long parentFlightId);
 
-    // Aktif uçuşlar
-    List<Flight> findByActiveTrue();
-    List<Flight> findByActiveTrueAndFlightDate(LocalDate flightDate);
+    @Query("SELECT f FROM Flight f WHERE f.isConnectingFlight = true AND f.segmentNumber > 0 ORDER BY f.segmentNumber")
+    List<Flight> findConnectingFlightSegments();
 
     // İstatistik sorguları
     @Query("SELECT COUNT(f) FROM Flight f WHERE f.flightDate = :date")
-    Long countFlightsByDate(@Param("date") LocalDate date);
+    long countFlightsByDate(@Param("date") LocalDate date);
 
-    @Query("SELECT COUNT(f) FROM Flight f WHERE f.airlineId = :airlineId AND f.flightDate = :date")
-    Long countFlightsByAirlineAndDate(@Param("airlineId") Long airlineId, @Param("date") LocalDate date);
+    @Query("SELECT COUNT(f) FROM Flight f WHERE f.flightDate = :date AND f.status = :status")
+    long countFlightsByDateAndStatus(@Param("date") LocalDate date, @Param("status") FlightStatus status);
 
-    @Query("SELECT COUNT(f) FROM Flight f WHERE f.status = :status AND f.flightDate = :date")
-    Long countFlightsByStatusAndDate(@Param("status") FlightStatus status, @Param("date") LocalDate date);
+    @Query("SELECT f.type, COUNT(f) FROM Flight f WHERE f.flightDate = :date GROUP BY f.type")
+    List<Object[]> countFlightsGroupedByType(@Param("date") LocalDate date);
 
-    // Rota bazlı sayım
-    @Query("SELECT COUNT(f) FROM Flight f WHERE f.originAirportId = :originId AND f.destinationAirportId = :destId")
-    Long countFlightsByRoute(@Param("originId") Long originId, @Param("destId") Long destinationId);
-
-    // Grafik verisi için tarih ve duruma göre gruplanmış sayım
-    @Query("SELECT f.flightDate, f.status, COUNT(f) FROM Flight f WHERE f.flightDate BETWEEN :startDate AND :endDate GROUP BY f.flightDate, f.status")
-    List<Object[]> countFlightsGroupedByDateAndStatus(@Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
-
-    // Uçuş tipine göre gruplanmış sayım
     @Query("SELECT f.type, COUNT(f) FROM Flight f GROUP BY f.type")
     List<Object[]> countFlightsGroupedByType();
 
-    // AKTARMALI UÇUŞ METODLARI
-    List<Flight> findByParentFlightId(Long parentFlightId);
-    List<Flight> findByParentFlightIdOrderBySegmentNumber(Long parentFlightId);
+    @Query("SELECT f.status, COUNT(f) FROM Flight f WHERE f.flightDate = :date GROUP BY f.status")
+    List<Object[]> countFlightsGroupedByStatus(@Param("date") LocalDate date);
 
-    // Ana uçuşlar (aktarmalı olmayan)
-    List<Flight> findByIsConnectingFlightFalse();
+    // Airline bazlı istatistikler
+    @Query("SELECT COUNT(f) FROM Flight f WHERE f.airlineId = :airlineId AND f.flightDate = :date")
+    long countFlightsByAirlineAndDate(@Param("airlineId") Long airlineId, @Param("date") LocalDate date);
+
+    @Query("SELECT COUNT(f) FROM Flight f WHERE f.status = :status AND f.flightDate = :date")
+    long countFlightsByStatusAndDate(@Param("status") FlightStatus status, @Param("date") LocalDate date);
+
+    // Connecting flight queries - parent flight ile sıralı
+    @Query("SELECT f FROM Flight f WHERE f.parentFlightId = :parentFlightId ORDER BY f.segmentNumber")
+    List<Flight> findByParentFlightIdOrderBySegmentNumber(@Param("parentFlightId") Long parentFlightId);
+
+    // Connecting flight sorgular - aktif connecting flight'lar
+    @Query("SELECT f FROM Flight f WHERE f.isConnectingFlight = true")
     List<Flight> findByIsConnectingFlightTrue();
 
-    // Parent-child ilişkisi kontrolü
-    boolean existsByParentFlightId(Long parentFlightId);
+    @Query("SELECT f FROM Flight f WHERE f.isConnectingFlight = true AND f.flightDate = :date")
+    List<Flight> findByIsConnectingFlightTrueAndFlightDate(@Param("date") LocalDate date);
 
-    // Segment uçuş sayısı
-    @Query("SELECT COUNT(f) FROM Flight f WHERE f.parentFlightId = :parentFlightId")
-    Long countSegmentsByParentFlightId(@Param("parentFlightId") Long parentFlightId);
+    @Query("SELECT f FROM Flight f WHERE f.isConnectingFlight = true AND f.airlineId = :airlineId")
+    List<Flight> findByIsConnectingFlightTrueAndAirlineId(@Param("airlineId") Long airlineId);
 
-    // Ana uçuş için tüm segment'ler
-    @Query("SELECT f FROM Flight f WHERE f.parentFlightId = :parentFlightId ORDER BY f.segmentNumber")
-    List<Flight> findConnectingFlightsByParentId(@Param("parentFlightId") Long parentFlightId);
+    @Query("SELECT f FROM Flight f WHERE f.isConnectingFlight = true AND f.airlineId = :airlineId AND f.flightDate = :date")
+    List<Flight> findByIsConnectingFlightTrueAndAirlineIdAndFlightDate(@Param("airlineId") Long airlineId, @Param("date") LocalDate date);
 
-    // Segment numarasıyla arama
-    @Query("SELECT f FROM Flight f WHERE f.parentFlightId = :parentFlightId AND f.segmentNumber = :segmentNumber")
-    Optional<Flight> findByParentFlightIdAndSegmentNumber(@Param("parentFlightId") Long parentFlightId, @Param("segmentNumber") Integer segmentNumber);
+    // Grup istatistikleri
+    @Query("SELECT f.flightDate, f.status, COUNT(f) FROM Flight f WHERE f.flightDate BETWEEN :startDate AND :endDate GROUP BY f.flightDate, f.status ORDER BY f.flightDate")
+    List<Object[]> countFlightsGroupedByDateAndStatus(@Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
 
-    // Paginated connecting flights - DÜZELTME: Pageable kullanın
-    Page<Flight> findByIsConnectingFlightTrue(Pageable pageable);
-    Page<Flight> findByIsConnectingFlightTrueAndAirlineId(Long airlineId, Pageable pageable);
-    Page<Flight> findByIsConnectingFlightTrueAndFlightDate(LocalDate flightDate, Pageable pageable);
-    Page<Flight> findByIsConnectingFlightTrueAndAirlineIdAndFlightDate(Long airlineId, LocalDate flightDate, Pageable pageable);
+    // Performans sorguları
+    @Query("SELECT f FROM Flight f WHERE f.scheduledDeparture BETWEEN :start AND :end ORDER BY f.scheduledDeparture")
+    List<Flight> findFlightsInTimeRange(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
 
-    // Validation queries
-    @Query("SELECT CASE WHEN COUNT(f) > 0 THEN true ELSE false END FROM Flight f WHERE f.flightNumber = :flightNumber AND f.flightDate = :flightDate AND f.parentFlightId IS NULL")
-    boolean existsMainFlightByFlightNumberAndDate(@Param("flightNumber") String flightNumber, @Param("flightDate") LocalDate flightDate);
+    @Query("SELECT f FROM Flight f WHERE f.routeId = :routeId AND f.flightDate BETWEEN :startDate AND :endDate ORDER BY f.scheduledDeparture")
+    List<Flight> findFlightsByRouteAndDateRange(@Param("routeId") Long routeId,
+                                                @Param("startDate") LocalDate startDate,
+                                                @Param("endDate") LocalDate endDate);
+
+    // Validation sorguları
+    boolean existsByFlightNumberAndFlightDate(String flightNumber, LocalDate flightDate);
+
+    @Query("SELECT CASE WHEN COUNT(f) > 0 THEN true ELSE false END FROM Flight f " +
+            "WHERE f.aircraftId = :aircraftId AND f.flightDate = :date AND " +
+            "((f.scheduledDeparture <= :departure AND f.scheduledArrival > :departure) OR " +
+            "(f.scheduledDeparture < :arrival AND f.scheduledArrival >= :arrival) OR " +
+            "(f.scheduledDeparture >= :departure AND f.scheduledArrival <= :arrival))")
+    boolean hasAircraftConflict(@Param("aircraftId") Long aircraftId,
+                                @Param("date") LocalDate date,
+                                @Param("departure") LocalDateTime departure,
+                                @Param("arrival") LocalDateTime arrival);
+
+    // Cleanup sorguları
+    @Query("DELETE FROM Flight f WHERE f.flightDate < :cutoffDate AND f.status IN ('CANCELLED', 'ARRIVED')")
+    void deleteOldCompletedFlights(@Param("cutoffDate") LocalDate cutoffDate);
+
+    // Route migration helper sorguları (geçici)
+    @Query("SELECT f FROM Flight f WHERE f.routeId IS NULL AND f.originAirportId IS NOT NULL AND f.destinationAirportId IS NOT NULL")
+    List<Flight> findFlightsNeedingRouteAssignment();
+
+    @Query("UPDATE Flight f SET f.routeId = :routeId WHERE f.originAirportId = :originId AND f.destinationAirportId = :destId AND f.routeId IS NULL")
+    void assignRouteToLegacyFlights(@Param("routeId") Long routeId,
+                                    @Param("originId") Long originId,
+                                    @Param("destId") Long destId);
 }

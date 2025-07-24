@@ -1,0 +1,156 @@
+databaseChangeLog:
+  - changeSet:
+      id: 001-add-route-id-to-flights
+      author: system
+      comment: "Add route_id column to flights table"
+      changes:
+        - addColumn:
+            tableName: flights
+            columns:
+              - column:
+                  name: route_id
+                  type: bigint
+                  constraints:
+                    nullable: true
+
+  - changeSet:
+      id: 001-create-default-routes-for-existing-flights
+      author: system
+      comment: "Create default routes for existing flights and populate route_id"
+      changes:
+        - sql:
+            sql: >
+              INSERT INTO routes (route_code, route_name, origin_airport_id, destination_airport_id, 
+                                route_type, visibility, is_multi_segment, created_by_user_id, active,
+                                created_at, updated_at)
+              SELECT DISTINCT
+                CONCAT('AUTO-', f.origin_airport_id, '-', f.destination_airport_id) as route_code,
+                CONCAT('Auto Route ', f.origin_airport_id, ' to ', f.destination_airport_id) as route_name,
+                f.origin_airport_id,
+                f.destination_airport_id,
+                'DOMESTIC' as route_type,
+                'PUBLIC' as visibility,
+                0 as is_multi_segment,
+                0 as created_by_user_id,
+                1 as active,
+                NOW() as created_at,
+                NOW() as updated_at
+              FROM flights f
+              WHERE f.origin_airport_id IS NOT NULL 
+                AND f.destination_airport_id IS NOT NULL
+                AND NOT EXISTS (
+                  SELECT 1 FROM routes r 
+                  WHERE r.origin_airport_id = f.origin_airport_id 
+                    AND r.destination_airport_id = f.destination_airport_id
+                )
+
+  - changeSet:
+      id: 001-update-flights-with-route-ids
+      author: system
+      comment: "Update flights table with corresponding route_id values"
+      changes:
+        - sql:
+            sql: >
+              UPDATE flights f
+              SET route_id = (
+                SELECT r.id 
+                FROM routes r 
+                WHERE r.origin_airport_id = f.origin_airport_id 
+                  AND r.destination_airport_id = f.destination_airport_id
+                LIMIT 1
+              )
+              WHERE f.origin_airport_id IS NOT NULL 
+                AND f.destination_airport_id IS NOT NULL
+                AND f.route_id IS NULL
+
+  - changeSet:
+      id: 001-add-route-id-not-null-constraint
+      author: system
+      comment: "Make route_id NOT NULL after populating data"
+      changes:
+        - addNotNullConstraint:
+            tableName: flights
+            columnName: route_id
+            columnDataType: bigint
+
+  - changeSet:
+      id: 001-add-route-id-index
+      author: system
+      comment: "Add index for route_id for performance"
+      changes:
+        - createIndex:
+            tableName: flights
+            indexName: idx_flights_route_id
+            columns:
+              - column:
+                  name: route_id
+
+  - changeSet:
+      id: 001-rename-airport-columns-for-backward-compatibility
+      author: system
+      comment: "Rename existing airport columns for backward compatibility"
+      changes:
+        - renameColumn:
+            tableName: flights
+            oldColumnName: origin_airport_id
+            newColumnName: origin_airport_id_deprecated
+            columnDataType: bigint
+        - renameColumn:
+            tableName: flights
+            oldColumnName: destination_airport_id
+            newColumnName: destination_airport_id_deprecated
+            columnDataType: bigint
+
+  - changeSet:
+      id: 001-add-flight-route-foreign-key
+      author: system
+      comment: "Add foreign key constraint for route_id (optional - depends on cross-service setup)"
+      changes:
+        - sql:
+            sql: >
+              -- Foreign key will be added when Reference Manager Service is accessible
+              -- ALTER TABLE flights ADD CONSTRAINT fk_flights_route 
+              -- FOREIGN KEY (route_id) REFERENCES routes(id);
+              SELECT 'Foreign key constraint commented out for cross-service setup' as note
+
+  - changeSet:
+      id: 001-update-flight-indexes
+      author: system
+      comment: "Update flight indexes to use route_id instead of airport_ids"
+      changes:
+        - dropIndex:
+            tableName: flights
+            indexName: idx_flights_airports
+        - createIndex:
+            tableName: flights
+            indexName: idx_flights_route_date
+            columns:
+              - column:
+                  name: route_id
+              - column:
+                  name: flight_date
+
+  - changeSet:
+      id: 001-create-flight-route-summary-view
+      author: system
+      comment: "Create view for flight-route summary"
+      changes:
+        - createView:
+            viewName: flight_route_summary
+            replaceIfExists: true
+            selectQuery: >
+              SELECT 
+                f.id as flight_id,
+                f.flight_number,
+                f.route_id,
+                f.flight_date,
+                f.scheduled_departure,
+                f.scheduled_arrival,
+                f.status,
+                f.origin_airport_id_deprecated as legacy_origin_airport_id,
+                f.destination_airport_id_deprecated as legacy_destination_airport_id,
+                f.active,
+                f.created_at,
+                f.updated_at
+              FROM flights f
+              WHERE f.active = 1

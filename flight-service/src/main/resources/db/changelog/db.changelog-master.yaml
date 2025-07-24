@@ -3,5 +3,5 @@ databaseChangeLog:
       file: changes/001-create-tables.yaml
       relativeToChangelogFile: true
   - include:
-      file: changes/002-add-connecting-flights-support.yaml
+      file: changes/001-flight-route-migration.yaml
       relativeToChangelogFile: true
