@@ -159,15 +159,6 @@ public class KafkaProducerService {
             payload.put("airline", airlineInfo);
         }
 
-        // Base Airport bilgisi
-        if (crewMember.getBaseAirport() != null) {
-            Map<String, Object> airportInfo = new HashMap<>();
-            airportInfo.put("id", crewMember.getBaseAirport().getId());
-            airportInfo.put("iataCode", crewMember.getBaseAirport().getIataCode());
-            airportInfo.put("name", crewMember.getBaseAirport().getName());
-            payload.put("baseAirport", airportInfo);
-        }
-
         ReferenceEvent event = ReferenceEvent.builder()
                 .eventId(UUID.randomUUID().toString())
                 .eventType(eventType)

@@ -18,7 +18,6 @@ public class AirportDeletionValidator {
 
     private final RouteRepository routeRepository;
     private final CrewMemberRepository crewMemberRepository;
-    private final GateRepository gateRepository;
 
     public void validateDeletion(Long airportId) throws BusinessException {
         DeletionCheckResult result = checkDependencies(airportId);
@@ -42,20 +41,6 @@ public class AirportDeletionValidator {
         if (totalRoutes > 0) {
             blockers.add(String.format("%d active route(s)", totalRoutes));
             dependentEntities.put("routes", (int) totalRoutes);
-        }
-
-        // Crew base airport kontrolü
-        long basedCrewCount = crewMemberRepository.countByBaseAirportId(airportId);
-        if (basedCrewCount > 0) {
-            blockers.add(String.format("%d crew member(s) based here", basedCrewCount));
-            dependentEntities.put("crewMembers", (int) basedCrewCount);
-        }
-
-        // Gate kontrolü
-        long gateCount = gateRepository.countByAirportId(airportId);
-        if (gateCount > 0) {
-            blockers.add(String.format("%d active gate(s)", gateCount));
-            dependentEntities.put("gates", (int) gateCount);
         }
 
         return DeletionCheckResult.builder()

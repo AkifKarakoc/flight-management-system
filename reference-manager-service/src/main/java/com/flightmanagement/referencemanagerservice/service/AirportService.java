@@ -4,13 +4,11 @@ import com.flightmanagement.referencemanagerservice.dto.request.AirportRequest;
 import com.flightmanagement.referencemanagerservice.dto.response.AirportResponse;
 import com.flightmanagement.referencemanagerservice.dto.response.DeletionCheckResult;
 import com.flightmanagement.referencemanagerservice.entity.Airport;
-import com.flightmanagement.referencemanagerservice.entity.CrewMember;
 import com.flightmanagement.referencemanagerservice.entity.Route;
 import com.flightmanagement.referencemanagerservice.exception.ResourceNotFoundException;
 import com.flightmanagement.referencemanagerservice.exception.DuplicateResourceException;
 import com.flightmanagement.referencemanagerservice.mapper.AirportMapper;
 import com.flightmanagement.referencemanagerservice.repository.AirportRepository;
-import com.flightmanagement.referencemanagerservice.repository.CrewMemberRepository;
 import com.flightmanagement.referencemanagerservice.repository.RouteRepository;
 import com.flightmanagement.referencemanagerservice.validator.AirportDeletionValidator;
 import lombok.RequiredArgsConstructor;
@@ -29,8 +27,6 @@ import java.util.List;
 public class AirportService {
     private final AirportRepository airportRepository;
     private final RouteRepository routeRepository;
-    private final GateRepository gateRepository;
-    private final CrewMemberRepository crewMemberRepository;
     private final AirportMapper airportMapper;
     private final KafkaProducerService kafkaProducerService;
     private final AirportDeletionValidator deletionValidator;
@@ -71,10 +67,6 @@ public class AirportService {
 
         Airport airport = airportMapper.toEntity(request);
 
-        // Set coordinates
-        if (request.getLatitude() != null && request.getLongitude() != null) {
-            airport.setCoordinates(new Coordinates(request.getLatitude(), request.getLongitude()));
-        }
 
         airport = airportRepository.save(airport);
 
@@ -104,11 +96,6 @@ public class AirportService {
         }
 
         airportMapper.updateEntity(airport, request);
-
-        // Update coordinates
-        if (request.getLatitude() != null && request.getLongitude() != null) {
-            airport.setCoordinates(new Coordinates(request.getLatitude(), request.getLongitude()));
-        }
 
         airport = airportRepository.save(airport);
 
@@ -168,18 +155,6 @@ public class AirportService {
         }
         for (Route route : destRoutes) {
             routeService.deleteRoute(route.getId(), systemUserId, isAdmin);
-        }
-
-        List<Gate> gates = gateRepository.findByAirportId(id);
-        for (Gate gate : gates) {
-            gateRepository.delete(gate);
-        }
-
-        // Base airport olarak kullanan crew member'ları güncelle (null yap)
-        List<CrewMember> basedCrews = crewMemberRepository.findByBaseAirportId(id);
-        for (CrewMember crew : basedCrews) {
-            crew.setBaseAirport(null);
-            crewMemberRepository.save(crew);
         }
 
         airportRepository.delete(airport);

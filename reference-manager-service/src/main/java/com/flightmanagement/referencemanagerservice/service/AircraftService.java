@@ -2,7 +2,6 @@ package com.flightmanagement.referencemanagerservice.service;
 
 import com.flightmanagement.referencemanagerservice.dto.request.AircraftRequest;
 import com.flightmanagement.referencemanagerservice.dto.response.AircraftResponse;
-import com.flightmanagement.referencemanagerservice.dto.response.DeletionCheckResult;
 import com.flightmanagement.referencemanagerservice.entity.Aircraft;
 import com.flightmanagement.referencemanagerservice.entity.Airline;
 import com.flightmanagement.referencemanagerservice.exception.ResourceNotFoundException;
@@ -10,7 +9,6 @@ import com.flightmanagement.referencemanagerservice.exception.DuplicateResourceE
 import com.flightmanagement.referencemanagerservice.mapper.AircraftMapper;
 import com.flightmanagement.referencemanagerservice.repository.AircraftRepository;
 import com.flightmanagement.referencemanagerservice.repository.AirlineRepository;
-import com.flightmanagement.referencemanagerservice.validator.AircraftDeletionValidator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -28,10 +26,9 @@ import java.util.stream.Collectors;
 public class AircraftService {
     private final AircraftRepository aircraftRepository;
     private final AirlineRepository airlineRepository;
-    private final AircraftSeatConfigurationRepository aircraftSeatConfigurationRepository;
     private final AircraftMapper aircraftMapper;
     private final KafkaProducerService kafkaProducerService;
-    private final AircraftDeletionValidator deletionValidator;
+
     private final WebSocketMessageService webSocketMessageService;
 
 
@@ -102,23 +99,12 @@ public class AircraftService {
         return aircraftMapper.toResponse(aircraft);
     }
 
-    public DeletionCheckResult checkAircraftDeletion(Long id) {
-        log.debug("Checking deletion dependencies for aircraft with id: {}", id);
-
-        aircraftRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Aircraft not found with id: " + id));
-
-        return deletionValidator.checkDependencies(id);
-    }
-
     public void deleteAircraft(Long id) {
         log.debug("Deleting aircraft with id: {}", id);
 
         Aircraft aircraft = aircraftRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Aircraft not found with id: " + id));
 
-        // Dependency validation
-        deletionValidator.validateDeletion(id);
 
         aircraftRepository.delete(aircraft);
 
@@ -132,10 +118,6 @@ public class AircraftService {
 
         Aircraft aircraft = aircraftRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Aircraft not found with id: " + id));
-
-        // Seat configuration'ı sil
-        aircraftSeatConfigurationRepository.findByAircraftId(id)
-                .ifPresent(config -> aircraftSeatConfigurationRepository.delete(config));
 
         aircraftRepository.delete(aircraft);
 
