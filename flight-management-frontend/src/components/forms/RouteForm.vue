@@ -65,7 +65,11 @@
       </el-col>
       <el-col :span="8">
         <el-form-item label="Route Tipi" prop="routeType">
-          <el-select v-model="form.routeType" placeholder="Tip seçiniz" style="width: 100%">
+          <el-select
+            v-model="form.routeType"
+            placeholder="Tip seçiniz"
+            style="width: 100%"
+          >
             <el-option
               v-for="(label, value) in ROUTE_TYPE_LABELS"
               :key="value"
@@ -77,19 +81,12 @@
       </el-col>
     </el-row>
 
-    <el-form-item label="Görünürlük" prop="visibility">
-      <el-select v-model="form.visibility" placeholder="Görünürlük seçiniz" style="width: 100%">
-        <el-option
-          v-for="(label, value) in ROUTE_VISIBILITY_LABELS"
-          :key="value"
-          :label="label"
-          :value="value"
-        />
-      </el-select>
-    </el-form-item>
-
     <el-form-item label="Durum">
-      <el-switch v-model="form.active" active-text="Aktif" inactive-text="Pasif" />
+      <el-switch
+        v-model="form.active"
+        active-text="Aktif"
+        inactive-text="Pasif"
+      />
     </el-form-item>
   </el-form>
 </template>
@@ -97,15 +94,19 @@
 <script setup>
 import { ref, reactive, watch, onMounted } from 'vue'
 import { useReferenceStore } from '@/stores/reference'
-import { ROUTE_TYPE_LABELS, ROUTE_VISIBILITY_LABELS } from '@/utils/constants'
+import { ROUTE_TYPE_LABELS } from '@/utils/constants'
 
 const referenceStore = useReferenceStore()
 
 // Props & Emits
-defineProps({
+const props = defineProps({
   modelValue: {
     type: Object,
     default: () => ({})
+  },
+  editMode: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -122,7 +123,6 @@ const form = reactive({
   distance: null,
   estimatedFlightTime: null,
   routeType: 'DOMESTIC',
-  visibility: 'PRIVATE',
   active: true
 })
 
@@ -152,13 +152,23 @@ const rules = {
   ],
   routeType: [
     { required: true, message: 'Route tipi seçimi gereklidir', trigger: 'change' }
-  ],
-  visibility: [
-    { required: true, message: 'Görünürlük seçimi gereklidir', trigger: 'change' }
   ]
 }
 
 // Watchers
+watch(() => props.modelValue, (newValue) => {
+  if (newValue && typeof newValue === 'object') {
+    Object.assign(form, {
+      originAirportId: newValue.originAirportId || null,
+      destinationAirportId: newValue.destinationAirportId || null,
+      distance: newValue.distance || null,
+      estimatedFlightTime: newValue.estimatedFlightTime || null,
+      routeType: newValue.routeType || 'DOMESTIC',
+      active: newValue.active !== undefined ? newValue.active : true
+    })
+  }
+}, { immediate: true, deep: true })
+
 watch(form, (newValue) => {
   emit('update:modelValue', { ...newValue })
 }, { deep: true })
@@ -172,10 +182,23 @@ const clearValidate = () => {
   formRef.value?.clearValidate()
 }
 
+const resetForm = () => {
+  Object.assign(form, {
+    originAirportId: null,
+    destinationAirportId: null,
+    distance: null,
+    estimatedFlightTime: null,
+    routeType: 'DOMESTIC',
+    active: true
+  })
+  clearValidate()
+}
+
 // Expose methods
 defineExpose({
   validate,
-  clearValidate
+  clearValidate,
+  resetForm
 })
 
 // Lifecycle
@@ -184,3 +207,9 @@ onMounted(async () => {
   airportOptions.value = referenceStore.airportOptions
 })
 </script>
+
+<style scoped>
+.el-form {
+  max-width: 100%;
+}
+</style>

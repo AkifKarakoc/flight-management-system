@@ -1,55 +1,132 @@
 <template>
   <div class="route-management">
-    <!-- Header -->
-    <div class="page-header">
-      <div>
-        <h1>Route Yönetimi</h1>
-        <p>Uçuş rotalarını yönetin</p>
+    <el-card>
+      <!-- Page Header -->
+      <div class="page-header">
+        <h2>Rota Yönetimi</h2>
+        <div class="header-actions">
+          <el-button @click="refreshData" :icon="Refresh">
+            Yenile
+          </el-button>
+          <el-button
+            v-if="authStore.isAdmin"
+            type="primary"
+            @click="showCreateDialog = true"
+            :icon="Plus"
+          >
+            Yeni Rota
+          </el-button>
+        </div>
       </div>
-      <div class="header-actions">
-        <el-button type="primary" @click="openCreateDialog" :icon="Plus">
-          Yeni Route
-        </el-button>
-        <el-button @click="loadRoutes" :icon="Refresh" :loading="loading">
-          Yenile
-        </el-button>
-      </div>
-    </div>
 
-    <!-- Route Table Component -->
-    <RouteTable
-      :routes="routes"
-      :loading="loading"
-      :current-page="currentPage"
-      :page-size="pageSize"
-      :total="total"
-      @view="viewRoute"
-      @edit="editRoute"
-      @delete="deleteRoute"
-      @page-change="handlePageChange"
-      @size-change="handleSizeChange"
-    />
+      <!-- Search Section -->
+      <div class="search-section">
+        <el-row :gutter="16">
+          <el-col :xs="24" :sm="12" :md="8">
+            <el-input
+              v-model="searchQuery"
+              placeholder="Rota ara..."
+              :prefix-icon="Search"
+              clearable
+              @input="handleSearch"
+            />
+          </el-col>
+          <el-col :xs="24" :sm="12" :md="6">
+            <el-select
+              v-model="filterOriginAirport"
+              placeholder="Kalkış Havalimanı"
+              clearable
+              filterable
+              @change="handleSearch"
+            >
+              <el-option
+                v-for="airport in referenceStore.airportOptions"
+                :key="airport.value"
+                :label="airport.label"
+                :value="airport.value"
+              />
+            </el-select>
+          </el-col>
+          <el-col :xs="24" :sm="12" :md="6">
+            <el-select
+              v-model="filterDestinationAirport"
+              placeholder="Varış Havalimanı"
+              clearable
+              filterable
+              @change="handleSearch"
+            >
+              <el-option
+                v-for="airport in referenceStore.airportOptions"
+                :key="airport.value"
+                :label="airport.label"
+                :value="airport.value"
+              />
+            </el-select>
+          </el-col>
+          <el-col :xs="24" :sm="8" :md="4">
+            <el-button type="primary" @click="handleSearch">
+              <el-icon><Search /></el-icon>
+              Ara
+            </el-button>
+            <el-button @click="handleClearFilters">
+              <el-icon><RefreshRight /></el-icon>
+              Temizle
+            </el-button>
+          </el-col>
+        </el-row>
+      </div>
+
+      <!-- Routes Table -->
+      <div class="table-section">
+        <RouteTable
+          :routes="filteredRoutes"
+          :loading="referenceStore.loadingStates.routes"
+          :show-edit-button="authStore.isAdmin"
+          :show-delete-button="authStore.isAdmin"
+          @view="viewRoute"
+          @edit="editRoute"
+          @delete="deleteRoute"
+          @sort-change="handleSortChange"
+        />
+
+        <!-- Pagination -->
+        <div class="pagination-section">
+          <el-pagination
+            v-model:current-page="currentPage"
+            v-model:page-size="pageSize"
+            :total="total"
+            :page-sizes="[10, 20, 50, 100]"
+            layout="total, sizes, prev, pager, next"
+            @size-change="handleSizeChange"
+            @current-change="handlePageChange"
+          />
+        </div>
+      </div>
+    </el-card>
 
     <!-- Create/Edit Dialog -->
     <el-dialog
       v-model="showCreateDialog"
-      :title="editingRoute ? 'Route Düzenle' : 'Yeni Route'"
+      :title="editingRoute ? 'Rota Düzenle' : 'Yeni Rota'"
       width="600px"
       :close-on-click-modal="false"
     >
       <RouteForm
         ref="routeFormRef"
         v-model="routeForm"
+        :edit-mode="!!editingRoute"
       />
 
       <template #footer>
-        <el-button @click="showCreateDialog = false">İptal</el-button>
+        <el-button @click="handleDialogClose">
+          İptal
+        </el-button>
         <el-button
           type="primary"
           :loading="loading"
           @click="handleSubmit"
         >
-          {{ editingRoute ? 'Güncelle' : 'Oluştur' }}
+          {{ editingRoute ? 'Güncelle' : 'Kaydet' }}
         </el-button>
       </template>
     </el-dialog>
@@ -57,28 +134,34 @@
     <!-- View Dialog -->
     <el-dialog
       v-model="showViewDialog"
-      title="Route Detayları"
-      width="600px"
+      title="Rota Detayları"
+      width="500px"
     >
       <div v-if="viewingRoute" class="route-details">
-        <el-descriptions :column="2" border>
-          <el-descriptions-item label="Güzergah">
-            <el-tag type="info">{{ getRouteDisplay(viewingRoute) }}</el-tag>
+        <el-descriptions :column="1" border>
+          <el-descriptions-item label="Rota">
+            <div class="route-display">
+              <el-tag type="primary">{{ viewingRoute.originAirport?.iataCode }}</el-tag>
+              <el-icon class="mx-2"><Right /></el-icon>
+              <el-tag type="primary">{{ viewingRoute.destinationAirport?.iataCode }}</el-tag>
+            </div>
+            <div class="route-cities">
+              {{ viewingRoute.originAirport?.name }} → {{ viewingRoute.destinationAirport?.name }}
+            </div>
+          </el-descriptions-item>
+          <el-descriptions-item label="Şehirler">
+            {{ viewingRoute.originAirport?.city }}, {{ viewingRoute.originAirport?.country }} →
+            {{ viewingRoute.destinationAirport?.city }}, {{ viewingRoute.destinationAirport?.country }}
           </el-descriptions-item>
           <el-descriptions-item label="Mesafe">
             {{ viewingRoute.distance ? `${viewingRoute.distance} km` : 'N/A' }}
           </el-descriptions-item>
-          <el-descriptions-item label="Tahmini Süre">
-            {{ viewingRoute.estimatedFlightTime ? `${viewingRoute.estimatedFlightTime} dk` : 'N/A' }}
+          <el-descriptions-item label="Tahmini Uçuş Süresi">
+            {{ formatFlightTime(viewingRoute.estimatedFlightTime) }}
           </el-descriptions-item>
-          <el-descriptions-item label="Route Tipi">
-            <el-tag :type="viewingRoute.routeType === 'DOMESTIC' ? 'success' : 'warning'">
+          <el-descriptions-item label="Rota Tipi">
+            <el-tag :type="getRouteTypeTagType(viewingRoute.routeType)">
               {{ ROUTE_TYPE_LABELS[viewingRoute.routeType] || viewingRoute.routeType }}
-            </el-tag>
-          </el-descriptions-item>
-          <el-descriptions-item label="Görünürlük">
-            <el-tag>
-              {{ ROUTE_VISIBILITY_LABELS[viewingRoute.visibility] || viewingRoute.visibility }}
             </el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="Durum">
@@ -87,28 +170,6 @@
             </el-tag>
           </el-descriptions-item>
         </el-descriptions>
-
-        <!-- Airport Details -->
-        <div v-if="viewingRoute.originAirport || viewingRoute.destinationAirport"
-             style="margin-top: 20px;">
-          <h4>Havalimanı Detayları</h4>
-          <el-row :gutter="20">
-            <el-col :span="12" v-if="viewingRoute.originAirport">
-              <el-card header="Kalkış Havalimanı">
-                <p><strong>Kod:</strong> {{ viewingRoute.originAirport.iataCode }}</p>
-                <p><strong>Ad:</strong> {{ viewingRoute.originAirport.name }}</p>
-                <p><strong>Şehir:</strong> {{ viewingRoute.originAirport.city }}</p>
-              </el-card>
-            </el-col>
-            <el-col :span="12" v-if="viewingRoute.destinationAirport">
-              <el-card header="Varış Havalimanı">
-                <p><strong>Kod:</strong> {{ viewingRoute.destinationAirport.iataCode }}</p>
-                <p><strong>Ad:</strong> {{ viewingRoute.destinationAirport.name }}</p>
-                <p><strong>Şehir:</strong> {{ viewingRoute.destinationAirport.city }}</p>
-              </el-card>
-            </el-col>
-          </el-row>
-        </div>
       </div>
     </el-dialog>
   </div>
@@ -117,16 +178,31 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Refresh } from '@element-plus/icons-vue'
+import {
+  Plus,
+  Refresh,
+  Search,
+  RefreshRight,
+  View,
+  Edit,
+  Delete,
+  Right
+} from '@element-plus/icons-vue'
+import { useAuthStore } from '@/stores/auth'
 import { useReferenceStore } from '@/stores/reference'
+import { ROUTE_TYPE_LABELS } from '@/utils/constants'
 import RouteTable from '@/components/tables/RouteTable.vue'
 import RouteForm from '@/components/forms/RouteForm.vue'
-import { ROUTE_TYPE_LABELS, ROUTE_VISIBILITY_LABELS } from '@/utils/constants'
 
+const authStore = useAuthStore()
 const referenceStore = useReferenceStore()
 
-// Reactive Data
+// State
 const loading = ref(false)
+const searchQuery = ref('')
+const filterOriginAirport = ref(null)
+const filterDestinationAirport = ref(null)
+const filterType = ref('')
 const currentPage = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
@@ -145,31 +221,126 @@ const routeForm = reactive({
   distance: null,
   estimatedFlightTime: null,
   routeType: 'DOMESTIC',
-  visibility: 'PRIVATE',
   active: true
 })
 
 // Computed
-const routes = computed(() => referenceStore.userRoutes || [])
+const filteredRoutes = computed(() => {
+  let routes = referenceStore.routes || []
+
+  // Search filter
+  if (searchQuery.value) {
+    const query = searchQuery.value.toLowerCase()
+    routes = routes.filter(route => {
+      const originCode = route.originAirport?.iataCode?.toLowerCase() || ''
+      const destinationCode = route.destinationAirport?.iataCode?.toLowerCase() || ''
+      const originCity = route.originAirport?.city?.toLowerCase() || ''
+      const destinationCity = route.destinationAirport?.city?.toLowerCase() || ''
+
+      return originCode.includes(query) ||
+        destinationCode.includes(query) ||
+        originCity.includes(query) ||
+        destinationCity.includes(query) ||
+        `${originCode} ${destinationCode}`.includes(query)
+    })
+  }
+
+  // Origin airport filter
+  if (filterOriginAirport.value) {
+    routes = routes.filter(route => route.originAirportId === filterOriginAirport.value)
+  }
+
+  // Destination airport filter
+  if (filterDestinationAirport.value) {
+    routes = routes.filter(route => route.destinationAirportId === filterDestinationAirport.value)
+  }
+
+  // Type filter
+  if (filterType.value) {
+    routes = routes.filter(route => route.routeType === filterType.value)
+  }
+
+  total.value = routes.length
+
+  // Client-side pagination
+  const start = (currentPage.value - 1) * pageSize.value
+  const end = start + pageSize.value
+  return routes.slice(start, end)
+})
 
 // Methods
-const loadRoutes = async () => {
-  try {
-    loading.value = true
-    await referenceStore.loadUserRoutes(true)
-    total.value = routes.value.length
-  } catch (error) {
-    console.error('Error loading routes:', error)
-    ElMessage.error('Route\'lar yüklenirken hata oluştu')
-  } finally {
-    loading.value = false
-  }
+const loadData = async () => {
+  await Promise.all([
+    referenceStore.loadRoutes(true),
+    referenceStore.loadAirports(true)
+  ])
 }
 
-const openCreateDialog = () => {
+const refreshData = async () => {
+  await loadData()
+  ElMessage.success('Veriler yenilendi')
+}
+
+const handleSearch = () => {
+  currentPage.value = 1
+}
+
+const handleClearFilters = () => {
+  searchQuery.value = ''
+  filterOriginAirport.value = null
+  filterDestinationAirport.value = null
+  filterType.value = ''
+  currentPage.value = 1
+}
+
+const handleSortChange = ({ column, prop, order }) => {
+  // Sorting logic can be implemented here
+  console.log('Sort change:', { prop, order })
+}
+
+const handlePageChange = (page) => {
+  currentPage.value = page
+}
+
+const handleSizeChange = (size) => {
+  pageSize.value = size
+  currentPage.value = 1
+}
+
+const getRouteTypeTagType = (type) => {
+  const typeMap = {
+    'DOMESTIC': 'success',
+    'INTERNATIONAL': 'warning'
+  }
+  return typeMap[type] || 'info'
+}
+
+const formatFlightTime = (minutes) => {
+  if (!minutes) return 'N/A'
+  const hours = Math.floor(minutes / 60)
+  const mins = minutes % 60
+  if (hours > 0) {
+    return `${hours}s ${mins}dk`
+  }
+  return `${mins}dk`
+}
+
+const resetForm = () => {
+  Object.assign(routeForm, {
+    originAirportId: null,
+    destinationAirportId: null,
+    distance: null,
+    estimatedFlightTime: null,
+    routeType: 'DOMESTIC',
+    active: true
+  })
   editingRoute.value = null
+  routeFormRef.value?.resetForm()
+}
+
+const handleDialogClose = () => {
+  showCreateDialog.value = false
   resetForm()
-  showCreateDialog.value = true
 }
 
 const viewRoute = (route) => {
@@ -185,36 +356,9 @@ const editRoute = (route) => {
     distance: route.distance,
     estimatedFlightTime: route.estimatedFlightTime,
     routeType: route.routeType,
-    visibility: route.visibility,
     active: route.active
   })
   showCreateDialog.value = true
-}
-
-const deleteRoute = async (route) => {
-  try {
-    await ElMessageBox.confirm(
-      `"${getRouteDisplay(route)}" route'unu silmek istediğinizden emin misiniz?`,
-      'Route Sil',
-      {
-        confirmButtonText: 'Sil',
-        cancelButtonText: 'İptal',
-        type: 'warning'
-      }
-    )
-
-    loading.value = true
-    await referenceStore.deleteRoute(route.id)
-    ElMessage.success('Route başarıyla silindi')
-    await loadRoutes()
-  } catch (error) {
-    if (error !== 'cancel') {
-      console.error('Error deleting route:', error)
-      ElMessage.error('Route silinirken hata oluştu')
-    }
-  } finally {
-    loading.value = false
-  }
 }
 
 const handleSubmit = async () => {
@@ -226,93 +370,112 @@ const handleSubmit = async () => {
 
     if (editingRoute.value) {
       await referenceStore.updateRoute(editingRoute.value.id, routeForm)
-      ElMessage.success('Route başarıyla güncellendi')
+      ElMessage.success('Rota başarıyla güncellendi')
     } else {
       await referenceStore.createRoute(routeForm)
-      ElMessage.success('Route başarıyla oluşturuldu')
+      ElMessage.success('Rota başarıyla oluşturuldu')
     }
 
-    showCreateDialog.value = false
-    await loadRoutes()
+    handleDialogClose()
   } catch (error) {
-    console.error('Error saving route:', error)
-    ElMessage.error('Route kaydedilirken hata oluştu')
+    console.error('Submit error:', error)
   } finally {
     loading.value = false
   }
 }
 
-const handlePageChange = (page) => {
-  currentPage.value = page
-}
+const deleteRoute = async (route) => {
+  try {
+    const originAirport = referenceStore.airports.find(a => a.id === route.originAirportId)
+    const destinationAirport = referenceStore.airports.find(a => a.id === route.destinationAirportId)
+    const routeName = `${originAirport?.iataCode || 'N/A'} → ${destinationAirport?.iataCode || 'N/A'}`
 
-const handleSizeChange = (size) => {
-  pageSize.value = size
-  currentPage.value = 1
-}
+    await ElMessageBox.confirm(
+      `"${routeName}" rotasını silmek istediğinizden emin misiniz?`,
+      'Rota Sil',
+      {
+        confirmButtonText: 'Evet',
+        cancelButtonText: 'İptal',
+        type: 'warning'
+      }
+    )
 
-const resetForm = () => {
-  Object.assign(routeForm, {
-    originAirportId: null,
-    destinationAirportId: null,
-    distance: null,
-    estimatedFlightTime: null,
-    routeType: 'DOMESTIC',
-    visibility: 'PRIVATE',
-    active: true
-  })
-  editingRoute.value = null
-  routeFormRef.value?.clearValidate()
-}
-
-const getRouteDisplay = (route) => {
-  if (route.originAirport && route.destinationAirport) {
-    return `${route.originAirport.iataCode} → ${route.destinationAirport.iataCode}`
+    await referenceStore.deleteRoute(route.id)
+    ElMessage.success('Rota başarıyla silindi')
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('Delete error:', error)
+    }
   }
-  return 'N/A'
 }
 
 // Lifecycle
 onMounted(() => {
-  loadRoutes()
+  loadData()
 })
 </script>
 
 <style scoped>
-.route-management {
-  padding: 20px;
-}
-
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 30px;
 }
 
-.page-header h1 {
+.page-header h2 {
   margin: 0;
-  color: #303133;
-  font-size: 24px;
-}
-
-.page-header p {
-  margin: 5px 0 0 0;
-  color: #909399;
 }
 
 .header-actions {
   display: flex;
-  gap: 10px;
+  gap: 12px;
 }
 
-.route-details h4 {
-  margin: 0 0 15px 0;
-  color: #303133;
+.search-section {
+  margin-bottom: 20px;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 8px;
 }
 
-.route-details p {
-  margin: 8px 0;
-  font-size: 14px;
+.table-section {
+  margin-top: 16px;
+}
+
+.pagination-section {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+.route-details {
+  padding: 16px 0;
+}
+
+.route-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.route-cities {
+  font-size: 12px;
+  color: #909399;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .header-actions {
+    flex-direction: column;
+  }
+
+  .search-section .el-col {
+    margin-bottom: 8px;
+  }
+
+  .data-table {
+    font-size: 12px;
+  }
 }
 </style>
