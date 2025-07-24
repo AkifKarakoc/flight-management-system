@@ -37,13 +37,6 @@ public class Flight {
     @Column(nullable = false)
     private Long routeId;               // Reference Manager'dan route
 
-    // ESKİ ALANLAR: Backward compatibility için geçici tutulacak, sonra kaldırılacak
-    @Column(name = "origin_airport_id")
-    private Long originAirportId;       // DEPRECATED - migration sonrası kaldırılacak
-
-    @Column(name = "destination_airport_id")
-    private Long destinationAirportId;  // DEPRECATED - migration sonrası kaldırılacak
-
     @Column(nullable = false)
     private LocalDate flightDate;       // Uçuş tarihi
 
@@ -143,20 +136,5 @@ public class Flight {
             return (int) java.time.Duration.between(scheduledDeparture, scheduledArrival).toMinutes();
         }
         return null;
-    }
-
-    // Backward compatibility helper methods (geçici)
-    @Deprecated
-    public Long getOriginAirportIdFromRoute() {
-        // Route'dan origin airport ID'yi alacak logic
-        // ReferenceDataService üzerinden route bilgisini çekeceğiz
-        return originAirportId; // Geçici olarak eski değeri döndür
-    }
-
-    @Deprecated
-    public Long getDestinationAirportIdFromRoute() {
-        // Route'dan destination airport ID'yi alacak logic
-        // ReferenceDataService üzerinden route bilgisini çekeceğiz
-        return destinationAirportId; // Geçici olarak eski değeri döndür
     }
 }
