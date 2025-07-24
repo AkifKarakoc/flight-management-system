@@ -176,4 +176,11 @@ public interface FlightRepository extends JpaRepository<Flight, Long> {
     Page<Flight> findConnectingFlightsWithFilters(@Param("airlineId") Long airlineId,
                                                   @Param("flightDate") LocalDate flightDate,
                                                   Pageable pageable);
+
+    @Query("SELECT CASE WHEN COUNT(f) > 0 THEN true ELSE false END FROM Flight f " +
+            "WHERE f.flightNumber = :flightNumber AND f.flightDate = :flightDate " +
+            "AND f.isConnectingFlight = true AND f.parentFlightId IS NULL")
+    boolean existsMainFlightByFlightNumberAndDate(@Param("flightNumber") String flightNumber,
+                                                  @Param("flightDate") LocalDate flightDate);
+
 }
