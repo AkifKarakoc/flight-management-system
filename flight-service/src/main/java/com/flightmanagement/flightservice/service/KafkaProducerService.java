@@ -3,6 +3,7 @@ package com.flightmanagement.flightservice.service;
 import com.flightmanagement.flightservice.dto.cache.AircraftCache;
 import com.flightmanagement.flightservice.dto.cache.AirlineCache;
 import com.flightmanagement.flightservice.dto.cache.AirportCache;
+import com.flightmanagement.flightservice.dto.cache.RouteCache;
 import com.flightmanagement.flightservice.entity.Flight;
 import com.flightmanagement.flightservice.event.FlightEvent;
 import lombok.RequiredArgsConstructor;
@@ -89,21 +90,42 @@ public class KafkaProducerService {
         }
 
         try {
-            AirportCache originAirport = referenceDataService.getAirport(flight.getOriginAirportId());
-            Map<String, Object> originInfo = new HashMap<>();
-            originInfo.put("id", originAirport.getId());
-            originInfo.put("iataCode", originAirport.getIataCode());
-            originInfo.put("name", originAirport.getName());
-            payload.put("originAirport", originInfo);
+            if (flight.getRouteId() != null) {
+                RouteCache route = referenceDataService.getRoute(flight.getRouteId());
+                if (route != null) {
+                    // Origin airport
+                    if (route.getOriginAirportId() != null) {
+                        AirportCache originAirport = referenceDataService.getAirport(route.getOriginAirportId());
+                        Map<String, Object> originInfo = new HashMap<>();
+                        originInfo.put("id", originAirport.getId());
+                        originInfo.put("iataCode", originAirport.getIataCode());
+                        originInfo.put("name", originAirport.getName());
+                        payload.put("originAirport", originInfo);
+                    }
 
-            AirportCache destinationAirport = referenceDataService.getAirport(flight.getDestinationAirportId());
-            Map<String, Object> destInfo = new HashMap<>();
-            destInfo.put("id", destinationAirport.getId());
-            destInfo.put("iataCode", destinationAirport.getIataCode());
-            destInfo.put("name", destinationAirport.getName());
-            payload.put("destinationAirport", destInfo);
+                    // Destination airport
+                    if (route.getDestinationAirportId() != null) {
+                        AirportCache destinationAirport = referenceDataService.getAirport(route.getDestinationAirportId());
+                        Map<String, Object> destInfo = new HashMap<>();
+                        destInfo.put("id", destinationAirport.getId());
+                        destInfo.put("iataCode", destinationAirport.getIataCode());
+                        destInfo.put("name", destinationAirport.getName());
+                        payload.put("destinationAirport", destInfo);
+                    }
+
+                    // Route bilgilerini de ekle
+                    Map<String, Object> routeInfo = new HashMap<>();
+                    routeInfo.put("id", route.getId());
+                    routeInfo.put("routeCode", route.getRouteCode());
+                    routeInfo.put("routePath", route.getRoutePath());
+                    routeInfo.put("distance", route.getDistance());
+                    routeInfo.put("estimatedTime", route.getEstimatedFlightTime());
+                    payload.put("route", routeInfo);
+                }
+            }
         } catch (Exception e) {
-            log.warn("Could not fetch airport info for flight event");
+            log.warn("Could not fetch route/airport info for flight event: {}", e.getMessage());
+            // Route bilgisi alınamazsa devam et, airport bilgileri olmadan event gönder
         }
 
         return payload;

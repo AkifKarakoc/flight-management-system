@@ -3,8 +3,8 @@ databaseChangeLog:
       file: changes/001-create-tables.yaml
       relativeToChangelogFile: true
   - include:
-      file: changes/001-flight-route-migration.yaml
+      file: changes/002-add-missing-columns.yaml
       relativeToChangelogFile: true
   - include:
-      file: changes/002-add-missing-columns.yaml
+      file: changes/003-add-flight-connections.yaml  # ← YENİ
       relativeToChangelogFile: true

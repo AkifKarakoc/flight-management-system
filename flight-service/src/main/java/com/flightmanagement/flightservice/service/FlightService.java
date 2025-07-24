@@ -472,10 +472,7 @@ public class FlightService {
         return status;
     }
 
-    // Bu method kaldırıldı çünkü artık migration yok
-    public void migrateLegacyFlightsToRoutes() {
-        throw new BusinessException("Migration is not available. System is already route-based.");
-    }
+    
 
     // ===============================
     // PRIVATE HELPER METHODS

@@ -1,5 +1,6 @@
 package com.flightmanagement.flightservice.controller;
 
+import com.flightmanagement.flightservice.entity.enums.FlightType;
 import com.flightmanagement.flightservice.exception.ResourceNotFoundException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;

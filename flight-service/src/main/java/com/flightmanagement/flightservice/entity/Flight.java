@@ -137,4 +137,13 @@ public class Flight {
         }
         return null;
     }
+
+    // Helper method eklenecek
+    public boolean hasConnections() {
+        return flightConnections != null && !flightConnections.isEmpty();
+    }
+
+    public int getConnectionCount() {
+        return flightConnections != null ? flightConnections.size() : 0;
+    }
 }
