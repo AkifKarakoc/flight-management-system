@@ -523,6 +523,74 @@ public class FlightService {
         return info;
     }
 
+    // Eksik metodları ekle
+    public List<FlightResponse> getFlightsByAirport(Long airportId) {
+        log.debug("Getting flights by airport id: {}", airportId);
+
+        List<Flight> flights = flightRepository.findByOriginAirportIdOrDestinationAirportId(airportId, airportId);
+        return flights.stream()
+                .map(this::buildFlightResponse)
+                .collect(Collectors.toList());
+    }
+
+    public List<FlightResponse> getDelayedFlights(Integer minDelayMinutes) {
+        log.debug("Getting delayed flights with minimum delay: {} minutes", minDelayMinutes);
+
+        List<Flight> flights = flightRepository.findByDelayMinutesGreaterThanEqual(minDelayMinutes);
+        return flights.stream()
+                .map(this::buildFlightResponse)
+                .collect(Collectors.toList());
+    }
+
+    public FlightResponse updateConnectingFlight(Long mainFlightId, ConnectingFlightRequest request) {
+        log.debug("Updating connecting flight: {}", mainFlightId);
+
+        return connectingFlightService.updateConnectingFlight(mainFlightId, request);
+    }
+
+    public void deleteConnectingFlight(Long mainFlightId) {
+        log.debug("Deleting connecting flight: {}", mainFlightId);
+
+        connectingFlightService.deleteConnectingFlight(mainFlightId);
+    }
+
+    public Page<FlightResponse> getConnectingFlightsWithFilters(Pageable pageable, Long airlineId, LocalDate flightDate) {
+        log.debug("Getting connecting flights with filters - airlineId: {}, date: {}", airlineId, flightDate);
+
+        return connectingFlightService.getConnectingFlightsWithFilters(pageable, airlineId, flightDate);
+    }
+
+    // FlightService'e eklenecek ek metod:
+
+    public Page<FlightResponse> getAllFlightsWithFilters(Pageable pageable, String flightNumber, Long airlineId, LocalDate flightDate) {
+        log.debug("Getting all flights with filters - flightNumber: {}, airlineId: {}, flightDate: {}",
+                flightNumber, airlineId, flightDate);
+
+        // Basit filtreleme - daha gelişmiş implementation yapılabilir
+        Page<Flight> flightsPage;
+
+        if (flightNumber != null && flightDate != null) {
+            List<Flight> flights = flightRepository.findByFlightNumberAndFlightDate(flightNumber, flightDate);
+            flightsPage = new PageImpl<>(flights, pageable, flights.size());
+        } else if (airlineId != null && flightDate != null) {
+            List<Flight> flights = flightRepository.findByAirlineIdAndFlightDate(airlineId, flightDate);
+            flightsPage = new PageImpl<>(flights, pageable, flights.size());
+        } else if (flightDate != null) {
+            List<Flight> flights = flightRepository.findByFlightDate(flightDate);
+            flightsPage = new PageImpl<>(flights, pageable, flights.size());
+        } else if (airlineId != null) {
+            flightsPage = flightRepository.findByAirlineId(airlineId, pageable);
+        } else {
+            flightsPage = flightRepository.findAll(pageable);
+        }
+
+        List<FlightResponse> responses = flightsPage.getContent().stream()
+                .map(this::buildFlightResponse)
+                .collect(Collectors.toList());
+
+        return new PageImpl<>(responses, pageable, flightsPage.getTotalElements());
+    }
+
     // ===============================
     // PRIVATE HELPER METHODS
     // ===============================

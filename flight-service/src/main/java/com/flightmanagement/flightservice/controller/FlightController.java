@@ -43,9 +43,25 @@ public class FlightController {
     private final FlightRepository flightRepository;
 
     // Temel CRUD işlemleri
+    // FlightController'da bu metodu değiştir:
+
     @GetMapping
-    public ResponseEntity<List<FlightResponse>> getAllFlights() {
-        return ResponseEntity.ok(flightService.getAllFlights());
+    public ResponseEntity<Page<FlightResponse>> getAllFlights(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "createdAt") String sortBy,
+            @RequestParam(defaultValue = "desc") String sortDirection,
+            @RequestParam(required = false) String flightNumber,
+            @RequestParam(required = false) Long airlineId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate flightDate) {
+
+        Pageable pageable = PageRequest.of(page, size,
+                Sort.by(Sort.Direction.fromString(sortDirection), sortBy));
+
+        Page<FlightResponse> flights = flightService.getAllFlightsWithFilters(
+                pageable, flightNumber, airlineId, flightDate);
+
+        return ResponseEntity.ok(flights);
     }
 
     @GetMapping("/{id}")

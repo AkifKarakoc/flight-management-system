@@ -162,4 +162,18 @@ public interface FlightRepository extends JpaRepository<Flight, Long> {
     void assignRouteToLegacyFlights(@Param("routeId") Long routeId,
                                     @Param("originId") Long originId,
                                     @Param("destId") Long destId);
+
+    // Eksik metodlar - FlightRepository'ye ekle:
+
+    List<Flight> findByOriginAirportIdOrDestinationAirportId(Long originAirportId, Long destinationAirportId);
+
+    List<Flight> findByDelayMinutesGreaterThanEqual(Integer minDelayMinutes);
+
+    // Connecting flights için filtreleme
+    @Query("SELECT f FROM Flight f WHERE f.isConnectingFlight = true " +
+            "AND (:airlineId IS NULL OR f.airlineId = :airlineId) " +
+            "AND (:flightDate IS NULL OR f.flightDate = :flightDate)")
+    Page<Flight> findConnectingFlightsWithFilters(@Param("airlineId") Long airlineId,
+                                                  @Param("flightDate") LocalDate flightDate,
+                                                  Pageable pageable);
 }
