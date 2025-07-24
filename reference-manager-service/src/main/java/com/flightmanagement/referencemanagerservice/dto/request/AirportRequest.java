@@ -25,13 +25,6 @@ public class AirportRequest {
     @NotBlank(message = "Country is required")
     private String country;
 
-    private String timezone;
-
-    private Double latitude;
-    private Double longitude;
-
-    private Integer elevation;
-
     @NotNull(message = "Airport type is required")
     private AirportType type;
 

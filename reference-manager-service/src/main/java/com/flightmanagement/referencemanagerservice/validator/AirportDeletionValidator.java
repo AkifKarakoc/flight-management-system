@@ -3,7 +3,6 @@ package com.flightmanagement.referencemanagerservice.validator;
 import com.flightmanagement.referencemanagerservice.dto.response.DeletionCheckResult;
 import com.flightmanagement.referencemanagerservice.exception.BusinessException;
 import com.flightmanagement.referencemanagerservice.repository.CrewMemberRepository;
-import com.flightmanagement.referencemanagerservice.repository.GateRepository;
 import com.flightmanagement.referencemanagerservice.repository.RouteRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;

@@ -13,10 +13,6 @@ public class AirportResponse {
     private String name;
     private String city;
     private String country;
-    private String timezone;
-    private Double latitude;
-    private Double longitude;
-    private Integer elevation;
     private AirportType type;
     private Boolean active;
     private LocalDateTime createdAt;

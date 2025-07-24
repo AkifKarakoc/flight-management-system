@@ -18,7 +18,7 @@ import java.util.List;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@ToString(exclude = {"originRoutes", "destinationRoutes", "gates", "basedCrewMembers"})
+@ToString(exclude = {"originRoutes", "destinationRoutes"})
 public class Airport {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -39,15 +39,6 @@ public class Airport {
     @Column(nullable = false)
     private String country;         // Turkey
 
-    @Column
-    private String timezone;        // Europe/Istanbul
-
-    @Embedded
-    private Coordinates coordinates;
-
-    @Column
-    private Integer elevation;      // Metre cinsinden
-
     @Enumerated(EnumType.STRING)
     private AirportType type;       // INTERNATIONAL, DOMESTIC, CARGO
 
@@ -66,10 +57,4 @@ public class Airport {
 
     @OneToMany(mappedBy = "destinationAirport")
     private List<Route> destinationRoutes = new ArrayList<>();
-
-    @OneToMany(mappedBy = "airport")
-    private List<Gate> gates = new ArrayList<>();
-
-    @OneToMany(mappedBy = "baseAirport")
-    private List<CrewMember> basedCrewMembers = new ArrayList<>();
 }

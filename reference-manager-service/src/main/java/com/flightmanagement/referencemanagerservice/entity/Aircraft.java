@@ -9,7 +9,6 @@ import lombok.ToString;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
@@ -17,7 +16,7 @@ import java.time.LocalDateTime;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@ToString(exclude = {"airline", "seatConfiguration"}) // Circular reference'ı önlemek için
+@ToString(exclude = {"airline"}) // Circular reference'ı önlemek için
 public class Aircraft {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -38,18 +37,6 @@ public class Aircraft {
     @Column
     private Integer seatCapacity;      // Yolcu kapasitesi
 
-    @Column
-    private Integer cargoCapacity;     // Kargo kapasitesi (kg)
-
-    @Column
-    private Integer maxRange;          // Maksimum menzil (km)
-
-    @Column
-    private LocalDate manufactureDate;
-
-    @Column
-    private LocalDate lastMaintenance;
-
     @Enumerated(EnumType.STRING)
     private AircraftStatus status = AircraftStatus.ACTIVE;
 
@@ -62,8 +49,4 @@ public class Aircraft {
 
     @UpdateTimestamp
     private LocalDateTime updatedAt;
-
-    // Relationships
-    @OneToOne(mappedBy = "aircraft", cascade = CascadeType.ALL)
-    private AircraftSeatConfiguration seatConfiguration;
 }

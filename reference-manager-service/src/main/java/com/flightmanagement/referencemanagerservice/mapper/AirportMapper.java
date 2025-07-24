@@ -9,13 +9,9 @@ import org.mapstruct.MappingTarget;
 
 @Mapper(componentModel = "spring")
 public interface AirportMapper {
-    @Mapping(target = "coordinates", ignore = true)
     Airport toEntity(AirportRequest request);
 
-    @Mapping(source = "coordinates.latitude", target = "latitude")
-    @Mapping(source = "coordinates.longitude", target = "longitude")
     AirportResponse toResponse(Airport airport);
 
-    @Mapping(target = "coordinates", ignore = true)
     void updateEntity(@MappingTarget Airport airport, AirportRequest request);
 }

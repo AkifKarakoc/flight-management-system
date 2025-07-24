@@ -10,7 +10,6 @@ import org.mapstruct.MappingTarget;
 @Mapper(componentModel = "spring", uses = {AirportMapper.class, AirlineMapper.class})
 public interface CrewMemberMapper {
     @Mapping(target = "airline", ignore = true)
-    @Mapping(target = "baseAirport", ignore = true)
     CrewMember toEntity(CrewMemberRequest request);
 
     @Mapping(source = "fullName", target = "fullName")
@@ -19,6 +18,5 @@ public interface CrewMemberMapper {
     CrewMemberResponse toResponse(CrewMember crewMember);
 
     @Mapping(target = "airline", ignore = true)
-    @Mapping(target = "baseAirport", ignore = true)
     void updateEntity(@MappingTarget CrewMember crewMember, CrewMemberRequest request);
 }

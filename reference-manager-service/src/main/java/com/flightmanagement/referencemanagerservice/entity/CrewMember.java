@@ -20,7 +20,7 @@ import java.time.Period;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@ToString(exclude = {"baseAirport", "airline"})
+@ToString(exclude = {"airline"})
 public class CrewMember {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -67,11 +67,6 @@ public class CrewMember {
 
     @Enumerated(EnumType.STRING)
     private CrewStatus status = CrewStatus.ACTIVE;
-
-    // Hangi havaalanında çalışıyor
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "base_airport_id")
-    private Airport baseAirport;
 
     // Hangi havayolu şirketinde çalışıyor
     @ManyToOne(fetch = FetchType.LAZY)

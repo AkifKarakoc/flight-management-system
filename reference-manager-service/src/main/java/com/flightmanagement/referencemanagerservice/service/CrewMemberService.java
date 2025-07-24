@@ -2,22 +2,18 @@ package com.flightmanagement.referencemanagerservice.service;
 
 import com.flightmanagement.referencemanagerservice.dto.request.CrewMemberRequest;
 import com.flightmanagement.referencemanagerservice.dto.response.CrewMemberResponse;
-import com.flightmanagement.referencemanagerservice.dto.response.DeletionCheckResult;
 import com.flightmanagement.referencemanagerservice.entity.Airline;
-import com.flightmanagement.referencemanagerservice.entity.Airport;
 import com.flightmanagement.referencemanagerservice.entity.CrewMember;
 import com.flightmanagement.referencemanagerservice.exception.ResourceNotFoundException;
 import com.flightmanagement.referencemanagerservice.exception.DuplicateResourceException;
 import com.flightmanagement.referencemanagerservice.mapper.CrewMemberMapper;
 import com.flightmanagement.referencemanagerservice.repository.AirlineRepository;
-import com.flightmanagement.referencemanagerservice.repository.AirportRepository;
 import com.flightmanagement.referencemanagerservice.repository.CrewMemberRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -28,7 +24,6 @@ import java.util.stream.Collectors;
 public class CrewMemberService {
     private final CrewMemberRepository crewMemberRepository;
     private final AirlineRepository airlineRepository;
-    private final AirportRepository airportRepository;
     private final CrewMemberMapper crewMemberMapper;
     private final KafkaProducerService kafkaProducerService;
 
@@ -59,12 +54,6 @@ public class CrewMemberService {
         CrewMember crewMember = crewMemberMapper.toEntity(request);
         crewMember.setAirline(airline);
 
-        if (request.getBaseAirportId() != null) {
-            Airport baseAirport = airportRepository.findById(request.getBaseAirportId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Base airport not found with id: " + request.getBaseAirportId()));
-            crewMember.setBaseAirport(baseAirport);
-        }
-
         crewMember = crewMemberRepository.save(crewMember);
 
         kafkaProducerService.sendCrewMemberEvent("CREW_MEMBER_CREATED", crewMember);
@@ -89,14 +78,6 @@ public class CrewMemberService {
             crewMember.setAirline(airline);
         }
 
-        if (request.getBaseAirportId() != null) {
-            Airport baseAirport = airportRepository.findById(request.getBaseAirportId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Base airport not found with id: " + request.getBaseAirportId()));
-            crewMember.setBaseAirport(baseAirport);
-        } else {
-            crewMember.setBaseAirport(null);
-        }
-
         crewMemberMapper.updateEntity(crewMember, request);
         crewMember = crewMemberRepository.save(crewMember);
 
@@ -114,19 +95,5 @@ public class CrewMemberService {
         crewMemberRepository.delete(crewMember);
 
         kafkaProducerService.sendCrewMemberEvent("CREW_MEMBER_DELETED", crewMember);
-    }
-
-    public DeletionCheckResult checkCrewMemberDeletion(Long id) {
-        log.debug("Checking deletion dependencies for crew member with id: {}", id);
-
-        crewMemberRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Crew member not found with id: " + id));
-
-        // Crew member için şimdilik dependency yok, gelecekte flight kontrolü eklenebilir
-        return DeletionCheckResult.builder()
-                .canDelete(true)
-                .reason("No dependencies found")
-                .dependentEntities(new HashMap<>())
-                .build();
     }
 }

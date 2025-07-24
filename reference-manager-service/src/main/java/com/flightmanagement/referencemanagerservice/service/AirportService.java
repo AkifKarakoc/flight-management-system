@@ -4,16 +4,13 @@ import com.flightmanagement.referencemanagerservice.dto.request.AirportRequest;
 import com.flightmanagement.referencemanagerservice.dto.response.AirportResponse;
 import com.flightmanagement.referencemanagerservice.dto.response.DeletionCheckResult;
 import com.flightmanagement.referencemanagerservice.entity.Airport;
-import com.flightmanagement.referencemanagerservice.entity.Coordinates;
 import com.flightmanagement.referencemanagerservice.entity.CrewMember;
-import com.flightmanagement.referencemanagerservice.entity.Gate;
 import com.flightmanagement.referencemanagerservice.entity.Route;
 import com.flightmanagement.referencemanagerservice.exception.ResourceNotFoundException;
 import com.flightmanagement.referencemanagerservice.exception.DuplicateResourceException;
 import com.flightmanagement.referencemanagerservice.mapper.AirportMapper;
 import com.flightmanagement.referencemanagerservice.repository.AirportRepository;
 import com.flightmanagement.referencemanagerservice.repository.CrewMemberRepository;
-import com.flightmanagement.referencemanagerservice.repository.GateRepository;
 import com.flightmanagement.referencemanagerservice.repository.RouteRepository;
 import com.flightmanagement.referencemanagerservice.validator.AirportDeletionValidator;
 import lombok.RequiredArgsConstructor;
@@ -24,7 +21,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor

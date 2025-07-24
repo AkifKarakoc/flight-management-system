@@ -9,7 +9,6 @@ import com.flightmanagement.referencemanagerservice.exception.ResourceNotFoundEx
 import com.flightmanagement.referencemanagerservice.exception.DuplicateResourceException;
 import com.flightmanagement.referencemanagerservice.mapper.AircraftMapper;
 import com.flightmanagement.referencemanagerservice.repository.AircraftRepository;
-import com.flightmanagement.referencemanagerservice.repository.AircraftSeatConfigurationRepository;
 import com.flightmanagement.referencemanagerservice.repository.AirlineRepository;
 import com.flightmanagement.referencemanagerservice.validator.AircraftDeletionValidator;
 import lombok.RequiredArgsConstructor;
