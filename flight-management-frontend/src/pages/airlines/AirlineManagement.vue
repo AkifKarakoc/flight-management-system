@@ -1,552 +1,1095 @@
 <template>
-  <div class="page-container">
-    <el-card shadow="never">
-      <template #header>
-        <div class="page-header">
-          <h2>Havayolu Yönetimi</h2>
-          <div class="header-actions">
-            <el-button
-              v-if="authStore.isAdmin"
-              type="primary"
-              @click="showCreateDialog = true"
-            >
-              <el-icon><Plus /></el-icon>
-              Yeni Havayolu
-            </el-button>
-            <el-button @click="refreshData">
-              <el-icon><Refresh /></el-icon>
-              Yenile
-            </el-button>
-          </div>
+  <div class="airline-management">
+    <!-- Page header -->
+    <div class="page-header">
+      <div class="header-content">
+        <div class="header-info">
+          <h1 class="page-title">Havayolu Yönetimi</h1>
+          <p class="page-description">
+            Havayolu şirketlerini görüntüleyin, ekleyin ve düzenleyin
+          </p>
         </div>
-      </template>
-
-      <!-- Search & Filters -->
-      <div class="search-section">
-        <el-row :gutter="16">
-          <el-col :xs="24" :sm="12" :md="8">
-            <el-input
-              v-model="searchQuery"
-              placeholder="Havayolu ara..."
-              clearable
-              @clear="handleSearch"
-              @keyup.enter="handleSearch"
-            >
-              <template #prefix>
-                <el-icon><Search /></el-icon>
-              </template>
-            </el-input>
-          </el-col>
-          <el-col :xs="24" :sm="12" :md="8">
-            <el-select
-              v-model="filterType"
-              placeholder="Tip Filtresi"
-              clearable
-              @change="handleSearch"
-            >
-              <el-option
-                v-for="(label, value) in AIRLINE_TYPE_LABELS"
-                :key="value"
-                :label="label"
-                :value="value"
-              />
-            </el-select>
-          </el-col>
-          <el-col :xs="24" :sm="24" :md="8">
-            <el-button type="primary" @click="handleSearch">
-              <el-icon><Search /></el-icon>
-              Ara
-            </el-button>
-            <el-button @click="handleClearFilters">
-              <el-icon><RefreshRight /></el-icon>
-              Temizle
-            </el-button>
-          </el-col>
-        </el-row>
+        <div class="header-actions">
+          <BaseButton
+            type="primary"
+            icon="Plus"
+            @click="navigateToCreate"
+          >
+            Yeni Havayolu
+          </BaseButton>
+          <BaseButton
+            icon="Refresh"
+            :loading="refreshing"
+            @click="refreshData"
+          >
+            Yenile
+          </BaseButton>
+          <BaseButton
+            icon="Download"
+            @click="exportData"
+          >
+            Dışa Aktar
+          </BaseButton>
+        </div>
       </div>
+    </div>
 
-      <!-- Airlines Table -->
-      <div class="table-section">
-        <el-table
-          v-loading="referenceStore.loadingStates.airlines"
-          :data="filteredAirlines"
-          stripe
-          class="data-table"
-          @sort-change="handleSortChange"
-        >
-          <el-table-column type="index" width="60" />
-
-          <el-table-column
-            prop="name"
-            label="Havayolu Adı"
-            sortable="custom"
-            min-width="200"
-          >
-            <template #default="{ row }">
-              <div class="airline-info">
-                <strong>{{ row.name }}</strong>
-                <div class="airline-codes">
-                  <el-tag size="small" type="info">{{ row.iataCode }}</el-tag>
-                  <el-tag size="small" type="info">{{ row.icaoCode }}</el-tag>
-                </div>
-              </div>
-            </template>
-          </el-table-column>
-
-          <el-table-column
-            prop="country"
-            label="Ülke"
-            sortable="custom"
-            width="120"
+    <!-- Filters and search -->
+    <BaseCard class="filters-card">
+      <div class="filters-section">
+        <div class="search-section">
+          <BaseInput
+            v-model="searchQuery"
+            placeholder="Havayolu ara (ad, kod, ülke)..."
+            prefix-icon="Search"
+            clearable
+            class="search-input"
+            @input="handleSearch"
           />
+        </div>
 
-          <el-table-column
-            prop="type"
-            label="Tip"
-            width="130"
+        <div class="filter-section">
+          <BaseSelect
+            v-model="filters.type"
+            placeholder="Havayolu Tipi"
+            :options="airlineTypeOptions"
+            clearable
+            style="width: 150px"
+            @change="handleFilterChange"
+          />
+          <BaseSelect
+            v-model="filters.country"
+            placeholder="Ülke"
+            :options="countryOptions"
+            clearable
+            style="width: 150px"
+            @change="handleFilterChange"
+          />
+          <BaseSelect
+            v-model="filters.status"
+            placeholder="Durum"
+            :options="statusOptions"
+            clearable
+            style="width: 120px"
+            @change="handleFilterChange"
+          />
+          <BaseButton
+            v-if="hasActiveFilters"
+            type="default"
+            icon="RefreshLeft"
+            @click="clearFilters"
           >
-            <template #default="{ row }">
-              <el-tag :type="getAirlineTypeTagType(row.type)">
-                {{ AIRLINE_TYPE_LABELS[row.type] || row.type }}
-              </el-tag>
-            </template>
-          </el-table-column>
+            Filtreleri Temizle
+          </BaseButton>
+        </div>
+      </div>
+    </BaseCard>
 
-          <el-table-column
-            prop="active"
-            label="Durum"
-            width="100"
-          >
-            <template #default="{ row }">
-              <el-tag :type="row.active ? 'success' : 'danger'">
-                {{ row.active ? 'Aktif' : 'Pasif' }}
-              </el-tag>
-            </template>
-          </el-table-column>
+    <!-- Results summary -->
+    <div v-if="filteredAirlines.length > 0" class="results-summary">
+      <span class="summary-text">
+        {{ filteredAirlines.length }} havayolu bulundu
+        <span v-if="selectedAirlines.length > 0" class="selected-count">
+          ({{ selectedAirlines.length }} seçili)
+        </span>
+      </span>
 
-          <el-table-column
-            label="İşlemler"
-            width="200"
-            fixed="right"
-          >
-            <template #default="{ row }">
-              <el-button
+      <!-- Bulk actions -->
+      <div v-if="selectedAirlines.length > 0" class="bulk-actions">
+        <BaseButton
+          type="danger"
+          size="small"
+          icon="Delete"
+          @click="handleBulkDelete"
+        >
+          Seçilenleri Sil ({{ selectedAirlines.length }})
+        </BaseButton>
+      </div>
+    </div>
+
+    <!-- Airlines table -->
+    <BaseCard class="table-card">
+      <el-table
+        v-loading="airlinesLoading"
+        :data="paginatedAirlines"
+        stripe
+        border
+        class="airlines-table"
+        @selection-change="handleSelectionChange"
+        @sort-change="handleSortChange"
+      >
+        <!-- Selection column -->
+        <el-table-column type="selection" width="50" />
+
+        <!-- Logo column -->
+        <el-table-column label="Logo" width="80" align="center">
+          <template #default="{ row }">
+            <div class="airline-logo">
+              <img
+                v-if="row.logoUrl"
+                :src="row.logoUrl"
+                :alt="row.name"
+                class="logo-image"
+                @error="handleLogoError"
+              />
+              <div v-else class="logo-placeholder">
+                {{ row.iataCode }}
+              </div>
+            </div>
+          </template>
+        </el-table-column>
+
+        <!-- Basic info column -->
+        <el-table-column label="Havayolu Bilgileri" min-width="250" sortable="custom" prop="name">
+          <template #default="{ row }">
+            <div class="airline-info">
+              <div class="airline-name">{{ row.name }}</div>
+              <div class="airline-codes">
+                <el-tag size="small" type="primary">{{ row.iataCode }}</el-tag>
+                <el-tag size="small" type="info">{{ row.icaoCode }}</el-tag>
+              </div>
+            </div>
+          </template>
+        </el-table-column>
+
+        <!-- Country column -->
+        <el-table-column label="Ülke" width="120" sortable="custom" prop="country">
+          <template #default="{ row }">
+            <div class="country-info">
+              <span class="country-flag">{{ getCountryFlag(row.country) }}</span>
+              <span class="country-name">{{ row.country }}</span>
+            </div>
+          </template>
+        </el-table-column>
+
+        <!-- Type column -->
+        <el-table-column label="Tip" width="120" sortable="custom" prop="type">
+          <template #default="{ row }">
+            <el-tag
+              :type="getAirlineTypeColor(row.type)"
+              size="small"
+            >
+              {{ formatAirlineType(row.type) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+
+        <!-- Status column -->
+        <el-table-column label="Durum" width="100" sortable="custom" prop="active">
+          <template #default="{ row }">
+            <el-tag
+              :type="row.active ? 'success' : 'danger'"
+              size="small"
+            >
+              {{ row.active ? 'Aktif' : 'Pasif' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+
+        <!-- Stats column -->
+        <el-table-column label="İstatistikler" width="120" align="center">
+          <template #default="{ row }">
+            <div class="airline-stats">
+              <el-tooltip content="Toplam Uçuş Sayısı">
+                <div class="stat-item">
+                  <el-icon><Airplane /></el-icon>
+                  <span>{{ row.flightCount || 0 }}</span>
+                </div>
+              </el-tooltip>
+            </div>
+          </template>
+        </el-table-column>
+
+        <!-- Actions column -->
+        <el-table-column label="İşlemler" width="200" fixed="right">
+          <template #default="{ row }">
+            <div class="action-buttons">
+              <BaseButton
                 size="small"
+                icon="View"
+                title="Detayları Görüntüle"
                 @click="viewAirline(row)"
-              >
-                <el-icon><View /></el-icon>
-                Görüntüle
-              </el-button>
-
-              <el-button
-                v-if="authStore.isAdmin"
+              />
+              <BaseButton
                 size="small"
                 type="primary"
+                icon="Edit"
+                title="Düzenle"
                 @click="editAirline(row)"
+              />
+              <el-dropdown
+                trigger="click"
+                @command="handleDropdownAction"
               >
-                <el-icon><Edit /></el-icon>
-                Düzenle
-              </el-button>
-
-              <el-button
-                v-if="authStore.isAdmin"
-                size="small"
-                type="danger"
-                @click="deleteAirline(row)"
-              >
-                <el-icon><Delete /></el-icon>
-                Sil
-              </el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-
-        <!-- Pagination -->
-        <div class="pagination-section">
-          <el-pagination
-            v-model:current-page="currentPage"
-            v-model:page-size="pageSize"
-            :total="total"
-            :page-sizes="[10, 20, 50, 100]"
-            layout="total, sizes, prev, pager, next"
-            @size-change="handleSizeChange"
-            @current-change="handlePageChange"
-          />
-        </div>
-      </div>
-    </el-card>
-
-    <!-- Create/Edit Dialog -->
-    <el-dialog
-      v-model="showCreateDialog"
-      :title="editingAirline ? 'Havayolu Düzenle' : 'Yeni Havayolu'"
-      width="600px"
-      :close-on-click-modal="false"
-    >
-      <el-form
-        ref="airlineFormRef"
-        :model="airlineForm"
-        :rules="airlineRules"
-        label-width="140px"
-      >
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="IATA Kodu" prop="iataCode">
-              <el-input v-model="airlineForm.iataCode" placeholder="TK" maxlength="3" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="ICAO Kodu" prop="icaoCode">
-              <el-input v-model="airlineForm.icaoCode" placeholder="THY" maxlength="4" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <el-form-item label="Havayolu Adı" prop="name">
-          <el-input v-model="airlineForm.name" placeholder="Turkish Airlines" />
-        </el-form-item>
-
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="Ülke" prop="country">
-              <el-input v-model="airlineForm.country" placeholder="Turkey" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="Tip" prop="type">
-              <el-select v-model="airlineForm.type" placeholder="Seçiniz">
-                <el-option
-                  v-for="(label, value) in AIRLINE_TYPE_LABELS"
-                  :key="value"
-                  :label="label"
-                  :value="value"
+                <BaseButton
+                  size="small"
+                  icon="MoreFilled"
+                  title="Daha Fazla"
                 />
-              </el-select>
-            </el-form-item>
-          </el-col>
-        </el-row>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item
+                      :command="{ action: 'toggle-status', airline: row }"
+                      :icon="row.active ? 'Hide' : 'View'"
+                    >
+                      {{ row.active ? 'Pasifleştir' : 'Aktifleştir' }}
+                    </el-dropdown-item>
+                    <el-dropdown-item
+                      :command="{ action: 'duplicate', airline: row }"
+                      icon="CopyDocument"
+                    >
+                      Kopyala
+                    </el-dropdown-item>
+                    <el-dropdown-item
+                      :command="{ action: 'export', airline: row }"
+                      icon="Download"
+                    >
+                      Dışa Aktar
+                    </el-dropdown-item>
+                    <el-dropdown-item
+                      :command="{ action: 'delete', airline: row }"
+                      icon="Delete"
+                      divided
+                      class="danger-item"
+                    >
+                      Sil
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
+          </template>
+        </el-table-column>
+      </el-table>
 
-        <el-form-item label="Durum">
-          <el-switch v-model="airlineForm.active" active-text="Aktif" inactive-text="Pasif" />
-        </el-form-item>
-      </el-form>
+      <!-- Pagination -->
+      <div class="pagination-wrapper">
+        <el-pagination
+          v-model:current-page="pagination.page"
+          v-model:page-size="pagination.size"
+          :total="pagination.total"
+          :page-sizes="[10, 20, 50, 100]"
+          :small="isMobile"
+          layout="total, sizes, prev, pager, next, jumper"
+          @size-change="handlePageSizeChange"
+          @current-change="handlePageChange"
+        />
+      </div>
+    </BaseCard>
 
-      <template #footer>
-        <el-button @click="showCreateDialog = false">İptal</el-button>
-        <el-button
-          type="primary"
-          :loading="loading"
-          @click="handleSubmit"
-        >
-          {{ editingAirline ? 'Güncelle' : 'Kaydet' }}
-        </el-button>
-      </template>
-    </el-dialog>
-
-    <!-- View Dialog -->
-    <el-dialog
-      v-model="showViewDialog"
-      title="Havayolu Detayları"
+    <!-- Modals -->
+    <BaseModal
+      v-model="showDeleteModal"
+      title="Havayolu Silme Onayı"
       width="500px"
     >
-      <div v-if="viewingAirline" class="airline-details">
-        <el-descriptions :column="2" border>
-          <el-descriptions-item label="IATA Kodu">{{ viewingAirline.iataCode }}</el-descriptions-item>
-          <el-descriptions-item label="ICAO Kodu">{{ viewingAirline.icaoCode }}</el-descriptions-item>
-          <el-descriptions-item label="Havayolu Adı" :span="2">{{ viewingAirline.name }}</el-descriptions-item>
-          <el-descriptions-item label="Ülke">{{ viewingAirline.country }}</el-descriptions-item>
-          <el-descriptions-item label="Tip">
-            <el-tag :type="getAirlineTypeTagType(viewingAirline.type)">
-              {{ AIRLINE_TYPE_LABELS[viewingAirline.type] || viewingAirline.type }}
-            </el-tag>
-          </el-descriptions-item>
-          <el-descriptions-item label="Durum" :span="2">
-            <el-tag :type="viewingAirline.active ? 'success' : 'danger'">
-              {{ viewingAirline.active ? 'Aktif' : 'Pasif' }}
-            </el-tag>
-          </el-descriptions-item>
-        </el-descriptions>
+      <div class="delete-confirmation">
+        <el-alert
+          v-if="deleteCheckResult?.canDelete === false"
+          type="warning"
+          :title="deleteCheckResult.message"
+          show-icon
+          :closable="false"
+        />
+
+        <p class="delete-message">
+          <strong>{{ airlineToDelete?.name }}</strong> havayolunu silmek istediğinizden emin misiniz?
+        </p>
+
+        <div v-if="deleteCheckResult?.dependencies" class="dependencies-info">
+          <h4>Bu havayoluna bağlı veriler:</h4>
+          <ul>
+            <li v-if="deleteCheckResult.dependencies.flights > 0">
+              {{ deleteCheckResult.dependencies.flights }} uçuş
+            </li>
+            <li v-if="deleteCheckResult.dependencies.aircraft > 0">
+              {{ deleteCheckResult.dependencies.aircraft }} uçak
+            </li>
+          </ul>
+        </div>
       </div>
-    </el-dialog>
+
+      <template #footer>
+        <div class="modal-footer">
+          <BaseButton @click="showDeleteModal = false">
+            İptal
+          </BaseButton>
+          <BaseButton
+            v-if="deleteCheckResult?.canDelete !== false"
+            type="danger"
+            :loading="deleting"
+            @click="confirmDelete"
+          >
+            Sil
+          </BaseButton>
+          <BaseButton
+            v-else
+            type="danger"
+            :loading="deleting"
+            @click="confirmForceDelete"
+          >
+            Zorla Sil
+          </BaseButton>
+        </div>
+      </template>
+    </BaseModal>
+
+    <!-- Airline details modal -->
+    <BaseModal
+      v-model="showDetailsModal"
+      title="Havayolu Detayları"
+      width="800px"
+    >
+      <AirlineDetails
+        v-if="selectedAirline"
+        :airline="selectedAirline"
+        @edit="editAirline"
+        @close="showDetailsModal = false"
+      />
+    </BaseModal>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import {
-  Plus,
-  Refresh,
-  Search,
-  RefreshRight,
-  View,
-  Edit,
-  Delete
-} from '@element-plus/icons-vue'
-import { useAuthStore } from '@/stores/auth'
-import { useReferenceStore } from '@/stores/reference'
-import { AIRLINE_TYPE_LABELS } from '@/utils/constants'
+import { Airplane, MoreFilled } from '@element-plus/icons-vue'
 
-const authStore = useAuthStore()
+import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseCard from '@/components/ui/BaseCard.vue'
+import BaseInput from '@/components/ui/BaseInput.vue'
+import BaseSelect from '@/components/ui/BaseSelect.vue'
+import BaseModal from '@/components/ui/BaseModal.vue'
+import AirlineDetails from '@/components/reference/AirlineDetails.vue'
+
+import { useReferenceStore } from '@/stores/reference'
+import { formatAirlineType } from '@/utils/formatters'
+import { debounce } from '@/utils/helpers'
+import { AIRLINE_TYPE } from '@/utils/constants'
+
+// Composables
+const router = useRouter()
 const referenceStore = useReferenceStore()
 
-// State
-const loading = ref(false)
+// Reactive state
 const searchQuery = ref('')
-const filterType = ref('')
-const currentPage = ref(1)
-const pageSize = ref(20)
-const total = ref(0)
+const refreshing = ref(false)
+const selectedAirlines = ref([])
+const showDeleteModal = ref(false)
+const showDetailsModal = ref(false)
+const airlineToDelete = ref(null)
+const selectedAirline = ref(null)
+const deleting = ref(false)
+const deleteCheckResult = ref(null)
+const isMobile = ref(window.innerWidth < 768)
 
-// Dialogs
-const showCreateDialog = ref(false)
-const showViewDialog = ref(false)
-const editingAirline = ref(null)
-const viewingAirline = ref(null)
-
-// Form
-const airlineFormRef = ref()
-const airlineForm = reactive({
-  iataCode: '',
-  icaoCode: '',
-  name: '',
-  country: '',
-  type: '',
-  active: true
+// Filters
+const filters = ref({
+  type: null,
+  country: null,
+  status: null
 })
 
-const airlineRules = {
-  iataCode: [
-    { required: true, message: 'IATA kodu gereklidir', trigger: 'blur' },
-    { min: 2, max: 3, message: 'IATA kodu 2-3 karakter olmalıdır', trigger: 'blur' }
-  ],
-  icaoCode: [
-    { required: true, message: 'ICAO kodu gereklidir', trigger: 'blur' },
-    { min: 3, max: 4, message: 'ICAO kodu 3-4 karakter olmalıdır', trigger: 'blur' }
-  ],
-  name: [
-    { required: true, message: 'Havayolu adı gereklidir', trigger: 'blur' }
-  ],
-  country: [
-    { required: true, message: 'Ülke gereklidir', trigger: 'blur' }
-  ],
-  type: [
-    { required: true, message: 'Tip seçimi gereklidir', trigger: 'change' }
-  ]
-}
+// Sorting
+const sortConfig = ref({
+  prop: 'name',
+  order: 'ascending'
+})
 
-// Computed
+// Pagination (local)
+const pagination = ref({
+  page: 1,
+  size: 20,
+  total: 0
+})
+
+// Computed properties
+const airlines = computed(() => referenceStore.airlines)
+const airlinesLoading = computed(() => referenceStore.airlinesLoading)
+
+const airlineTypeOptions = computed(() => [
+  { label: 'Tam Hizmet', value: AIRLINE_TYPE.FULL_SERVICE },
+  { label: 'Düşük Maliyet', value: AIRLINE_TYPE.LOW_COST },
+  { label: 'Kargo', value: AIRLINE_TYPE.CARGO },
+  { label: 'Charter', value: AIRLINE_TYPE.CHARTER }
+])
+
+const countryOptions = computed(() => {
+  const countries = [...new Set(airlines.value.map(airline => airline.country))]
+  return countries.map(country => ({ label: country, value: country }))
+})
+
+const statusOptions = computed(() => [
+  { label: 'Aktif', value: true },
+  { label: 'Pasif', value: false }
+])
+
+const hasActiveFilters = computed(() => {
+  return Object.values(filters.value).some(value => value !== null && value !== '')
+})
+
 const filteredAirlines = computed(() => {
-  let airlines = referenceStore.airlines || []
+  let result = [...airlines.value]
 
+  // Search filter
   if (searchQuery.value) {
     const query = searchQuery.value.toLowerCase()
-    airlines = airlines.filter(airline =>
-      airline.name?.toLowerCase().includes(query) ||
-      airline.iataCode?.toLowerCase().includes(query) ||
-      airline.icaoCode?.toLowerCase().includes(query) ||
-      airline.country?.toLowerCase().includes(query)
+    result = result.filter(airline =>
+      airline.name.toLowerCase().includes(query) ||
+      airline.iataCode.toLowerCase().includes(query) ||
+      airline.icaoCode.toLowerCase().includes(query) ||
+      airline.country.toLowerCase().includes(query)
     )
   }
 
-  if (filterType.value) {
-    airlines = airlines.filter(airline => airline.type === filterType.value)
+  // Type filter
+  if (filters.value.type) {
+    result = result.filter(airline => airline.type === filters.value.type)
   }
 
-  total.value = airlines.length
+  // Country filter
+  if (filters.value.country) {
+    result = result.filter(airline => airline.country === filters.value.country)
+  }
 
-  // Client-side pagination
-  const start = (currentPage.value - 1) * pageSize.value
-  const end = start + pageSize.value
-  return airlines.slice(start, end)
+  // Status filter
+  if (filters.value.status !== null) {
+    result = result.filter(airline => airline.active === filters.value.status)
+  }
+
+  // Sort
+  result.sort((a, b) => {
+    const aValue = a[sortConfig.value.prop] || ''
+    const bValue = b[sortConfig.value.prop] || ''
+
+    if (sortConfig.value.order === 'ascending') {
+      return aValue > bValue ? 1 : -1
+    } else {
+      return aValue < bValue ? 1 : -1
+    }
+  })
+
+  // Update pagination total
+  pagination.value.total = result.length
+
+  return result
 })
 
+const paginatedAirlines = computed(() => {
+  const start = (pagination.value.page - 1) * pagination.value.size
+  const end = start + pagination.value.size
+  return filteredAirlines.value.slice(start, end)
+})
+
+// Debounced search
+const debouncedSearch = debounce(() => {
+  pagination.value.page = 1 // Reset to first page on search
+}, 300)
+
 // Methods
-const loadData = async () => {
-  await referenceStore.loadAirlines(true)
+const loadAirlines = async (useCache = true) => {
+  try {
+    await referenceStore.loadAirlines({
+      page: 0,
+      size: 1000 // Load all for client-side filtering
+    }, useCache)
+  } catch (error) {
+    console.error('Error loading airlines:', error)
+  }
 }
 
 const refreshData = async () => {
-  await loadData()
-  ElMessage.success('Veriler yenilendi')
-}
-
-const handleSearch = () => {
-  currentPage.value = 1
-}
-
-const handleClearFilters = () => {
-  searchQuery.value = ''
-  filterType.value = ''
-  currentPage.value = 1
-}
-
-const handleSortChange = ({ column, prop, order }) => {
-  // Sorting logic can be implemented here
-  console.log('Sort change:', { prop, order })
-}
-
-const handlePageChange = (page) => {
-  currentPage.value = page
-}
-
-const handleSizeChange = (size) => {
-  pageSize.value = size
-  currentPage.value = 1
-}
-
-const getAirlineTypeTagType = (type) => {
-  const typeMap = {
-    'FULL_SERVICE': 'primary',
-    'LOW_COST': 'success',
-    'CHARTER': 'warning',
-    'CARGO': 'info'
+  refreshing.value = true
+  try {
+    await loadAirlines(false) // Force refresh
+    ElMessage.success('Veriler yenilendi')
+  } catch (error) {
+    ElMessage.error('Veriler yenilenirken hata oluştu')
+  } finally {
+    refreshing.value = false
   }
-  return typeMap[type] || 'info'
 }
 
-const resetForm = () => {
-  Object.assign(airlineForm, {
-    iataCode: '',
-    icaoCode: '',
-    name: '',
-    country: '',
-    type: '',
-    active: true
-  })
-  editingAirline.value = null
-  airlineFormRef.value?.clearValidate()
+const navigateToCreate = () => {
+  router.push({ name: 'AirlineCreate' })
 }
 
-const viewAirline = (airline) => {
-  viewingAirline.value = airline
-  showViewDialog.value = true
+const viewAirline = async (airline) => {
+  try {
+    await referenceStore.getAirlineById(airline.id)
+    selectedAirline.value = referenceStore.currentAirline
+    showDetailsModal.value = true
+  } catch (error) {
+    console.error('Error loading airline details:', error)
+  }
 }
 
 const editAirline = (airline) => {
-  editingAirline.value = airline
-  Object.assign(airlineForm, {
-    iataCode: airline.iataCode,
-    icaoCode: airline.icaoCode,
-    name: airline.name,
-    country: airline.country,
-    type: airline.type,
-    active: airline.active
-  })
-  showCreateDialog.value = true
-}
-
-const handleSubmit = async () => {
-  if (!airlineFormRef.value) return
-
-  try {
-    await airlineFormRef.value.validate()
-    loading.value = true
-
-    if (editingAirline.value) {
-      await referenceStore.updateAirline(editingAirline.value.id, airlineForm)
-      ElMessage.success('Havayolu başarıyla güncellendi')
-    } else {
-      await referenceStore.createAirline(airlineForm)
-      ElMessage.success('Havayolu başarıyla oluşturuldu')
-    }
-
-    showCreateDialog.value = false
-    resetForm()
-  } catch (error) {
-    console.error('Submit error:', error)
-  } finally {
-    loading.value = false
-  }
+  router.push({ name: 'AirlineEdit', params: { id: airline.id } })
 }
 
 const deleteAirline = async (airline) => {
+  airlineToDelete.value = airline
+
+  try {
+    deleteCheckResult.value = await referenceStore.checkAirlineDeletion(airline.id)
+    showDeleteModal.value = true
+  } catch (error) {
+    ElMessage.error('Silme kontrolü yapılırken hata oluştu')
+  }
+}
+
+const confirmDelete = async () => {
+  if (!airlineToDelete.value) return
+
+  deleting.value = true
+  try {
+    await referenceStore.deleteAirline(airlineToDelete.value.id)
+    showDeleteModal.value = false
+    airlineToDelete.value = null
+    deleteCheckResult.value = null
+  } catch (error) {
+    console.error('Error deleting airline:', error)
+  } finally {
+    deleting.value = false
+  }
+}
+
+const confirmForceDelete = async () => {
   try {
     await ElMessageBox.confirm(
-      `"${airline.name}" havayolunu silmek istediğinizden emin misiniz?`,
-      'Havayolu Sil',
+      'Bu işlem geri alınamaz ve tüm bağlı verileri silecektir!',
+      'Zorla Silme Onayı',
       {
-        confirmButtonText: 'Evet',
-        cancelButtonText: 'İptal',
-        type: 'warning'
+        type: 'error',
+        confirmButtonText: 'Zorla Sil',
+        cancelButtonText: 'İptal'
       }
     )
 
-    await referenceStore.deleteAirline(airline.id)
-    ElMessage.success('Havayolu başarıyla silindi')
+    deleting.value = true
+    await referenceStore.deleteAirline(airlineToDelete.value.id, true)
+    showDeleteModal.value = false
+    airlineToDelete.value = null
+    deleteCheckResult.value = null
   } catch (error) {
     if (error !== 'cancel') {
-      console.error('Delete error:', error)
+      console.error('Error force deleting airline:', error)
+    }
+  } finally {
+    deleting.value = false
+  }
+}
+
+const handleBulkDelete = async () => {
+  try {
+    await ElMessageBox.confirm(
+      `${selectedAirlines.value.length} havayolunu silmek istediğinizden emin misiniz?`,
+      'Toplu Silme Onayı',
+      {
+        type: 'warning',
+        confirmButtonText: 'Sil',
+        cancelButtonText: 'İptal'
+      }
+    )
+
+    const ids = selectedAirlines.value.map(airline => airline.id)
+    await referenceStore.batchDeleteAirlines(ids)
+    selectedAirlines.value = []
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('Error in bulk delete:', error)
     }
   }
 }
 
+const handleDropdownAction = ({ action, airline }) => {
+  switch (action) {
+    case 'toggle-status':
+      toggleAirlineStatus(airline)
+      break
+    case 'duplicate':
+      duplicateAirline(airline)
+      break
+    case 'export':
+      exportAirline(airline)
+      break
+    case 'delete':
+      deleteAirline(airline)
+      break
+  }
+}
+
+const toggleAirlineStatus = async (airline) => {
+  try {
+    const updatedData = { ...airline, active: !airline.active }
+    await referenceStore.updateAirline(airline.id, updatedData)
+    ElMessage.success(`Havayolu ${airline.active ? 'pasifleştirildi' : 'aktifleştirildi'}`)
+  } catch (error) {
+    console.error('Error toggling airline status:', error)
+  }
+}
+
+const duplicateAirline = (airline) => {
+  const duplicateData = {
+    ...airline,
+    name: `${airline.name} (Kopya)`,
+    iataCode: '',
+    icaoCode: ''
+  }
+  router.push({
+    name: 'AirlineCreate',
+    query: { duplicate: JSON.stringify(duplicateData) }
+  })
+}
+
+const exportAirline = (airline) => {
+  // Export single airline logic
+  ElMessage.info('Tekil dışa aktarma özelliği yakında gelecek')
+}
+
+const exportData = () => {
+  // Export all airlines logic
+  ElMessage.info('Dışa aktarma özelliği yakında gelecek')
+}
+
+const handleSearch = () => {
+  debouncedSearch()
+}
+
+const handleFilterChange = () => {
+  pagination.value.page = 1
+}
+
+const clearFilters = () => {
+  filters.value = {
+    type: null,
+    country: null,
+    status: null
+  }
+  searchQuery.value = ''
+  pagination.value.page = 1
+}
+
+const handleSelectionChange = (selection) => {
+  selectedAirlines.value = selection
+}
+
+const handleSortChange = ({ prop, order }) => {
+  sortConfig.value = { prop, order }
+}
+
+const handlePageChange = (page) => {
+  pagination.value.page = page
+}
+
+const handlePageSizeChange = (size) => {
+  pagination.value.size = size
+  pagination.value.page = 1
+}
+
+const getAirlineTypeColor = (type) => {
+  const colorMap = {
+    [AIRLINE_TYPE.FULL_SERVICE]: 'primary',
+    [AIRLINE_TYPE.LOW_COST]: 'success',
+    [AIRLINE_TYPE.CARGO]: 'warning',
+    [AIRLINE_TYPE.CHARTER]: 'info'
+  }
+  return colorMap[type] || 'default'
+}
+
+const getCountryFlag = (country) => {
+  // Simple country to flag emoji mapping
+  const flagMap = {
+    'Turkey': '🇹🇷',
+    'United States': '🇺🇸',
+    'Germany': '🇩🇪',
+    'France': '🇫🇷',
+    'United Kingdom': '🇬🇧'
+  }
+  return flagMap[country] || '🌍'
+}
+
+const handleLogoError = (event) => {
+  event.target.style.display = 'none'
+}
+
+const handleResize = () => {
+  isMobile.value = window.innerWidth < 768
+}
+
 // Lifecycle
-onMounted(() => {
-  loadData()
+onMounted(async () => {
+  await loadAirlines()
+  window.addEventListener('resize', handleResize)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+})
+
+// Watch for filter changes
+watch(filters, () => {
+  handleFilterChange()
+}, { deep: true })
+
+// Page meta
+definePageMeta({
+  title: 'Havayolu Yönetimi',
+  breadcrumb: 'Havayolları',
+  requiresAuth: true,
+  permissions: ['USER', 'ADMIN']
 })
 </script>
 
 <style scoped>
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.airline-management {
+  padding: 0;
 }
 
-.page-header h2 {
+/* Page header */
+.page-header {
+  background: linear-gradient(135deg, var(--el-color-primary-light-3), var(--el-color-primary));
+  color: white;
+  padding: 32px 24px;
+  margin: -24px -24px 24px -24px;
+  border-radius: 0 0 16px 16px;
+}
+
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  max-width: 1400px;
+  margin: 0 auto;
+  gap: 24px;
+}
+
+.header-info {
+  flex: 1;
+}
+
+.page-title {
+  font-size: 28px;
+  font-weight: 700;
+  margin: 0 0 8px 0;
+  line-height: 1.2;
+}
+
+.page-description {
+  font-size: 16px;
+  opacity: 0.9;
   margin: 0;
+  line-height: 1.4;
 }
 
 .header-actions {
   display: flex;
   gap: 12px;
+  flex-shrink: 0;
+}
+
+/* Filters */
+.filters-card {
+  margin-bottom: 24px;
+}
+
+.filters-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .search-section {
-  margin-bottom: 20px;
-  padding: 16px;
-  background: #f8f9fa;
-  border-radius: 8px;
+  flex: 1;
 }
 
-.table-section {
-  margin-top: 16px;
+.search-input {
+  max-width: 400px;
 }
 
-.airline-info strong {
+.filter-section {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* Results summary */
+.results-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding: 0 4px;
+}
+
+.summary-text {
   font-size: 14px;
-  color: #303133;
+  color: var(--el-text-color-regular);
+}
+
+.selected-count {
+  color: var(--el-color-primary);
+  font-weight: 500;
+}
+
+.bulk-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* Table */
+.table-card {
+  margin-bottom: 0;
+}
+
+.airlines-table {
+  width: 100%;
+}
+
+/* Table cell content */
+.airline-logo {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.logo-image {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
+.logo-placeholder {
+  width: 40px;
+  height: 40px;
+  background: var(--el-color-primary-light-8);
+  color: var(--el-color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.airline-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.airline-name {
+  font-weight: 500;
+  color: var(--el-text-color-primary);
+  line-height: 1.3;
 }
 
 .airline-codes {
   display: flex;
   gap: 4px;
-  margin-top: 4px;
 }
 
-.pagination-section {
+.country-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.country-flag {
+  font-size: 16px;
+}
+
+.country-name {
+  font-size: 13px;
+}
+
+.airline-stats {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--el-text-color-regular);
+}
+
+.action-buttons {
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+}
+
+/* Pagination */
+.pagination-wrapper {
   display: flex;
   justify-content: center;
-  margin-top: 20px;
+  padding: 20px 0;
+  border-top: 1px solid var(--el-border-color-lighter);
+  margin-top: 16px;
 }
 
-.airline-details {
+/* Modal content */
+.delete-confirmation {
   padding: 16px 0;
 }
 
-/* Responsive */
+.delete-message {
+  margin: 16px 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.dependencies-info {
+  margin-top: 16px;
+  padding: 12px;
+  background: var(--el-color-warning-light-9);
+  border-radius: 4px;
+}
+
+.dependencies-info h4 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  color: var(--el-color-warning-dark-2);
+}
+
+.dependencies-info ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+/* Responsive design */
+@media (max-width: 1024px) {
+  .header-content {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+  }
+
+  .header-actions {
+    justify-content: center;
+  }
+
+  .filter-section {
+    justify-content: center;
+  }
+
+  .results-summary {
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+  }
+}
+
 @media (max-width: 768px) {
+  .page-header {
+    padding: 24px 16px;
+    margin: -24px -16px 24px -16px;
+  }
+
+  .page-title {
+    font-size: 24px;
+  }
+
   .header-actions {
     flex-direction: column;
   }
 
-  .search-section .el-col {
-    margin-bottom: 8px;
+  .filters-section {
+    gap: 12px;
   }
 
-  .data-table {
+  .search-input {
+    max-width: none;
+  }
+
+  .filter-section {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filter-section > * {
+    width: 100% !important;
+  }
+
+  .airlines-table {
     font-size: 12px;
+  }
+
+  .action-buttons {
+    flex-direction: column;
+    gap: 2px;
+  }
+}
+
+/* Dropdown danger item */
+:deep(.danger-item) {
+  color: var(--el-color-danger);
+}
+
+:deep(.danger-item:hover) {
+  background-color: var(--el-color-danger-light-9);
+}
+
+/* High contrast mode */
+@media (prefers-contrast: more) {
+  .page-header {
+    border: 2px solid white;
+  }
+
+  .airlines-table {
+    border-width: 2px;
+  }
+
+  .logo-placeholder {
+    border: 1px solid var(--el-color-primary);
+  }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .page-header,
+  .action-buttons > *,
+  .airline-logo {
+    transition: none;
+  }
+}
+
+/* Print styles */
+@media print {
+  .page-header {
+    background: white !important;
+    color: black !important;
+    border-bottom: 2px solid black;
+  }
+
+  .header-actions,
+  .filters-card,
+  .bulk-actions,
+  .action-buttons {
+    display: none;
+  }
+
+  .airlines-table {
+    break-inside: auto;
+  }
+
+  .pagination-wrapper {
+    display: none;
   }
 }
 </style>

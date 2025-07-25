@@ -1,134 +1,381 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { ElMessage } from 'element-plus'
+import { STORAGE_KEYS } from '@/utils/constants'
+import { getStorageItem } from '@/utils/helpers'
+
+// Lazy loading için route import'ları
+const LoginPage = () => import('@/pages/auth/LoginPage.vue')
+const DashboardPage = () => import('@/pages/dashboard/DashboardPage.vue')
+const NotFound = () => import('@/pages/errors/NotFound.vue')
+const Forbidden = () => import('@/pages/errors/Forbidden.vue')
+const ServerError = () => import('@/pages/errors/ServerError.vue')
+
+// Layout imports
+const MainLayout = () => import('@/layouts/MainLayout.vue')
+const AuthLayout = () => import('@/layouts/AuthLayout.vue')
+
+// Flight Management
+const FlightManagement = () => import('@/pages/flights/FlightManagement.vue')
+const FlightCreate = () => import('@/pages/flights/FlightCreate.vue')
+const FlightEdit = () => import('@/pages/flights/FlightEdit.vue')
+const FlightView = () => import('@/pages/flights/FlightView.vue')
+const FlightUpload = () => import('@/pages/flights/FlightUpload.vue')
+
+// Reference Data Management
+const AirlineManagement = () => import('@/pages/reference/airlines/AirlineManagement.vue')
+const AirlineCreate = () => import('@/pages/reference/airlines/AirlineCreate.vue')
+const AirlineEdit = () => import('@/pages/reference/airlines/AirlineEdit.vue')
+
+const AirportManagement = () => import('@/pages/reference/airports/AirportManagement.vue')
+const AirportCreate = () => import('@/pages/reference/airports/AirportCreate.vue')
+const AirportEdit = () => import('@/pages/reference/airports/AirportEdit.vue')
+
+const AircraftManagement = () => import('@/pages/reference/aircraft/AircraftManagement.vue')
+const AircraftCreate = () => import('@/pages/reference/aircraft/AircraftCreate.vue')
+const AircraftEdit = () => import('@/pages/reference/aircraft/AircraftEdit.vue')
+
+const RouteManagement = () => import('@/pages/reference/routes/RouteManagement.vue')
+const RouteCreate = () => import('@/pages/reference/routes/RouteCreate.vue')
+const RouteEdit = () => import('@/pages/reference/routes/RouteEdit.vue')
+
+const CrewManagement = () => import('@/pages/reference/crew/CrewManagement.vue')
+const CrewCreate = () => import('@/pages/reference/crew/CrewCreate.vue')
+const CrewEdit = () => import('@/pages/reference/crew/CrewEdit.vue')
+
+// Reports
+const ArchiveReports = () => import('@/pages/reports/ArchiveReports.vue')
+const FlightReports = () => import('@/pages/reports/FlightReports.vue')
+const KpiReports = () => import('@/pages/reports/KpiReports.vue')
 
 const routes = [
+  // Auth routes
   {
     path: '/login',
     name: 'Login',
-    component: () => import('@/pages/auth/LoginPage.vue'),
+    component: LoginPage,
     meta: {
-      requiresAuth: false,
       layout: 'auth',
+      requiresAuth: false,
       title: 'Giriş Yap'
     }
   },
+
+  // Main routes with authentication
   {
     path: '/',
-    redirect: '/dashboard',
-    component: () => import('@/layouts/MainLayout.vue'),
+    component: MainLayout,
     meta: { requiresAuth: true },
     children: [
+      // Dashboard
       {
-        path: 'dashboard',
+        path: '',
         name: 'Dashboard',
-        component: () => import('@/pages/dashboard/DashboardPage.vue'),
+        component: DashboardPage,
         meta: {
-          title: 'Dashboard',
-          icon: 'Odometer'
+          title: 'Kontrol Paneli',
+          breadcrumb: 'Kontrol Paneli'
         }
       },
+
+      // Flight Management Routes
       {
-        path: 'flights',
+        path: '/flights',
         name: 'FlightManagement',
-        component: () => import('@/pages/flights/FlightManagement.vue'),
+        component: FlightManagement,
         meta: {
           title: 'Uçuş Yönetimi',
-          icon: 'Ship'
+          breadcrumb: 'Uçuş Yönetimi',
+          permissions: ['USER', 'ADMIN']
         }
       },
       {
-        path: 'flights/create',
+        path: '/flights/create',
         name: 'FlightCreate',
-        component: () => import('@/pages/flights/FlightCreate.vue'),
+        component: FlightCreate,
         meta: {
-          title: 'Uçuş Oluştur',
-          requiresAdmin: true,
-          breadcrumb: [
-            { title: 'Uçuş Yönetimi', to: '/flights' },
-            { title: 'Yeni Uçuş' }
-          ]
+          title: 'Yeni Uçuş',
+          breadcrumb: 'Yeni Uçuş',
+          permissions: ['ADMIN']
         }
       },
       {
-        path: 'flights/:id/edit',
+        path: '/flights/:id/edit',
         name: 'FlightEdit',
-        component: () => import('@/pages/flights/FlightEdit.vue'),
+        component: FlightEdit,
+        props: true,
         meta: {
           title: 'Uçuş Düzenle',
-          requiresAdmin: true,
-          breadcrumb: [
-            { title: 'Uçuş Yönetimi', to: '/flights' },
-            { title: 'Uçuş Düzenle' }
-          ]
+          breadcrumb: 'Uçuş Düzenle',
+          permissions: ['ADMIN']
         }
       },
       {
-        path: 'flights/upload',
+        path: '/flights/:id',
+        name: 'FlightView',
+        component: FlightView,
+        props: true,
+        meta: {
+          title: 'Uçuş Detayları',
+          breadcrumb: 'Uçuş Detayları',
+          permissions: ['USER', 'ADMIN']
+        }
+      },
+      {
+        path: '/flights/upload',
         name: 'FlightUpload',
-        component: () => import('@/pages/flights/FlightUpload.vue'),
+        component: FlightUpload,
         meta: {
-          title: 'CSV Uçuş Yükleme',
-          requiresAdmin: true,
-          breadcrumb: [
-            { title: 'Uçuş Yönetimi', to: '/flights' },
-            { title: 'CSV Yükleme' }
-          ]
+          title: 'Uçuş CSV Yükleme',
+          breadcrumb: 'CSV Yükleme',
+          permissions: ['ADMIN']
         }
       },
+
+      // Reference Data Routes
       {
-        path: 'airlines',
-        name: 'Airlines',
-        component: () => import('@/pages/airlines/AirlineManagement.vue'),
+        path: '/reference',
         meta: {
-          title: 'Havayolu Yönetimi',
-          icon: 'Ship'
-        }
+          title: 'Referans Veriler',
+          breadcrumb: 'Referans Veriler'
+        },
+        children: [
+          // Airlines
+          {
+            path: 'airlines',
+            name: 'AirlineManagement',
+            component: AirlineManagement,
+            meta: {
+              title: 'Havayolu Yönetimi',
+              breadcrumb: 'Havayolları',
+              permissions: ['USER', 'ADMIN']
+            }
+          },
+          {
+            path: 'airlines/create',
+            name: 'AirlineCreate',
+            component: AirlineCreate,
+            meta: {
+              title: 'Yeni Havayolu',
+              breadcrumb: 'Yeni Havayolu',
+              permissions: ['ADMIN']
+            }
+          },
+          {
+            path: 'airlines/:id/edit',
+            name: 'AirlineEdit',
+            component: AirlineEdit,
+            props: true,
+            meta: {
+              title: 'Havayolu Düzenle',
+              breadcrumb: 'Havayolu Düzenle',
+              permissions: ['ADMIN']
+            }
+          },
+
+          // Airports
+          {
+            path: 'airports',
+            name: 'AirportManagement',
+            component: AirportManagement,
+            meta: {
+              title: 'Havalimanı Yönetimi',
+              breadcrumb: 'Havalimanları',
+              permissions: ['USER', 'ADMIN']
+            }
+          },
+          {
+            path: 'airports/create',
+            name: 'AirportCreate',
+            component: AirportCreate,
+            meta: {
+              title: 'Yeni Havalimanı',
+              breadcrumb: 'Yeni Havalimanı',
+              permissions: ['ADMIN']
+            }
+          },
+          {
+            path: 'airports/:id/edit',
+            name: 'AirportEdit',
+            component: AirportEdit,
+            props: true,
+            meta: {
+              title: 'Havalimanı Düzenle',
+              breadcrumb: 'Havalimanı Düzenle',
+              permissions: ['ADMIN']
+            }
+          },
+
+          // Aircraft
+          {
+            path: 'aircraft',
+            name: 'AircraftManagement',
+            component: AircraftManagement,
+            meta: {
+              title: 'Uçak Yönetimi',
+              breadcrumb: 'Uçaklar',
+              permissions: ['USER', 'ADMIN']
+            }
+          },
+          {
+            path: 'aircraft/create',
+            name: 'AircraftCreate',
+            component: AircraftCreate,
+            meta: {
+              title: 'Yeni Uçak',
+              breadcrumb: 'Yeni Uçak',
+              permissions: ['ADMIN']
+            }
+          },
+          {
+            path: 'aircraft/:id/edit',
+            name: 'AircraftEdit',
+            component: AircraftEdit,
+            props: true,
+            meta: {
+              title: 'Uçak Düzenle',
+              breadcrumb: 'Uçak Düzenle',
+              permissions: ['ADMIN']
+            }
+          },
+
+          // Routes
+          {
+            path: 'routes',
+            name: 'RouteManagement',
+            component: RouteManagement,
+            meta: {
+              title: 'Rota Yönetimi',
+              breadcrumb: 'Rotalar',
+              permissions: ['USER', 'ADMIN']
+            }
+          },
+          {
+            path: 'routes/create',
+            name: 'RouteCreate',
+            component: RouteCreate,
+            meta: {
+              title: 'Yeni Rota',
+              breadcrumb: 'Yeni Rota',
+              permissions: ['ADMIN']
+            }
+          },
+          {
+            path: 'routes/:id/edit',
+            name: 'RouteEdit',
+            component: RouteEdit,
+            props: true,
+            meta: {
+              title: 'Rota Düzenle',
+              breadcrumb: 'Rota Düzenle',
+              permissions: ['ADMIN']
+            }
+          },
+
+          // Crew Members
+          {
+            path: 'crew',
+            name: 'CrewManagement',
+            component: CrewManagement,
+            meta: {
+              title: 'Mürettebat Yönetimi',
+              breadcrumb: 'Mürettebat',
+              permissions: ['USER', 'ADMIN']
+            }
+          },
+          {
+            path: 'crew/create',
+            name: 'CrewCreate',
+            component: CrewCreate,
+            meta: {
+              title: 'Yeni Mürettebat',
+              breadcrumb: 'Yeni Mürettebat',
+              permissions: ['ADMIN']
+            }
+          },
+          {
+            path: 'crew/:id/edit',
+            name: 'CrewEdit',
+            component: CrewEdit,
+            props: true,
+            meta: {
+              title: 'Mürettebat Düzenle',
+              breadcrumb: 'Mürettebat Düzenle',
+              permissions: ['ADMIN']
+            }
+          }
+        ]
       },
+
+      // Reports Routes
       {
-        path: 'airports',
-        name: 'Airports',
-        component: () => import('@/pages/airports/AirportManagement.vue'),
-        meta: {
-          title: 'Havalimanı Yönetimi',
-          icon: 'Place'
-        }
-      },
-      {
-        path: 'routes',
-        name: 'Routes',
-        component: () => import('@/pages/routes/RouteManagement.vue'),
-        meta: {
-          title: 'Rota Yönetimi',
-          icon: 'MapLocation'
-        }
-      },
-      {
-        path: 'crew-members',
-        name: 'CrewMembers',
-        component: () => import('@/pages/crew/CrewManagement.vue'),
-        meta: {
-          title: 'Mürettebat Yönetimi',
-          icon: 'User'
-        }
-      },
-      {
-        path: 'reports',
-        name: 'Reports',
-        component: () => import('@/pages/reports/ArchiveReports.vue'),
+        path: '/reports',
         meta: {
           title: 'Raporlar',
-          icon: 'DocumentCopy'
-        }
+          breadcrumb: 'Raporlar'
+        },
+        children: [
+          {
+            path: 'archive',
+            name: 'ArchiveReports',
+            component: ArchiveReports,
+            meta: {
+              title: 'Arşiv Raporları',
+              breadcrumb: 'Arşiv Raporları',
+              permissions: ['USER', 'ADMIN']
+            }
+          },
+          {
+            path: 'flights',
+            name: 'FlightReports',
+            component: FlightReports,
+            meta: {
+              title: 'Uçuş Raporları',
+              breadcrumb: 'Uçuş Raporları',
+              permissions: ['USER', 'ADMIN']
+            }
+          },
+          {
+            path: 'kpi',
+            name: 'KpiReports',
+            component: KpiReports,
+            meta: {
+              title: 'KPI Raporları',
+              breadcrumb: 'KPI Raporları',
+              permissions: ['ADMIN']
+            }
+          }
+        ]
       }
     ]
   },
+
+  // Error routes
   {
-    // 404 page
+    path: '/403',
+    name: 'Forbidden',
+    component: Forbidden,
+    meta: {
+      layout: 'empty',
+      title: 'Yetkisiz Erişim'
+    }
+  },
+  {
+    path: '/500',
+    name: 'ServerError',
+    component: ServerError,
+    meta: {
+      layout: 'empty',
+      title: 'Sunucu Hatası'
+    }
+  },
+
+  // Catch all route - 404
+  {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
-    component: () => import('@/pages/error/NotFound.vue'),
+    component: NotFound,
     meta: {
+      layout: 'empty',
       title: 'Sayfa Bulunamadı'
     }
   }
@@ -144,47 +391,6 @@ const router = createRouter({
       return { top: 0 }
     }
   }
-})
-
-// Global navigation guards
-router.beforeEach((to, from, next) => {
-  const authStore = useAuthStore()
-
-  // Set document title
-  const baseTitle = import.meta.env.VITE_APP_TITLE || 'Uçuş Yönetim Sistemi'
-  document.title = to.meta.title ? `${to.meta.title} - ${baseTitle}` : baseTitle
-
-  // Check authentication
-  if (to.meta.requiresAuth !== false) {
-    if (!authStore.isAuthenticated) {
-      ElMessage.warning('Bu sayfaya erişmek için giriş yapmalısınız.')
-      next({
-        name: 'Login',
-        query: { redirect: to.fullPath }
-      })
-      return
-    }
-
-    // Check admin requirement
-    if (to.meta.requiresAdmin && !authStore.isAdmin) {
-      ElMessage.error('Bu sayfaya erişmek için yönetici yetkisine sahip olmalısınız.')
-      next({ name: 'Dashboard' })
-      return
-    }
-  }
-
-  // Redirect to dashboard if already authenticated and trying to access login
-  if (to.name === 'Login' && authStore.isAuthenticated) {
-    next({ name: 'Dashboard' })
-    return
-  }
-
-  next()
-})
-
-router.afterEach((to, from) => {
-  // Page analytics veya diğer tracking kodları buraya eklenebilir
-  console.debug(`Navigation: ${from.path} -> ${to.path}`)
 })
 
 export default router

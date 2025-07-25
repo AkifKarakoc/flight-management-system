@@ -1,550 +1,760 @@
 <template>
-  <div class="dashboard-container">
-    <!-- Welcome Card -->
-    <div class="welcome-card">
-      <el-card shadow="never" class="welcome-content">
-        <div class="welcome-info">
-          <h1 class="welcome-title">
-            Hoş geldiniz, {{ authStore.userName }}! 👋
-          </h1>
-          <p class="welcome-subtitle">
-            Uçuş Yönetim Sistemi Dashboard'una hoş geldiniz.
-            {{ formattedDate }} tarihindeki sistem durumu aşağıda görüntülenmektedir.
+  <div class="dashboard-page">
+    <!-- Page header -->
+    <div class="dashboard-header">
+      <div class="header-content">
+        <div class="header-text">
+          <h1 class="page-title">Kontrol Paneli</h1>
+          <p class="page-subtitle">
+            Hoş geldiniz, {{ user?.name || 'Kullanıcı' }}!
+            Son güncelleme: {{ lastUpdateText }}
           </p>
         </div>
-        <div class="welcome-actions">
-          <el-button
-            v-if="authStore.isAdmin"
+        <div class="header-actions">
+          <BaseButton
             type="primary"
-            size="large"
-            @click="$router.push('/flights/create')"
+            icon="Refresh"
+            :loading="refreshing"
+            @click="refreshDashboard"
           >
-            <el-icon><Plus /></el-icon>
-            Yeni Uçuş Oluştur
-          </el-button>
-          <el-button
-            size="large"
-            @click="$router.push('/flights')"
+            Yenile
+          </BaseButton>
+          <BaseButton
+            icon="Download"
+            @click="exportReport"
           >
-            <el-icon><List /></el-icon>
-            Uçuşları Görüntüle
-          </el-button>
+            Rapor İndir
+          </BaseButton>
         </div>
-      </el-card>
+      </div>
     </div>
 
-    <!-- KPI Cards -->
-    <div class="kpi-section">
-      <el-row :gutter="24">
-        <el-col :xs="24" :sm="12" :md="6">
-          <el-card shadow="hover" class="kpi-card">
-            <div class="kpi-content">
-              <div class="kpi-icon scheduled">
-                <el-icon :size="24"><Clock /></el-icon>
-              </div>
-              <div class="kpi-info">
-                <h3 class="kpi-value">{{ kpiData.scheduledFlights }}</h3>
-                <p class="kpi-label">Planlanan Uçuş</p>
-              </div>
-            </div>
-          </el-card>
-        </el-col>
-
-        <el-col :xs="24" :sm="12" :md="6">
-          <el-card shadow="hover" class="kpi-card">
-            <div class="kpi-content">
-              <div class="kpi-icon active">
-                <el-icon :size="24"><Ship /></el-icon>
-              </div>
-              <div class="kpi-info">
-                <h3 class="kpi-value">{{ kpiData.activeFlights }}</h3>
-                <p class="kpi-label">Aktif Uçuş</p>
-              </div>
-            </div>
-          </el-card>
-        </el-col>
-
-        <el-col :xs="24" :sm="12" :md="6">
-          <el-card shadow="hover" class="kpi-card">
-            <div class="kpi-content">
-              <div class="kpi-icon completed">
-                <el-icon :size="24"><Check /></el-icon>
-              </div>
-              <div class="kpi-info">
-                <h3 class="kpi-value">{{ kpiData.completedFlights }}</h3>
-                <p class="kpi-label">Tamamlanan</p>
-              </div>
-            </div>
-          </el-card>
-        </el-col>
-
-        <el-col :xs="24" :sm="12" :md="6">
-          <el-card shadow="hover" class="kpi-card">
-            <div class="kpi-content">
-              <div class="kpi-icon delayed">
-                <el-icon :size="24"><Warning /></el-icon>
-              </div>
-              <div class="kpi-info">
-                <h3 class="kpi-value">{{ kpiData.delayedFlights }}</h3>
-                <p class="kpi-label">Gecikmeli</p>
-              </div>
-            </div>
-          </el-card>
-        </el-col>
-      </el-row>
+    <!-- Quick stats -->
+    <div class="dashboard-stats">
+      <KpiCard
+        v-for="stat in quickStats"
+        :key="stat.key"
+        :title="stat.title"
+        :value="stat.value"
+        :change="stat.change"
+        :icon="stat.icon"
+        :color="stat.color"
+        :loading="statsLoading"
+        @click="handleStatClick(stat)"
+      />
     </div>
 
-    <!-- Quick Actions -->
-    <div class="quick-actions-section">
-      <el-card shadow="never">
-        <template #header>
-          <h3>Hızlı İşlemler</h3>
-        </template>
+    <!-- Main content grid -->
+    <div class="dashboard-grid">
+      <!-- Recent flights -->
+      <BaseCard
+        title="Son Uçuşlar"
+        class="recent-flights-card"
+        :actions="[
+          { key: 'view-all', label: 'Tümünü Gör', handler: () => navigateTo('FlightManagement') }
+        ]"
+      >
+        <RecentFlightsTable
+          :flights="recentFlights"
+          :loading="flightsLoading"
+          @view-flight="handleViewFlight"
+          @edit-flight="handleEditFlight"
+        />
+      </BaseCard>
 
-        <el-row :gutter="16">
-          <el-col :xs="24" :sm="12" :md="8" :lg="6">
-            <div class="action-item" @click="$router.push('/flights')">
-              <el-icon :size="32" color="#409eff"><List /></el-icon>
-              <h4>Uçuş Listesi</h4>
-              <p>Tüm uçuşları görüntüle</p>
-            </div>
-          </el-col>
+      <!-- Flight status chart -->
+      <BaseCard
+        title="Uçuş Durumları"
+        class="flight-status-card"
+      >
+        <FlightStatusChart
+          :data="flightStatusData"
+          :loading="chartsLoading"
+          @status-click="handleStatusClick"
+        />
+      </BaseCard>
 
-          <el-col v-if="authStore.isAdmin" :xs="24" :sm="12" :md="8" :lg="6">
-            <div class="action-item" @click="$router.push('/flights/create')">
-              <el-icon :size="32" color="#67c23a"><Plus /></el-icon>
-              <h4>Yeni Uçuş</h4>
-              <p>Uçuş oluştur</p>
-            </div>
-          </el-col>
+      <!-- Daily operations -->
+      <BaseCard
+        title="Günlük İşlemler"
+        class="daily-operations-card"
+      >
+        <DailyOperationsChart
+          :data="dailyOperationsData"
+          :loading="chartsLoading"
+          :date-range="dateRange"
+          @date-change="handleDateRangeChange"
+        />
+      </BaseCard>
 
-          <el-col :xs="24" :sm="12" :md="8" :lg="6">
-            <div class="action-item" @click="$router.push('/airlines')">
-              <el-icon :size="32" color="#e6a23c"><Ship /></el-icon>
-              <h4>Havayolları</h4>
-              <p>Havayolu yönetimi</p>
-            </div>
-          </el-col>
+      <!-- Quick actions -->
+      <BaseCard
+        title="Hızlı İşlemler"
+        class="quick-actions-card"
+      >
+        <div class="quick-actions-grid">
+          <BaseButton
+            v-for="action in quickActions"
+            :key="action.key"
+            :type="action.type"
+            :icon="action.icon"
+            size="large"
+            class="quick-action-btn"
+            @click="action.handler"
+          >
+            {{ action.label }}
+          </BaseButton>
+        </div>
+      </BaseCard>
 
-          <el-col :xs="24" :sm="12" :md="8" :lg="6">
-            <div class="action-item" @click="$router.push('/reports')">
-              <el-icon :size="32" color="#f56c6c"><DocumentCopy /></el-icon>
-              <h4>Raporlar</h4>
-              <p>Detaylı raporlar</p>
-            </div>
-          </el-col>
-        </el-row>
-      </el-card>
+      <!-- Notifications panel -->
+      <BaseCard
+        title="Sistem Bildirimleri"
+        class="notifications-card"
+        :actions="[
+          { key: 'mark-all-read', label: 'Tümünü Okundu İşaretle', handler: markAllNotificationsRead }
+        ]"
+      >
+        <NotificationsList
+          :notifications="systemNotifications"
+          :loading="notificationsLoading"
+          @notification-click="handleNotificationClick"
+        />
+      </BaseCard>
+
+      <!-- Performance metrics -->
+      <BaseCard
+        title="Performans Metrikleri"
+        class="performance-card"
+      >
+        <PerformanceMetrics
+          :metrics="performanceMetrics"
+          :loading="metricsLoading"
+          :time-period="timePeriod"
+          @period-change="handleTimePeriodChange"
+        />
+      </BaseCard>
     </div>
 
-    <!-- System Status -->
-    <div class="system-status-section">
-      <el-card shadow="never">
-        <template #header>
-          <div class="status-header">
-            <h3>Sistem Durumu</h3>
-            <el-tag :type="systemStatus.type" size="small">
-              {{ systemStatus.text }}
-            </el-tag>
-          </div>
-        </template>
-
-        <el-row :gutter="24">
-          <el-col :xs="24" :md="12">
-            <div class="status-item">
-              <div class="status-indicator">
-                <el-icon :size="16" :color="serviceStatus.reference.color">
-                  <CircleCheckFilled v-if="serviceStatus.reference.status === 'active'" />
-                  <CircleCloseFilled v-else />
-                </el-icon>
-              </div>
-              <div class="status-info">
-                <h4>Reference Manager Service</h4>
-                <p>Port: 8081 - {{ serviceStatus.reference.text }}</p>
-              </div>
-            </div>
-          </el-col>
-
-          <el-col :xs="24" :md="12">
-            <div class="status-item">
-              <div class="status-indicator">
-                <el-icon :size="16" :color="serviceStatus.flight.color">
-                  <CircleCheckFilled v-if="serviceStatus.flight.status === 'active'" />
-                  <CircleCloseFilled v-else />
-                </el-icon>
-              </div>
-              <div class="status-info">
-                <h4>Flight Service</h4>
-                <p>Port: 8082 - {{ serviceStatus.flight.text }}</p>
-              </div>
-            </div>
-          </el-col>
-
-          <el-col :xs="24" :md="12">
-            <div class="status-item">
-              <div class="status-indicator">
-                <el-icon :size="16" :color="serviceStatus.archive.color">
-                  <CircleCheckFilled v-if="serviceStatus.archive.status === 'active'" />
-                  <CircleCloseFilled v-else />
-                </el-icon>
-              </div>
-              <div class="status-info">
-                <h4>Archive Service</h4>
-                <p>Port: 8083 - {{ serviceStatus.archive.text }}</p>
-              </div>
-            </div>
-          </el-col>
-
-          <el-col :xs="24" :md="12">
-            <div class="status-item">
-              <div class="status-indicator">
-                <el-icon :size="16" :color="serviceStatus.websocket.color">
-                  <CircleCheckFilled v-if="serviceStatus.websocket.status === 'active'" />
-                  <CircleCloseFilled v-else />
-                </el-icon>
-              </div>
-              <div class="status-info">
-                <h4>WebSocket Connection</h4>
-                <p>Real-time - {{ serviceStatus.websocket.text }}</p>
-              </div>
-            </div>
-          </el-col>
-        </el-row>
-      </el-card>
-    </div>
+    <!-- Modals -->
+    <BaseModal
+      v-model="showExportModal"
+      title="Rapor Dışa Aktar"
+      width="500px"
+    >
+      <ExportReportForm
+        @export="handleExport"
+        @cancel="showExportModal = false"
+      />
+    </BaseModal>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import dayjs from 'dayjs'
-import {
-  Plus,
-  List,
-  Clock,
-  Ship,
-  Check,
-  Warning,
-  DocumentCopy,
-  CircleCheckFilled,
-  CircleCloseFilled
-} from '@element-plus/icons-vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import BaseButton from '@/components/ui/BaseButton.vue'
+import BaseCard from '@/components/ui/BaseCard.vue'
+import BaseModal from '@/components/ui/BaseModal.vue'
+import KpiCard from '@/components/charts/KpiCards.vue'
+import RecentFlightsTable from '@/components/tables/RecentFlightsTable.vue'
+import FlightStatusChart from '@/components/charts/FlightStatusChart.vue'
+import DailyOperationsChart from '@/components/charts/DailyOperationsChart.vue'
+import NotificationsList from '@/components/common/NotificationsList.vue'
+import PerformanceMetrics from '@/components/charts/PerformanceMetrics.vue'
+import ExportReportForm from '@/components/forms/ExportReportForm.vue'
+
 import { useAuthStore } from '@/stores/auth'
+import { useDashboardStore } from '@/stores/dashboard'
 import { useFlightStore } from '@/stores/flights'
-import { useReferenceStore } from '@/stores/reference'
+import { formatRelativeTime, formatNumber } from '@/utils/formatters'
+import { debounce } from '@/utils/helpers'
 
+// Composables
+const router = useRouter()
 const authStore = useAuthStore()
+const dashboardStore = useDashboardStore()
 const flightStore = useFlightStore()
-const referenceStore = useReferenceStore()
 
-// State
-const serviceStatus = ref({
-  reference: { status: 'inactive', text: 'Kontrol ediliyor...', color: '#909399' },
-  flight: { status: 'inactive', text: 'Kontrol ediliyor...', color: '#909399' },
-  archive: { status: 'inactive', text: 'Kontrol ediliyor...', color: '#909399' },
-  websocket: { status: 'inactive', text: 'Kontrol ediliyor...', color: '#909399' }
+// Reactive state
+const refreshing = ref(false)
+const showExportModal = ref(false)
+const lastUpdate = ref(new Date())
+const dateRange = ref([
+  new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // 7 days ago
+  new Date()
+])
+const timePeriod = ref('week')
+
+// Loading states - separate for better UX
+const statsLoading = ref(true)
+const flightsLoading = ref(true)
+const chartsLoading = ref(true)
+const notificationsLoading = ref(true)
+const metricsLoading = ref(true)
+
+// Auto-refresh timer
+let refreshTimer = null
+
+// Computed properties
+const user = computed(() => authStore.user)
+
+const lastUpdateText = computed(() => {
+  return formatRelativeTime(lastUpdate.value)
 })
 
-// Computed
-const formattedDate = computed(() => {
-  return dayjs().format('DD MMMM YYYY')
-})
-
-const systemStatus = computed(() => {
-  const activeServices = Object.values(serviceStatus.value).filter(s => s.status === 'active').length
-  const totalServices = Object.keys(serviceStatus.value).length
-
-  if (activeServices === totalServices) {
-    return { type: 'success', text: 'Tüm Sistemler Aktif' }
-  } else if (activeServices > 0) {
-    return { type: 'warning', text: 'Kısmi Aktif' }
-  } else {
-    return { type: 'danger', text: 'Sistem Hatası' }
+const quickStats = computed(() => [
+  {
+    key: 'total-flights',
+    title: 'Toplam Uçuş',
+    value: formatNumber(dashboardStore.stats.totalFlights),
+    change: dashboardStore.stats.flightsChange,
+    icon: 'Airplane',
+    color: 'primary'
+  },
+  {
+    key: 'active-flights',
+    title: 'Aktif Uçuş',
+    value: formatNumber(dashboardStore.stats.activeFlights),
+    change: dashboardStore.stats.activeChange,
+    icon: 'Timer',
+    color: 'success'
+  },
+  {
+    key: 'delayed-flights',
+    title: 'Gecikmeli Uçuş',
+    value: formatNumber(dashboardStore.stats.delayedFlights),
+    change: dashboardStore.stats.delayedChange,
+    icon: 'Warning',
+    color: 'warning'
+  },
+  {
+    key: 'cancelled-flights',
+    title: 'İptal Edilen',
+    value: formatNumber(dashboardStore.stats.cancelledFlights),
+    change: dashboardStore.stats.cancelledChange,
+    icon: 'Close',
+    color: 'danger'
   }
-})
+])
 
-const kpiData = computed(() => flightStore.kpiData)
+const recentFlights = computed(() => dashboardStore.recentFlights)
+const flightStatusData = computed(() => dashboardStore.flightStatusData)
+const dailyOperationsData = computed(() => dashboardStore.dailyOperationsData)
+const systemNotifications = computed(() => dashboardStore.notifications)
+const performanceMetrics = computed(() => dashboardStore.performanceMetrics)
+
+const quickActions = computed(() => [
+  {
+    key: 'add-flight',
+    label: 'Yeni Uçuş',
+    icon: 'Plus',
+    type: 'primary',
+    handler: () => navigateTo('FlightCreate')
+  },
+  {
+    key: 'upload-csv',
+    label: 'CSV Yükle',
+    icon: 'Upload',
+    type: 'success',
+    handler: () => navigateTo('FlightUpload')
+  },
+  {
+    key: 'view-reports',
+    label: 'Raporlar',
+    icon: 'Document',
+    type: 'info',
+    handler: () => navigateTo('FlightReports')
+  },
+  {
+    key: 'manage-airlines',
+    label: 'Havayolları',
+    icon: 'OfficeBuilding',
+    type: 'default',
+    handler: () => navigateTo('AirlineManagement')
+  }
+])
+
+// Debounced refresh function for efficiency
+const debouncedRefresh = debounce(async () => {
+  await loadDashboardData()
+}, 1000)
 
 // Methods
-const loadDashboardData = async () => {
+const refreshDashboard = async () => {
+  if (refreshing.value) return
+
+  refreshing.value = true
   try {
-    // KPI verilerini yükle
-    await flightStore.loadDashboardKPIs()
-
-    // Debug: Tüm uçuşları da yükle
-    await flightStore.loadFlights()
-
-    // Reference data'yı cache'le (dropdown'lar için)
-    await referenceStore.loadAllReferenceData()
-
+    await loadDashboardData()
+    lastUpdate.value = new Date()
+    ElMessage.success('Kontrol paneli yenilendi')
   } catch (error) {
-    console.error('Dashboard data load error:', error)
+    ElMessage.error('Veriler yenilenirken hata oluştu')
+    console.error('Dashboard refresh error:', error)
+  } finally {
+    refreshing.value = false
   }
 }
 
-const checkServiceStatus = async () => {
-  // Reference Manager Service kontrolü
+const loadDashboardData = async () => {
   try {
-    await referenceStore.loadAirlines()
-    serviceStatus.value.reference = {
-      status: 'active',
-      text: 'Çalışıyor',
-      color: '#67c23a'
-    }
-  } catch (error) {
-    serviceStatus.value.reference = {
-      status: 'inactive',
-      text: 'Bağlantı Hatası',
-      color: '#f56c6c'
-    }
-  }
+    // Load data in parallel for better performance
+    const promises = []
 
-  // Flight Service kontrolü
+    // Load stats
+    promises.push(
+      dashboardStore.loadStats().finally(() => {
+        statsLoading.value = false
+      })
+    )
+
+    // Load recent flights
+    promises.push(
+      dashboardStore.loadRecentFlights().finally(() => {
+        flightsLoading.value = false
+      })
+    )
+
+    // Load charts data
+    promises.push(
+      Promise.all([
+        dashboardStore.loadFlightStatusData(),
+        dashboardStore.loadDailyOperationsData()
+      ]).finally(() => {
+        chartsLoading.value = false
+      })
+    )
+
+    // Load notifications
+    promises.push(
+      dashboardStore.loadNotifications().finally(() => {
+        notificationsLoading.value = false
+      })
+    )
+
+    // Load performance metrics
+    promises.push(
+      dashboardStore.loadPerformanceMetrics(timePeriod.value).finally(() => {
+        metricsLoading.value = false
+      })
+    )
+
+    await Promise.allSettled(promises)
+  } catch (error) {
+    console.error('Error loading dashboard data:', error)
+    throw error
+  }
+}
+
+const navigateTo = (routeName, params = {}) => {
+  router.push({ name: routeName, params })
+}
+
+const handleStatClick = (stat) => {
+  switch (stat.key) {
+    case 'total-flights':
+      navigateTo('FlightManagement')
+      break
+    case 'active-flights':
+      navigateTo('FlightManagement', { status: 'ACTIVE' })
+      break
+    case 'delayed-flights':
+      navigateTo('FlightManagement', { status: 'DELAYED' })
+      break
+    case 'cancelled-flights':
+      navigateTo('FlightManagement', { status: 'CANCELLED' })
+      break
+  }
+}
+
+const handleViewFlight = (flight) => {
+  navigateTo('FlightView', { id: flight.id })
+}
+
+const handleEditFlight = (flight) => {
+  navigateTo('FlightEdit', { id: flight.id })
+}
+
+const handleStatusClick = (status) => {
+  navigateTo('FlightManagement', { status: status.toUpperCase() })
+}
+
+const handleDateRangeChange = (newRange) => {
+  dateRange.value = newRange
+  debouncedRefresh()
+}
+
+const handleTimePeriodChange = (period) => {
+  timePeriod.value = period
+  metricsLoading.value = true
+  dashboardStore.loadPerformanceMetrics(period).finally(() => {
+    metricsLoading.value = false
+  })
+}
+
+const handleNotificationClick = (notification) => {
+  dashboardStore.markNotificationAsRead(notification.id)
+
+  // Navigate based on notification type
+  if (notification.actionUrl) {
+    router.push(notification.actionUrl)
+  }
+}
+
+const markAllNotificationsRead = () => {
+  dashboardStore.markAllNotificationsAsRead()
+  ElMessage.success('Tüm bildirimler okundu olarak işaretlendi')
+}
+
+const exportReport = () => {
+  showExportModal.value = true
+}
+
+const handleExport = async (exportConfig) => {
   try {
-    await flightStore.loadFlightStats()
-    serviceStatus.value.flight = {
-      status: 'active',
-      text: 'Çalışıyor',
-      color: '#67c23a'
-    }
+    await dashboardStore.exportDashboardReport(exportConfig)
+    showExportModal.value = false
+    ElMessage.success('Rapor başarıyla dışa aktarıldı')
   } catch (error) {
-    serviceStatus.value.flight = {
-      status: 'inactive',
-      text: 'Bağlantı Hatası',
-      color: '#f56c6c'
+    ElMessage.error('Rapor dışa aktarılırken hata oluştu')
+    console.error('Export error:', error)
+  }
+}
+
+// Auto-refresh functionality
+const setupAutoRefresh = () => {
+  // Refresh every 5 minutes
+  refreshTimer = setInterval(() => {
+    if (document.visibilityState === 'visible') {
+      debouncedRefresh()
     }
-  }
+  }, 5 * 60 * 1000)
+}
 
-  // Archive Service (placeholder)
-  serviceStatus.value.archive = {
-    status: 'active',
-    text: 'Çalışıyor',
-    color: '#67c23a'
+const cleanupAutoRefresh = () => {
+  if (refreshTimer) {
+    clearInterval(refreshTimer)
+    refreshTimer = null
   }
+}
 
-  // WebSocket (placeholder)
-  serviceStatus.value.websocket = {
-    status: 'inactive',
-    text: 'Henüz Entegre Değil',
-    color: '#e6a23c'
+// Visibility change handler - pause refresh when tab is not visible
+const handleVisibilityChange = () => {
+  if (document.visibilityState === 'visible') {
+    // Tab became visible, refresh data if it's been a while
+    const timeSinceLastUpdate = Date.now() - lastUpdate.value.getTime()
+    if (timeSinceLastUpdate > 2 * 60 * 1000) { // 2 minutes
+      debouncedRefresh()
+    }
   }
 }
 
 // Lifecycle
 onMounted(async () => {
+  // Load initial data
   await loadDashboardData()
-  await checkServiceStatus()
+
+  // Setup auto-refresh
+  setupAutoRefresh()
+
+  // Listen for visibility changes
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+
+  // Setup performance monitoring
+  if ('PerformanceObserver' in window) {
+    const observer = new PerformanceObserver((list) => {
+      const entries = list.getEntries()
+      entries.forEach((entry) => {
+        if (entry.entryType === 'navigation') {
+          console.log('Dashboard load time:', entry.loadEventEnd - entry.loadEventStart, 'ms')
+        }
+      })
+    })
+    observer.observe({ entryTypes: ['navigation'] })
+  }
+})
+
+onUnmounted(() => {
+  cleanupAutoRefresh()
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
+})
+
+// Page meta
+definePageMeta({
+  title: 'Kontrol Paneli',
+  breadcrumb: 'Kontrol Paneli',
+  requiresAuth: true
 })
 </script>
 
 <style scoped>
-.dashboard-container {
-  max-width: 1200px;
-  margin: 0 auto;
+.dashboard-page {
+  padding: 0;
+  max-width: 100%;
 }
 
-/* Welcome Card */
-.welcome-card {
-  margin-bottom: 24px;
-}
-
-.welcome-content {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+/* Header */
+.dashboard-header {
+  background: linear-gradient(135deg, var(--el-color-primary), var(--el-color-primary-dark-2));
   color: white;
-  border: none;
+  padding: 32px 24px;
+  margin: -24px -24px 24px -24px;
 }
 
-:deep(.welcome-content .el-card__body) {
+.header-content {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  padding: 32px;
+  align-items: flex-end;
+  max-width: 1400px;
+  margin: 0 auto;
+  gap: 24px;
 }
 
-.welcome-info h1 {
+.header-text {
+  flex: 1;
+}
+
+.page-title {
+  font-size: 32px;
+  font-weight: 700;
   margin: 0 0 8px 0;
-  font-size: 28px;
-  font-weight: 600;
+  line-height: 1.2;
 }
 
-.welcome-info p {
-  margin: 0;
+.page-subtitle {
   font-size: 16px;
   opacity: 0.9;
-  line-height: 1.5;
+  margin: 0;
+  line-height: 1.4;
 }
 
-.welcome-actions {
+.header-actions {
   display: flex;
   gap: 12px;
+  flex-shrink: 0;
 }
 
-/* KPI Cards */
-.kpi-section {
-  margin-bottom: 24px;
+/* Stats grid */
+.dashboard-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px;
+  margin-bottom: 32px;
 }
 
-.kpi-card {
-  height: 120px;
-  cursor: pointer;
-  transition: transform 0.3s ease;
+/* Main content grid */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 24px;
+  grid-auto-rows: min-content;
 }
 
-.kpi-card:hover {
-  transform: translateY(-4px);
+/* Grid item positioning */
+.recent-flights-card {
+  grid-column: span 8;
 }
 
-.kpi-content {
-  display: flex;
-  align-items: center;
+.flight-status-card {
+  grid-column: span 4;
+}
+
+.daily-operations-card {
+  grid-column: span 8;
+}
+
+.quick-actions-card {
+  grid-column: span 4;
+}
+
+.notifications-card {
+  grid-column: span 6;
+}
+
+.performance-card {
+  grid-column: span 6;
+}
+
+/* Quick actions */
+.quick-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
   gap: 16px;
-  height: 100%;
 }
 
-.kpi-icon {
-  width: 60px;
-  height: 60px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
+.quick-action-btn {
+  height: 80px;
+  flex-direction: column;
+  gap: 8px;
+  font-weight: 500;
 }
 
-.kpi-icon.scheduled {
-  background-color: rgba(64, 158, 255, 0.1);
-  color: #409eff;
+.quick-action-btn :deep(.el-icon) {
+  font-size: 24px;
 }
 
-.kpi-icon.active {
-  background-color: rgba(103, 194, 58, 0.1);
-  color: #67c23a;
+/* Card optimizations */
+.dashboard-grid :deep(.base-card) {
+  height: fit-content;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.kpi-icon.completed {
-  background-color: rgba(230, 162, 60, 0.1);
-  color: #e6a23c;
-}
-
-.kpi-icon.delayed {
-  background-color: rgba(245, 108, 108, 0.1);
-  color: #f56c6c;
-}
-
-.kpi-info h3 {
-  margin: 0 0 4px 0;
-  font-size: 28px;
-  font-weight: 600;
-  color: #303133;
-}
-
-.kpi-info p {
-  margin: 0;
-  font-size: 14px;
-  color: #909399;
-}
-
-/* Quick Actions */
-.quick-actions-section {
-  margin-bottom: 24px;
-}
-
-.action-item {
-  text-align: center;
-  padding: 24px 16px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  border: 1px solid transparent;
-}
-
-.action-item:hover {
-  background-color: #f5f7fa;
-  border-color: #e4e7ed;
+.dashboard-grid :deep(.base-card):hover {
   transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 
-.action-item h4 {
-  margin: 12px 0 8px 0;
-  font-size: 16px;
-  font-weight: 500;
-  color: #303133;
+/* Responsive design */
+@media (max-width: 1200px) {
+  .dashboard-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .recent-flights-card,
+  .daily-operations-card {
+    grid-column: span 12;
+  }
+
+  .flight-status-card,
+  .quick-actions-card,
+  .notifications-card,
+  .performance-card {
+    grid-column: span 6;
+  }
 }
 
-.action-item p {
-  margin: 0;
-  font-size: 14px;
-  color: #909399;
-}
-
-/* System Status */
-.system-status-section {
-  margin-bottom: 24px;
-}
-
-.status-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.status-header h3 {
-  margin: 0;
-}
-
-.status-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 16px 0;
-  border-bottom: 1px solid #f0f2f5;
-}
-
-.status-item:last-child {
-  border-bottom: none;
-}
-
-.status-indicator {
-  flex-shrink: 0;
-}
-
-.status-info h4 {
-  margin: 0 0 4px 0;
-  font-size: 14px;
-  font-weight: 500;
-  color: #303133;
-}
-
-.status-info p {
-  margin: 0;
-  font-size: 12px;
-  color: #909399;
-}
-
-/* Responsive */
 @media (max-width: 768px) {
-  :deep(.welcome-content .el-card__body) {
+  .dashboard-header {
+    padding: 24px 16px;
+    margin: -24px -16px 24px -16px;
+  }
+
+  .header-content {
     flex-direction: column;
-    align-items: flex-start;
-    gap: 20px;
+    align-items: stretch;
+    gap: 16px;
   }
 
-  .welcome-actions {
+  .header-actions {
+    justify-content: center;
+  }
+
+  .page-title {
+    font-size: 24px;
+  }
+
+  .page-subtitle {
+    font-size: 14px;
+  }
+
+  .dashboard-stats {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .dashboard-grid {
+    gap: 16px;
+  }
+
+  .dashboard-grid > * {
+    grid-column: span 12 !important;
+  }
+
+  .quick-actions-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .quick-action-btn {
+    height: 60px;
+  }
+}
+
+@media (max-width: 480px) {
+  .dashboard-header {
+    padding: 20px 12px;
+    margin: -24px -12px 20px -12px;
+  }
+
+  .page-title {
+    font-size: 20px;
+  }
+
+  .header-actions {
     flex-direction: column;
-    width: 100%;
   }
 
-  .welcome-actions button {
-    width: 100%;
+  .dashboard-stats {
+    gap: 12px;
   }
 
-  .kpi-card {
-    height: auto;
-    margin-bottom: 16px;
+  .dashboard-grid {
+    gap: 12px;
+  }
+}
+
+/* Performance optimizations */
+.dashboard-page {
+  /* Enable GPU acceleration for smooth animations */
+  transform: translateZ(0);
+  will-change: transform;
+}
+
+/* Skeleton loading states */
+.dashboard-stats:has([loading="true"]) {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* High contrast mode */
+@media (prefers-contrast: more) {
+  .dashboard-header {
+    border-bottom: 2px solid white;
   }
 
-  .action-item {
-    margin-bottom: 16px;
+  .dashboard-grid :deep(.base-card) {
+    border-width: 2px;
+  }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-grid :deep(.base-card),
+  .quick-action-btn {
+    transition: none;
+  }
+
+  .dashboard-grid :deep(.base-card):hover {
+    transform: none;
+  }
+}
+
+/* Print styles */
+@media print {
+  .dashboard-header {
+    background: white !important;
+    color: black !important;
+    border-bottom: 2px solid black;
+  }
+
+  .header-actions,
+  .quick-actions-card {
+    display: none;
+  }
+
+  .dashboard-grid {
+    display: block;
+  }
+
+  .dashboard-grid > * {
+    break-inside: avoid;
+    margin-bottom: 20px;
   }
 }
 </style>
