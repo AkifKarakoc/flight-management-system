@@ -263,6 +263,19 @@ public class AutoRouteService {
         routeData.put("distance", distance);
         routeData.put("estimatedFlightTime", calculateEstimatedFlightTime(distance));
 
+        // Direct route için tek segment ekle - BURAYI EKLEDİM
+        List<Map<String, Object>> segments = new ArrayList<>();
+        Map<String, Object> segment = new HashMap<>();
+        segment.put("segmentOrder", 1);
+        segment.put("originAirportId", originAirport.getId());
+        segment.put("destinationAirportId", destinationAirport.getId());
+        segment.put("distance", distance);
+        segment.put("estimatedFlightTime", calculateEstimatedFlightTime(distance));
+        segment.put("active", true);
+        segments.add(segment);
+
+        routeData.put("segments", segments);
+
         return routeData;
     }
 
