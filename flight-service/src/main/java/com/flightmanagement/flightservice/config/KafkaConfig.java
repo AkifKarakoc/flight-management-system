@@ -8,6 +8,7 @@ import org.apache.kafka.common.serialization.StringSerializer;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.core.*;
 import org.springframework.kafka.support.serializer.JsonDeserializer;
@@ -25,7 +26,7 @@ public class KafkaConfig {
     @Value("${spring.kafka.consumer.group-id}")
     private String groupId;
 
-    // Producer Configuration with Type Headers
+    // Producer Configuration for FlightEvent
     @Bean
     public ProducerFactory<String, FlightEvent> flightEventProducerFactory() {
         Map<String, Object> configs = new HashMap<>();
@@ -42,6 +43,28 @@ public class KafkaConfig {
     @Bean
     public KafkaTemplate<String, FlightEvent> flightEventKafkaTemplate() {
         return new KafkaTemplate<>(flightEventProducerFactory());
+    }
+
+    // ✅ YENİ: Generic Object Producer Configuration for Health Checks
+    @Bean
+    public ProducerFactory<String, Object> objectProducerFactory() {
+        Map<String, Object> configs = new HashMap<>();
+        configs.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+        configs.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+        configs.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
+        configs.put(JsonSerializer.ADD_TYPE_INFO_HEADERS, false);
+
+        // Health check için timeout'ları kısa tut
+        configs.put(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, 3000);
+        configs.put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, 5000);
+
+        return new DefaultKafkaProducerFactory<>(configs);
+    }
+
+    @Bean
+    @Primary  // Bu bean'i primary yap ki health check injection çalışsın
+    public KafkaTemplate<String, Object> kafkaTemplate() {
+        return new KafkaTemplate<>(objectProducerFactory());
     }
 
     // Consumer Configuration for Reference Events

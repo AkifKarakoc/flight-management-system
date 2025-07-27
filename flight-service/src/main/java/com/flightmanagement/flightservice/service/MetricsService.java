@@ -1,9 +1,6 @@
 package com.flightmanagement.flightservice.service;
 
-import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.Gauge;
-import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.Timer;
+import io.micrometer.core.instrument.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -136,27 +133,27 @@ public class MetricsService {
                 .tag("service", "flight-service")
                 .register(meterRegistry);
 
-        // Initialize Gauges
-        Gauge.builder("flights_active_current")
+        // Initialize Gauges - DÜZELTME: Doğru sözdizimi
+        Gauge.builder("flights_active_current", this, MetricsService::getCurrentActiveFlights)
                 .description("Current number of active flights")
                 .tag("service", "flight-service")
-                .register(meterRegistry, this, MetricsService::getCurrentActiveFlights);
+                .register(meterRegistry);
 
-        Gauge.builder("flights_delayed_current")
+        Gauge.builder("flights_delayed_current", this, MetricsService::getCurrentDelayedFlights)
                 .description("Current number of delayed flights")
                 .tag("service", "flight-service")
-                .register(meterRegistry, this, MetricsService::getCurrentDelayedFlights);
+                .register(meterRegistry);
 
-        Gauge.builder("flights_today_total")
+        Gauge.builder("flights_today_total", this, MetricsService::getTodayFlightsCount)
                 .description("Total flights for today")
                 .tag("service", "flight-service")
-                .register(meterRegistry, this, MetricsService::getTodayFlightsCount);
+                .register(meterRegistry);
 
         // JVM and System Gauges
-        Gauge.builder("jvm_memory_usage_percent")
+        Gauge.builder("jvm_memory_usage_percent", this, MetricsService::getMemoryUsagePercent)
                 .description("JVM memory usage percentage")
                 .tag("service", "flight-service")
-                .register(meterRegistry, this, MetricsService::getMemoryUsagePercent);
+                .register(meterRegistry);
 
         log.info("Custom metrics initialized successfully");
     }
@@ -367,15 +364,15 @@ public class MetricsService {
     public void recordCsvProcessingResult(int totalRows, int successCount, int errorCount) {
         // Register gauges dynamically using MeterRegistry directly
         meterRegistry.gauge("csv_last_processing_total_rows",
-                io.micrometer.core.instrument.Tags.of("service", "flight-service"),
+                Tags.of("service", "flight-service"),
                 totalRows);
 
         meterRegistry.gauge("csv_last_processing_success_count",
-                io.micrometer.core.instrument.Tags.of("service", "flight-service"),
+                Tags.of("service", "flight-service"),
                 successCount);
 
         meterRegistry.gauge("csv_last_processing_error_count",
-                io.micrometer.core.instrument.Tags.of("service", "flight-service"),
+                Tags.of("service", "flight-service"),
                 errorCount);
     }
 }

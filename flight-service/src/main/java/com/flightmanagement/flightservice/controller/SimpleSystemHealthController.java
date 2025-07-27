@@ -1,10 +1,8 @@
 package com.flightmanagement.flightservice.controller;
 
-import com.flightmanagement.flightservice.health.DependencyHealthIndicator;
+import com.flightmanagement.flightservice.health.SimpleDependencyHealthIndicator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.actuator.health.Health;
-import org.springframework.boot.actuator.health.Status;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,25 +17,26 @@ import java.util.Map;
 @RequestMapping("/api/v1/system")
 @RequiredArgsConstructor
 @Slf4j
-public class SystemHealthController {
+public class SimpleSystemHealthController {
 
-    private final DependencyHealthIndicator dependencyHealthIndicator;
+    private final SimpleDependencyHealthIndicator dependencyHealthIndicator;
 
     @GetMapping("/health")
     public ResponseEntity<Map<String, Object>> getSystemHealth() {
         log.debug("System health check requested");
 
-        Health health = dependencyHealthIndicator.health();
+        SimpleDependencyHealthIndicator.SimpleHealthResponse health = dependencyHealthIndicator.checkHealth();
 
         Map<String, Object> response = new HashMap<>();
-        response.put("status", health.getStatus().getCode());
+        response.put("status", health.getStatus());
+        response.put("healthy", health.isHealthy());
         response.put("timestamp", LocalDateTime.now());
         response.put("service", "flight-service");
         response.put("version", "2.0-ROUTE-BASED");
         response.put("dependencies", health.getDetails());
 
         // HTTP status code'u health durumuna göre belirle
-        HttpStatus httpStatus = health.getStatus() == Status.UP ?
+        HttpStatus httpStatus = health.isHealthy() ?
                 HttpStatus.OK : HttpStatus.SERVICE_UNAVAILABLE;
 
         return new ResponseEntity<>(response, httpStatus);
@@ -96,14 +95,15 @@ public class SystemHealthController {
 
     @GetMapping("/readiness")
     public ResponseEntity<Map<String, Object>> getReadiness() {
-        Health health = dependencyHealthIndicator.health();
+        SimpleDependencyHealthIndicator.SimpleHealthResponse health = dependencyHealthIndicator.checkHealth();
 
         Map<String, Object> readiness = new HashMap<>();
-        readiness.put("ready", health.getStatus() == Status.UP);
+        readiness.put("ready", health.isHealthy());
+        readiness.put("status", health.getStatus());
         readiness.put("timestamp", LocalDateTime.now());
         readiness.put("checks", health.getDetails());
 
-        HttpStatus httpStatus = health.getStatus() == Status.UP ?
+        HttpStatus httpStatus = health.isHealthy() ?
                 HttpStatus.OK : HttpStatus.SERVICE_UNAVAILABLE;
 
         return new ResponseEntity<>(readiness, httpStatus);

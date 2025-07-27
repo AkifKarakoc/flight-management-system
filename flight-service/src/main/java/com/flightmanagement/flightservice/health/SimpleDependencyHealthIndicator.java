@@ -3,15 +3,12 @@ package com.flightmanagement.flightservice.health;
 import com.flightmanagement.flightservice.service.ReferenceDataService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.actuator.health.Health;
-import org.springframework.boot.actuator.health.HealthIndicator;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
@@ -21,21 +18,19 @@ import java.util.concurrent.TimeUnit;
 @Component
 @RequiredArgsConstructor
 @Slf4j
-public class DependencyHealthIndicator implements HealthIndicator {
+public class SimpleDependencyHealthIndicator {
 
     private final DataSource dataSource;
     private final RedisTemplate<String, Object> redisTemplate;
     private final ReferenceDataService referenceDataService;
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
-    @Override
-    public Health health() {
+    public SimpleHealthResponse checkHealth() {
         Map<String, Object> details = new HashMap<>();
         boolean allHealthy = true;
         LocalDateTime checkTime = LocalDateTime.now();
 
         // Database Health Check
-        Health.Builder builder = Health.up();
         try {
             DatabaseHealth dbHealth = checkDatabaseHealth();
             details.put("database", dbHealth);
@@ -88,11 +83,7 @@ public class DependencyHealthIndicator implements HealthIndicator {
         details.put("serviceName", "flight-service");
         details.put("version", "2.0-ROUTE-BASED");
 
-        if (allHealthy) {
-            return builder.up().withDetails(details).build();
-        } else {
-            return builder.down().withDetails(details).build();
-        }
+        return new SimpleHealthResponse(allHealthy ? "UP" : "DOWN", allHealthy, details);
     }
 
     private DatabaseHealth checkDatabaseHealth() {
@@ -215,6 +206,15 @@ public class DependencyHealthIndicator implements HealthIndicator {
         status.put("error", error);
         status.put("responseTimeMs", -1);
         return status;
+    }
+
+    // Simple Health Response class
+    @lombok.Data
+    @lombok.AllArgsConstructor
+    public static class SimpleHealthResponse {
+        private String status;
+        private boolean healthy;
+        private Map<String, Object> details;
     }
 
     // Inner classes for structured health responses
