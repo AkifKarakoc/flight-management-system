@@ -1,8 +1,10 @@
 package com.flightmanagement.flightservice.service;
 
 import com.flightmanagement.flightservice.dto.cache.RouteCache;
+import com.flightmanagement.flightservice.dto.request.ArchiveSearchRequest;
 import com.flightmanagement.flightservice.dto.request.ConnectingFlightRequest;
 import com.flightmanagement.flightservice.dto.request.FlightRequest;
+import com.flightmanagement.flightservice.dto.response.ArchivedFlightResponse;
 import com.flightmanagement.flightservice.dto.response.FlightResponse;
 import com.flightmanagement.flightservice.dto.response.stats.FlightChartDataDto;
 import com.flightmanagement.flightservice.dto.response.stats.FlightTypeDistributionDto;
@@ -23,6 +25,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -41,6 +44,7 @@ public class FlightService {
     private final KafkaProducerService kafkaProducerService;
     private final WebSocketMessageService webSocketMessageService;
     private final ConnectingFlightService connectingFlightService;
+    private final ArchiveServiceClient archiveServiceClient;
 
     // ===============================
     // TEMEL FLIGHT OPERATIONS
@@ -239,6 +243,8 @@ public class FlightService {
                 if (flight.getActualArrival() == null) {
                     flight.setActualArrival(now);
                 }
+                // Archive flight when it arrives
+                archiveCompletedFlight(flight);
                 break;
         }
 
@@ -472,6 +478,21 @@ public class FlightService {
         return status;
     }
 
+    public Page<ArchivedFlightResponse> searchArchivedFlights(ArchiveSearchRequest searchRequest, Pageable pageable) {
+        log.debug("Searching archived flights with criteria: {}", searchRequest);
+        return archiveServiceClient.searchArchivedFlights(searchRequest, pageable);
+    }
+
+    public ArchivedFlightResponse getArchivedFlight(String flightNumber, LocalDate flightDate) {
+        log.debug("Getting archived flight: {} on {}", flightNumber, flightDate);
+        return archiveServiceClient.getArchivedFlight(flightNumber, flightDate);
+    }
+
+    public Map<String, Object> getArchiveStats(LocalDate startDate, LocalDate endDate) {
+        log.debug("Getting archive stats from {} to {}", startDate, endDate);
+        return archiveServiceClient.getArchiveStats(startDate, endDate);
+    }
+
     
 
     // ===============================
@@ -551,5 +572,128 @@ public class FlightService {
         }
 
         return route.toString();
+    }
+
+    private void archiveCompletedFlight(Flight flight) {
+        try {
+            if (FlightStatus.ARRIVED.equals(flight.getStatus()) || FlightStatus.CANCELLED.equals(flight.getStatus())) {
+                log.debug("Archiving completed flight: {}", flight.getFlightNumber());
+
+                Map<String, Object> flightData = buildFlightArchiveData(flight);
+                archiveServiceClient.archiveFlight(flightData);
+
+                log.info("Flight {} archived successfully", flight.getFlightNumber());
+            }
+        } catch (Exception e) {
+            log.error("Failed to archive flight {}: {}", flight.getFlightNumber(), e.getMessage());
+            // Don't fail the main operation if archiving fails
+        }
+    }
+
+    private Map<String, Object> buildFlightArchiveData(Flight flight) {
+        Map<String, Object> data = new HashMap<>();
+
+        // Basic flight info
+        data.put("id", flight.getId());
+        data.put("flightNumber", flight.getFlightNumber());
+        data.put("flightDate", flight.getFlightDate());
+        data.put("scheduledDeparture", flight.getScheduledDeparture());
+        data.put("scheduledArrival", flight.getScheduledArrival());
+        data.put("actualDeparture", flight.getActualDeparture());
+        data.put("actualArrival", flight.getActualArrival());
+        data.put("status", flight.getStatus());
+        data.put("type", flight.getType());
+        data.put("passengerCount", flight.getPassengerCount());
+        data.put("cargoWeight", flight.getCargoWeight());
+        data.put("delayMinutes", flight.getDelayMinutes());
+        data.put("delayReason", flight.getDelayReason());
+        data.put("gateNumber", flight.getGateNumber());
+        data.put("notes", flight.getNotes());
+        data.put("createdAt", flight.getCreatedAt());
+        data.put("updatedAt", flight.getUpdatedAt());
+
+        // Reference data
+        try {
+            var airline = referenceDataService.getAirline(flight.getAirlineId());
+            if (airline != null) {
+                Map<String, Object> airlineData = new HashMap<>();
+                airlineData.put("id", airline.getId());
+                airlineData.put("iataCode", airline.getIataCode());
+                airlineData.put("name", airline.getName());
+                airlineData.put("country", airline.getCountry());
+                data.put("airline", airlineData);
+            }
+
+            var aircraft = referenceDataService.getAircraft(flight.getAircraftId());
+            if (aircraft != null) {
+                Map<String, Object> aircraftData = new HashMap<>();
+                aircraftData.put("id", aircraft.getId());
+                aircraftData.put("registrationNumber", aircraft.getRegistrationNumber());
+                aircraftData.put("aircraftType", aircraft.getAircraftType());
+                aircraftData.put("manufacturer", aircraft.getManufacturer());
+                data.put("aircraft", aircraftData);
+            }
+
+            if (flight.getRouteId() != null) {
+                var route = referenceDataService.getRoute(flight.getRouteId());
+                if (route != null) {
+                    Map<String, Object> routeData = new HashMap<>();
+                    routeData.put("id", route.getId());
+                    routeData.put("routeCode", route.getRouteCode());
+                    routeData.put("routePath", route.getRoutePath());
+                    routeData.put("distance", route.getDistance());
+                    data.put("route", routeData);
+
+                    // Airport data from route
+                    if (route.getOriginAirportId() != null) {
+                        var originAirport = referenceDataService.getAirport(route.getOriginAirportId());
+                        if (originAirport != null) {
+                            Map<String, Object> originData = new HashMap<>();
+                            originData.put("id", originAirport.getId());
+                            originData.put("iataCode", originAirport.getIataCode());
+                            originData.put("name", originAirport.getName());
+                            originData.put("city", originAirport.getCity());
+                            data.put("originAirport", originData);
+                        }
+                    }
+
+                    if (route.getDestinationAirportId() != null) {
+                        var destAirport = referenceDataService.getAirport(route.getDestinationAirportId());
+                        if (destAirport != null) {
+                            Map<String, Object> destData = new HashMap<>();
+                            destData.put("id", destAirport.getId());
+                            destData.put("iataCode", destAirport.getIataCode());
+                            destData.put("name", destAirport.getName());
+                            destData.put("city", destAirport.getCity());
+                            data.put("destinationAirport", destData);
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Could not populate reference data for archive: {}", e.getMessage());
+        }
+
+        // Performance metrics
+        if (flight.getActualDeparture() != null && flight.getActualArrival() != null) {
+            int actualDuration = (int) Duration.between(flight.getActualDeparture(), flight.getActualArrival()).toMinutes();
+            data.put("actualFlightDuration", actualDuration);
+        }
+
+        if (flight.getDelayMinutes() != null && flight.getDelayMinutes() > 0) {
+            data.put("isDelayed", true);
+            data.put("delayCategory", getDelayCategory(flight.getDelayMinutes()));
+        } else {
+            data.put("isDelayed", false);
+        }
+
+        return data;
+    }
+
+    private String getDelayCategory(Integer delayMinutes) {
+        if (delayMinutes == null || delayMinutes <= 0) return "ON_TIME";
+        if (delayMinutes <= 15) return "MINOR_DELAY";
+        if (delayMinutes <= 60) return "MODERATE_DELAY";
+        return "MAJOR_DELAY";
     }
 }
