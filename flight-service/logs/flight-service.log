@@ -3112,3 +3112,6 @@ Caused by: com.fasterxml.jackson.core.JsonParseException: Unrecognized token 'PO
 	... 156 common frames omitted
 2025-07-27 22:12:15.917 [http-nio-8082-exec-9] WARN  [,] o.s.w.s.m.m.a.ExceptionHandlerExceptionResolver - Resolved [org.springframework.http.converter.HttpMessageNotReadableException: JSON parse error: Unrecognized token 'POST': was expecting (JSON String, Number, Array, Object or token 'null', 'true' or 'false')]
 2025-07-27 22:12:15.917 [http-nio-8082-exec-9] DEBUG [,] o.s.w.f.CommonsRequestLoggingFilter - REQUEST: POST /api/v1/flights, client=0:0:0:0:0:0:0:1, user=admin]
+2025-07-27 22:15:00.003 [MessageBroker-6] INFO  [,] c.f.f.config.MetricsScheduler - Metrics Summary - Active Flights: 0.0, Delayed Flights: 0.0, Today's Flights: 0.0, Memory Usage: 3%
+2025-07-27 22:15:01.693 [SpringApplicationShutdownHook] INFO  [,] o.s.b.w.e.tomcat.GracefulShutdown - Commencing graceful shutdown. Waiting for active requests to complete
+2025-07-27 22:15:01.701 [tomcat-shutdown] INFO  [,] o.s.b.w.e.tomcat.GracefulShutdown - Graceful shutdown complete

@@ -1,12 +1,17 @@
 package com.flightmanagement.flightservice.dto.request;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.flightmanagement.flightservice.entity.enums.FlightStatus;
 import com.flightmanagement.flightservice.entity.enums.FlightType;
 import com.flightmanagement.flightservice.validator.ValidFlightCreation;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -14,107 +19,175 @@ import java.util.List;
 import java.util.ArrayList;
 
 @Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 @ValidFlightCreation
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class FlightRequest {
 
     @NotBlank(message = "Flight number is required")
     @Pattern(regexp = "^[A-Z]{2}\\d{1,4}$", message = "Flight number must be in format: TK123")
+    @JsonProperty("flightNumber")
     private String flightNumber;
 
     @NotNull(message = "Airline ID is required")
+    @JsonProperty("airlineId")
     private Long airlineId;
 
     @NotNull(message = "Aircraft ID is required")
+    @JsonProperty("aircraftId")
     private Long aircraftId;
 
-    // YENİ SISTEM: Route bazlı yaklaşım
-    @NotNull(message = "Route ID is required", groups = RouteBasedValidation.class)
+    // YENİ ROUTE SİSTEMİ - Route ID zorunlu alan
+    @JsonProperty("routeId")
     private Long routeId;
 
-    // Airport-based creation için
-    private Long originAirportId;
-    private Long destinationAirportId;
-
-    // Creation mode indicator - ZORUNLU ALAN
+    // Creation mode - ZORUNLU ALAN
     @NotBlank(message = "Creation mode is required")
     @Pattern(regexp = "ROUTE|AIRPORTS|MULTI_AIRPORTS",
             message = "Creation mode must be ROUTE, AIRPORTS, or MULTI_AIRPORTS")
+    @JsonProperty("creationMode")
     private String creationMode;
 
-    // Multi-segment airport creation için
+    // Direct airport creation için (AIRPORTS mode)
+    @JsonProperty("originAirportId")
+    private Long originAirportId;
+
+    @JsonProperty("destinationAirportId")
+    private Long destinationAirportId;
+
+    // Multi-segment airport creation için (MULTI_AIRPORTS mode)
     @Valid
     @Size(min = 2, max = 10, message = "Multi-segment flight must have 2-10 segments")
+    @JsonProperty("airportSegments")
     private List<AirportSegmentRequest> airportSegments;
 
+    @JsonProperty("isMultiSegmentAirportFlight")
+    @Builder.Default
     private Boolean isMultiSegmentAirportFlight = false;
 
+    // Flight Timing
     @NotNull(message = "Flight date is required")
     @FutureOrPresent(message = "Flight date cannot be in the past")
     @JsonFormat(pattern = "yyyy-MM-dd")
+    @JsonProperty("flightDate")
     private LocalDate flightDate;
 
     @NotNull(message = "Scheduled departure is required")
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm")
+    @JsonProperty("scheduledDeparture")
     private LocalDateTime scheduledDeparture;
 
     @NotNull(message = "Scheduled arrival is required")
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm")
+    @JsonProperty("scheduledArrival")
     private LocalDateTime scheduledArrival;
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm")
+    @JsonProperty("actualDeparture")
     private LocalDateTime actualDeparture;
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm")
+    @JsonProperty("actualArrival")
     private LocalDateTime actualArrival;
 
+    // Flight Status and Type
+    @JsonProperty("status")
+    @Builder.Default
     private FlightStatus status = FlightStatus.SCHEDULED;
 
     @NotNull(message = "Flight type is required")
+    @JsonProperty("type")
     private FlightType type;
 
+    // Operational Details
     @Min(value = 0, message = "Passenger count cannot be negative")
     @Max(value = 1000, message = "Passenger count cannot exceed 1000")
+    @JsonProperty("passengerCount")
     private Integer passengerCount;
 
     @Min(value = 0, message = "Cargo weight cannot be negative")
+    @JsonProperty("cargoWeight")
     private Integer cargoWeight;
 
     @Size(max = 500, message = "Notes cannot exceed 500 characters")
+    @JsonProperty("notes")
     private String notes;
 
     @Size(max = 10, message = "Gate number cannot exceed 10 characters")
+    @JsonProperty("gateNumber")
     private String gateNumber;
 
     @Min(value = 0, message = "Delay minutes cannot be negative")
+    @JsonProperty("delayMinutes")
     private Integer delayMinutes;
 
     @Size(max = 200, message = "Delay reason cannot exceed 200 characters")
+    @JsonProperty("delayReason")
     private String delayReason;
 
+    @JsonProperty("active")
+    @Builder.Default
     private Boolean active = true;
 
-    // Aktarmalı uçuş alanları
+    // Connecting Flight Fields (for future use)
+    @JsonProperty("parentFlightId")
     private Long parentFlightId;
 
     @Min(value = 1, message = "Segment number must be at least 1")
+    @JsonProperty("segmentNumber")
+    @Builder.Default
     private Integer segmentNumber = 1;
 
+    @JsonProperty("isConnectingFlight")
+    @Builder.Default
     private Boolean isConnectingFlight = false;
 
     @Min(value = 0, message = "Connection time cannot be negative")
     @Max(value = 1440, message = "Connection time cannot exceed 24 hours (1440 minutes)")
+    @JsonProperty("connectionTimeMinutes")
     private Integer connectionTimeMinutes;
 
+    @Valid
+    @JsonProperty("segments")
     private List<FlightSegmentRequest> segments;
 
-    public boolean isRouteBasedFlight() {
-        return "ROUTE".equals(creationMode) && routeId != null;
+    // ===========================================
+    // HELPER METHODS
+    // ===========================================
+
+    /**
+     * Route-based creation kontrolü
+     */
+    public boolean isRouteBasedCreation() {
+        return "ROUTE".equals(creationMode);
     }
 
+    /**
+     * Direct airport creation kontrolü
+     */
+    public boolean isAirportBasedCreation() {
+        return "AIRPORTS".equals(creationMode);
+    }
+
+    /**
+     * Multi-segment airport creation kontrolü
+     */
+    public boolean isMultiSegmentAirportCreation() {
+        return "MULTI_AIRPORTS".equals(creationMode);
+    }
+
+    /**
+     * Connecting flight request kontrolü
+     */
     public boolean isConnectingFlightRequest() {
         return Boolean.TRUE.equals(isConnectingFlight) && segments != null && !segments.isEmpty();
     }
 
+    /**
+     * Flight timing validation
+     */
     public boolean isFlightTimeValid() {
         if (scheduledDeparture != null && scheduledArrival != null) {
             return scheduledArrival.isAfter(scheduledDeparture);
@@ -122,7 +195,9 @@ public class FlightRequest {
         return true;
     }
 
-    // Validation helper - actual vs scheduled times
+    /**
+     * Actual timing validation
+     */
     public boolean areActualTimesValid() {
         if (actualDeparture != null && actualArrival != null) {
             return actualArrival.isAfter(actualDeparture);
@@ -130,25 +205,12 @@ public class FlightRequest {
         return true;
     }
 
-    // Flight duration calculation helper
-    public Integer getEstimatedDurationMinutes() {
-        if (scheduledDeparture != null && scheduledArrival != null) {
-            return (int) java.time.Duration.between(scheduledDeparture, scheduledArrival).toMinutes();
-        }
-        return null;
-    }
-
-    // Business logic helpers
-    public boolean isCargoFlight() {
-        return FlightType.CARGO.equals(type);
-    }
-
-    public boolean isPassengerFlight() {
-        return FlightType.PASSENGER.equals(type);
-    }
-
-    // Validation helper for flight type consistency
+    /**
+     * Flight type consistency kontrolü
+     */
     public boolean isFlightTypeConsistent() {
+        if (type == null) return true;
+
         switch (type) {
             case CARGO:
                 return (passengerCount == null || passengerCount == 0) &&
@@ -164,46 +226,9 @@ public class FlightRequest {
         }
     }
 
-    // For connecting flights
-    public boolean hasValidSegmentSequence() {
-        if (segments == null || segments.isEmpty() || segments.size() == 1) {
-            return true;
-        }
-        for (int i = 0; i < segments.size() - 1; i++) {
-            if (!segments.get(i).getDestinationAirportId().equals(segments.get(i + 1).getOriginAirportId())) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    // Multi-segment helpers
-    public Long getFirstOriginAirportId() {
-        if (isMultiSegmentAirportCreation() && airportSegments != null && !airportSegments.isEmpty()) {
-            return airportSegments.get(0).getOriginAirportId();
-        }
-        return originAirportId;
-    }
-
-    public Long getLastDestinationAirportId() {
-        if (isMultiSegmentAirportCreation() && airportSegments != null && !airportSegments.isEmpty()) {
-            return airportSegments.get(airportSegments.size() - 1).getDestinationAirportId();
-        }
-        return destinationAirportId;
-    }
-
-    public boolean isRouteBasedCreation() {
-        return "ROUTE".equals(creationMode);
-    }
-
-    public boolean isAirportBasedCreation() {
-        return "AIRPORTS".equals(creationMode);
-    }
-
-    public boolean isMultiSegmentAirportCreation() {
-        return "MULTI_AIRPORTS".equals(creationMode);
-    }
-
+    /**
+     * Creation mode validation
+     */
     public boolean hasValidCreationMode() {
         if (creationMode == null || creationMode.trim().isEmpty()) {
             return false;
@@ -229,6 +254,9 @@ public class FlightRequest {
         }
     }
 
+    /**
+     * Airport segments sequence validation
+     */
     private boolean validateAirportSegmentsSequence() {
         if (airportSegments == null || airportSegments.size() < 2) {
             return false;
@@ -238,12 +266,10 @@ public class FlightRequest {
         for (int i = 0; i < airportSegments.size(); i++) {
             AirportSegmentRequest segment = airportSegments.get(i);
 
-            // Segment order must be sequential starting from 1
             if (segment.getSegmentOrder() == null || segment.getSegmentOrder() != (i + 1)) {
                 return false;
             }
 
-            // Origin and destination must be different
             if (segment.getOriginAirportId() == null ||
                     segment.getDestinationAirportId() == null ||
                     segment.getOriginAirportId().equals(segment.getDestinationAirportId())) {
@@ -251,7 +277,7 @@ public class FlightRequest {
             }
         }
 
-        // Continuity validation: each segment's destination = next segment's origin
+        // Continuity validation
         for (int i = 0; i < airportSegments.size() - 1; i++) {
             AirportSegmentRequest current = airportSegments.get(i);
             AirportSegmentRequest next = airportSegments.get(i + 1);
@@ -264,17 +290,9 @@ public class FlightRequest {
         return true;
     }
 
-    public boolean hasConflictingData() {
-        // Check for conflicting creation modes
-        int modeCount = 0;
-
-        if (isRouteBasedCreation() && routeId != null) modeCount++;
-        if (isAirportBasedCreation() && originAirportId != null && destinationAirportId != null) modeCount++;
-        if (isMultiSegmentAirportCreation() && airportSegments != null && !airportSegments.isEmpty()) modeCount++;
-
-        return modeCount > 1; // Conflict if more than one mode has data
-    }
-
+    /**
+     * Validation errors listesi
+     */
     public List<String> getValidationErrors() {
         List<String> errors = new ArrayList<>();
 
@@ -287,12 +305,6 @@ public class FlightRequest {
             case "ROUTE":
                 if (routeId == null) {
                     errors.add("Route ID is required for route-based creation");
-                }
-                if (originAirportId != null || destinationAirportId != null) {
-                    errors.add("Airport IDs should not be provided for route-based creation");
-                }
-                if (airportSegments != null && !airportSegments.isEmpty()) {
-                    errors.add("Airport segments should not be provided for route-based creation");
                 }
                 break;
 
@@ -307,12 +319,6 @@ public class FlightRequest {
                         originAirportId.equals(destinationAirportId)) {
                     errors.add("Origin and destination airports cannot be the same");
                 }
-                if (routeId != null) {
-                    errors.add("Route ID should not be provided for airport-based creation");
-                }
-                if (airportSegments != null && !airportSegments.isEmpty()) {
-                    errors.add("Airport segments should not be provided for direct airport creation");
-                }
                 break;
 
             case "MULTI_AIRPORTS":
@@ -325,16 +331,7 @@ public class FlightRequest {
                     if (airportSegments.size() > 10) {
                         errors.add("Multi-segment creation cannot have more than 10 segments");
                     }
-
-                    // Detailed segment validation
-                    List<String> segmentErrors = validateSegmentDetails();
-                    errors.addAll(segmentErrors);
-                }
-                if (routeId != null) {
-                    errors.add("Route ID should not be provided for multi-segment creation");
-                }
-                if (originAirportId != null || destinationAirportId != null) {
-                    errors.add("Individual airport IDs should not be provided for multi-segment creation");
+                    errors.addAll(validateSegmentDetails());
                 }
                 break;
 
@@ -345,6 +342,9 @@ public class FlightRequest {
         return errors;
     }
 
+    /**
+     * Segment detail validation
+     */
     private List<String> validateSegmentDetails() {
         List<String> errors = new ArrayList<>();
 
@@ -352,15 +352,13 @@ public class FlightRequest {
             return errors;
         }
 
-        // Check segment numbering
         for (int i = 0; i < airportSegments.size(); i++) {
             AirportSegmentRequest segment = airportSegments.get(i);
 
             if (segment.getSegmentOrder() == null) {
                 errors.add("Segment " + (i + 1) + " is missing segment order");
             } else if (segment.getSegmentOrder() != (i + 1)) {
-                errors.add("Segment " + (i + 1) + " has incorrect segment order: expected " + (i + 1) +
-                        ", found " + segment.getSegmentOrder());
+                errors.add("Segment " + (i + 1) + " has incorrect segment order");
             }
 
             if (segment.getOriginAirportId() == null) {
@@ -375,19 +373,9 @@ public class FlightRequest {
                     segment.getOriginAirportId().equals(segment.getDestinationAirportId())) {
                 errors.add("Segment " + (i + 1) + " origin and destination airports cannot be the same");
             }
-
-            // Connection time validation
-            if (segment.getConnectionTimeMinutes() != null) {
-                if (segment.getConnectionTimeMinutes() < 0) {
-                    errors.add("Segment " + (i + 1) + " connection time cannot be negative");
-                }
-                if (segment.getConnectionTimeMinutes() > 1440) {
-                    errors.add("Segment " + (i + 1) + " connection time cannot exceed 24 hours");
-                }
-            }
         }
 
-        // Check continuity
+        // Continuity check
         for (int i = 0; i < airportSegments.size() - 1; i++) {
             AirportSegmentRequest current = airportSegments.get(i);
             AirportSegmentRequest next = airportSegments.get(i + 1);
@@ -402,18 +390,69 @@ public class FlightRequest {
         return errors;
     }
 
-    public boolean hasBothRouteAndAirports() {
-        return (isRouteBasedCreation() && (originAirportId != null || destinationAirportId != null)) ||
-                (isAirportBasedCreation() && routeId != null) ||
-                (isMultiSegmentAirportCreation() && routeId != null);
+    /**
+     * Conflicting data kontrolü
+     */
+    public boolean hasConflictingData() {
+        int modeCount = 0;
+
+        if (isRouteBasedCreation() && routeId != null) modeCount++;
+        if (isAirportBasedCreation() && originAirportId != null && destinationAirportId != null) modeCount++;
+        if (isMultiSegmentAirportCreation() && airportSegments != null && !airportSegments.isEmpty()) modeCount++;
+
+        return modeCount > 1;
     }
 
+    /**
+     * Valid flight data kontrolü
+     */
     public boolean hasValidFlightData() {
         return hasValidCreationMode() && !hasConflictingData();
     }
 
+    /**
+     * Flight duration hesaplama
+     */
+    public Integer getEstimatedDurationMinutes() {
+        if (scheduledDeparture != null && scheduledArrival != null) {
+            return (int) java.time.Duration.between(scheduledDeparture, scheduledArrival).toMinutes();
+        }
+        return null;
+    }
+
+    /**
+     * Business logic helpers
+     */
+    public boolean isCargoFlight() {
+        return FlightType.CARGO.equals(type);
+    }
+
+    public boolean isPassengerFlight() {
+        return FlightType.PASSENGER.equals(type);
+    }
+
+    /**
+     * Multi-segment helpers
+     */
+    public Long getFirstOriginAirportId() {
+        if (isMultiSegmentAirportCreation() && airportSegments != null && !airportSegments.isEmpty()) {
+            return airportSegments.get(0).getOriginAirportId();
+        }
+        return originAirportId;
+    }
+
+    public Long getLastDestinationAirportId() {
+        if (isMultiSegmentAirportCreation() && airportSegments != null && !airportSegments.isEmpty()) {
+            return airportSegments.get(airportSegments.size() - 1).getDestinationAirportId();
+        }
+        return destinationAirportId;
+    }
+
+    /**
+     * Route/mode description
+     */
     public String getCreationModeDescription() {
-        switch (creationMode) {
+        switch (creationMode != null ? creationMode : "UNKNOWN") {
             case "ROUTE":
                 return "Using existing route (ID: " + routeId + ")";
             case "AIRPORTS":
@@ -429,18 +468,37 @@ public class FlightRequest {
         if (isMultiSegmentAirportCreation() && airportSegments != null) {
             return airportSegments.size();
         }
-        return 1; // Single segment for direct flights
+        return 1;
     }
 
     public int getStopCount() {
-        return getSegmentCount() - 1; // Stops = segments - 1
+        return getSegmentCount() - 1;
     }
 
     public boolean isComplexRoute() {
         return isMultiSegmentAirportCreation() && getSegmentCount() > 3;
     }
 
-    // [YENİ EKLE] Validation groups for conditional validation
+    /**
+     * Request type detection for debugging
+     */
+    public String getRequestType() {
+        if (isRouteBasedCreation()) {
+            return "ROUTE_BASED";
+        } else if (isAirportBasedCreation()) {
+            return "AIRPORT_BASED";
+        } else if (isMultiSegmentAirportCreation()) {
+            return "MULTI_SEGMENT";
+        } else if (isConnectingFlightRequest()) {
+            return "CONNECTING_FLIGHT";
+        } else {
+            return "UNKNOWN";
+        }
+    }
+
+    // ===========================================
+    // VALIDATION GROUPS
+    // ===========================================
     public interface RouteBasedValidation {}
     public interface AirportBasedValidation {}
     public interface MultiAirportValidation {}
