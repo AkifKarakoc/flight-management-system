@@ -1,12 +1,15 @@
 <template>
   <div id="app">
-    <router-view />
+    <ErrorBoundary>
+      <router-view />
+    </ErrorBoundary>
   </div>
 </template>
 
 <script setup>
 import { onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import ErrorBoundary from '@/components/common/ErrorBoundary.vue'
 
 const authStore = useAuthStore()
 

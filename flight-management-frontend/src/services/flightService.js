@@ -8,27 +8,27 @@ class FlightService {
   // ========================
 
   async getAllFlights(params = {}) {
-    const response = await flightAPI.get('/flights', { params })
+    const response = await flightAPI.get('/api/v1/flights', { params })
     return response.data
   }
 
   async getFlightById(id) {
-    const response = await flightAPI.get(`/flights/${id}`)
+    const response = await flightAPI.get(`/api/v1/flights/${id}`)
     return response.data
   }
 
   async createFlight(flightData) {
-    const response = await flightAPI.post('/flights', flightData)
+    const response = await flightAPI.post('/api/v1/flights', flightData)
     return response.data
   }
 
   async updateFlight(id, flightData) {
-    const response = await flightAPI.put(`/flights/${id}`, flightData)
+    const response = await flightAPI.put(`/api/v1/flights/${id}`, flightData)
     return response.data
   }
 
   async deleteFlight(id) {
-    await flightAPI.delete(`/flights/${id}`)
+    await flightAPI.delete(`/api/v1/flights/${id}`)
   }
 
   // ========================
@@ -36,14 +36,14 @@ class FlightService {
   // ========================
 
   async updateFlightStatus(id, status) {
-    const response = await flightAPI.put(`/flights/${id}/status`, null, {
+    const response = await flightAPI.put(`/api/v1/flights/${id}/status`, null, {
       params: { status }
     })
     return response.data
   }
 
   async recordFlightDelay(id, delayMinutes, reason = null) {
-    const response = await flightAPI.put(`/flights/${id}/delay`, null, {
+    const response = await flightAPI.put(`/api/v1/flights/${id}/delay`, null, {
       params: { delayMinutes, reason }
     })
     return response.data
@@ -54,29 +54,139 @@ class FlightService {
   // ========================
 
   async getFlightsByDate(date) {
-    const response = await flightAPI.get(`/flights/date/${date}`)
+    const response = await flightAPI.get(`/api/v1/flights/date/${date}`)
     return response.data
   }
 
   async getFlightsByAirline(airlineId) {
-    const response = await flightAPI.get(`/flights/airline/${airlineId}`)
+    const response = await flightAPI.get(`/api/v1/flights/airline/${airlineId}`)
     return response.data
   }
 
   async getFlightsByAirport(airportId) {
-    const response = await flightAPI.get(`/flights/airport/${airportId}`)
+    const response = await flightAPI.get(`/api/v1/flights/airport/${airportId}`)
     return response.data
   }
 
   async getFlightsByStatus(status) {
-    const response = await flightAPI.get(`/flights/status/${status}`)
+    const response = await flightAPI.get(`/api/v1/flights/status/${status}`)
     return response.data
   }
 
   async getDelayedFlights(minDelayMinutes = 15) {
-    const response = await flightAPI.get('/flights/delayed', {
+    const response = await flightAPI.get('/api/v1/flights/delayed', {
       params: { minDelayMinutes }
     })
+    return response.data
+  }
+
+  async getFlightsByRoute(routeId, date = null) {
+    const params = date ? { date } : {}
+    const response = await flightAPI.get(`/api/v1/flights/route/${routeId}`, { params })
+    return response.data
+  }
+
+  async getFlightsByRoutePaged(routeId, params = {}) {
+    const response = await flightAPI.get(`/api/v1/flights/route/${routeId}/paged`, { params })
+    return response.data
+  }
+
+  // ========================
+  // CONNECTING FLIGHTS
+  // ========================
+
+  async createConnectingFlight(connectingFlightData) {
+    const response = await flightAPI.post('/api/v1/flights/connecting', connectingFlightData)
+    return response.data
+  }
+
+  async getConnectingFlightDetails(mainFlightId) {
+    const response = await flightAPI.get(`/api/v1/flights/connecting/${mainFlightId}`)
+    return response.data
+  }
+
+  async getFlightSegments(mainFlightId) {
+    const response = await flightAPI.get(`/api/v1/flights/${mainFlightId}/segments`)
+    return response.data
+  }
+
+  async updateConnectingFlight(mainFlightId, connectingFlightData) {
+    const response = await flightAPI.put(`/api/v1/flights/connecting/${mainFlightId}`, connectingFlightData)
+    return response.data
+  }
+
+  async deleteConnectingFlight(mainFlightId) {
+    await flightAPI.delete(`/api/v1/flights/connecting/${mainFlightId}`)
+  }
+
+  async getConnectingFlights(params = {}) {
+    const response = await flightAPI.get('/api/v1/flights/connecting', { params })
+    return response.data
+  }
+
+  async updateFlightSegment(segmentId, flightData) {
+    const response = await flightAPI.put(`/api/v1/flights/segments/${segmentId}`, flightData)
+    return response.data
+  }
+
+  async updateSegmentStatus(segmentId, status, reason = null) {
+    const params = reason ? { status, reason } : { status }
+    const response = await flightAPI.patch(`/api/v1/flights/segments/${segmentId}/status`, null, { params })
+    return response.data
+  }
+
+  // ========================
+  // BULK OPERATIONS
+  // ========================
+
+  async bulkStatusUpdate(flightIds, status, reason = null) {
+    const params = reason ? { flightIds, status, reason } : { flightIds, status }
+    const response = await flightAPI.post('/api/v1/flights/bulk-status-update', null, { params })
+    return response.data
+  }
+
+  async bulkDeleteFlights(flightIds, force = false) {
+    const params = { flightIds, force }
+    const response = await flightAPI.delete('/api/v1/flights/bulk-delete', { params })
+    return response.data
+  }
+
+  // ========================
+  // SEARCH & FILTER
+  // ========================
+
+  async searchFlights(filters = {}) {
+    const response = await flightAPI.get('/api/v1/flights/search', { params: filters })
+    return response.data
+  }
+
+  async filterFlights(filters = {}) {
+    const response = await flightAPI.get('/api/v1/flights/filter', { params: filters })
+    return response.data
+  }
+
+  // ========================
+  // STATISTICS & ANALYTICS
+  // ========================
+
+  async getFlightCounts(date = null) {
+    const params = date ? { date } : {}
+    const response = await flightAPI.get('/api/v1/flights/count', { params })
+    return response.data
+  }
+
+  async getFlightStats() {
+    const response = await flightAPI.get('/api/v1/flights/stats')
+    return response.data
+  }
+
+  async getSystemInfo() {
+    const response = await flightAPI.get('/api/v1/flights/system-info')
+    return response.data
+  }
+
+  async getMigrationStatus() {
+    const response = await flightAPI.get('/api/v1/flights/migration-status')
     return response.data
   }
 
@@ -88,7 +198,7 @@ class FlightService {
     const formData = new FormData()
     formData.append('file', file)
 
-    const response = await flightAPI.post('/flights/upload-csv', formData, {
+    const response = await flightAPI.post('/api/v1/flights/upload-csv', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
@@ -97,327 +207,170 @@ class FlightService {
     return response.data
   }
 
+  async validateCsv(file) {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const response = await flightAPI.post('/api/v1/flights/validate-csv', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+
+    return response.data
+  }
+
+  async getCsvTemplate() {
+    const response = await flightAPI.get('/api/v1/flights/csv-template')
+    return response.data
+  }
+
   // ========================
-  // STATISTICS & DASHBOARD
+  // ROUTE INFORMATION
+  // ========================
+
+  async getFlightRouteInfo(flightId) {
+    const response = await flightAPI.get(`/api/v1/flights/${flightId}/route-info`)
+    return response.data
+  }
+
+  // ========================
+  // HEALTH CHECK
+  // ========================
+
+  async healthCheck() {
+    const response = await flightAPI.get('/api/v1/flights/health')
+    return response.data
+  }
+
+  // ========================
+  // LEGACY METHODS (for backward compatibility)
   // ========================
 
   async getFlightCountByDate(date) {
-    const response = await flightAPI.get(`/flights/stats/count/date/${date}`)
-    return response.data
+    const counts = await this.getFlightCounts(date)
+    return counts.totalFlights || 0
   }
 
   async getFlightCountByAirlineAndDate(airlineId, date) {
-    const response = await flightAPI.get(`/flights/stats/count/airline/${airlineId}/date/${date}`)
-    return response.data
+    const flights = await this.getFlightsByAirline(airlineId)
+    return flights.filter(f => f.flightDate === date).length
   }
 
   async getFlightCountByStatusAndDate(status, date) {
-    const response = await flightAPI.get(`/flights/stats/count/status/${status}/date/${date}`)
-    return response.data
+    const flights = await this.getFlightsByStatus(status)
+    return flights.filter(f => f.flightDate === date).length
   }
 
   async getDashboardStats(date) {
-    try {
-      const response = await flightAPI.get(`/flights/stats/dashboard/${date}`)
-      return response.data
-    } catch (error) {
-      // Endpoint mevcut değilse temel stats'i manuel olarak hesapla
-      console.warn('Dashboard endpoint not available, calculating basic stats')
+    const [counts, delayedFlights] = await Promise.all([
+      this.getFlightCounts(date),
+      this.getDelayedFlights(15)
+    ])
 
-      try {
-        const [scheduled, departed, arrived, delayed, cancelled] = await Promise.all([
-          this.getFlightCountByStatusAndDate('SCHEDULED', date),
-          this.getFlightCountByStatusAndDate('DEPARTED', date),
-          this.getFlightCountByStatusAndDate('ARRIVED', date),
-          this.getFlightCountByStatusAndDate('DELAYED', date),
-          this.getFlightCountByStatusAndDate('CANCELLED', date)
-        ])
-
-        const total = scheduled + departed + arrived + delayed + cancelled
-
-        return {
-          totalFlights: total,
-          scheduledFlights: scheduled,
-          departedFlights: departed,
-          arrivedFlights: arrived,
-          delayedFlights: delayed,
-          cancelledFlights: cancelled,
-          onTimePerformance: total > 0 ? ((total - delayed) / total * 100) : 0,
-          cancellationRate: total > 0 ? (cancelled / total * 100) : 0
-        }
-      } catch (fallbackError) {
-        console.error('Error in fallback stats calculation:', fallbackError)
-        throw error
-      }
+    return {
+      totalFlights: counts.totalFlights || 0,
+      scheduledFlights: counts.scheduledFlights || 0,
+      departedFlights: counts.departedFlights || 0,
+      arrivedFlights: counts.arrivedFlights || 0,
+      cancelledFlights: counts.cancelledFlights || 0,
+      delayedFlights: delayedFlights.length,
+      onTimePercentage: counts.onTimePercentage || 0
     }
   }
 
   async getChartData(startDate, endDate) {
-    const response = await flightAPI.get('/flights/stats/chart-data', {
-      params: { start: startDate, end: endDate }
+    // This would need to be implemented based on backend analytics endpoints
+    const response = await flightAPI.get('/api/v1/flights/stats/chart', {
+      params: { startDate, endDate }
     })
     return response.data
   }
 
   async getFlightTypeDistribution() {
-    const response = await flightAPI.get('/flights/stats/type-distribution')
+    const response = await flightAPI.get('/api/v1/flights/stats/type-distribution')
     return response.data
   }
 
-  // ========================
-  // UTILITY METHODS
-  // ========================
-
-  /**
-   * Get today's flights with status breakdown
-   */
   async getTodayFlights() {
     const today = new Date().toISOString().split('T')[0]
-    return await this.getFlightsByDate(today)
+    return this.getFlightsByDate(today)
   }
 
-  /**
-   * Get flight status statistics for today
-   */
   async getTodayFlightStats() {
     const today = new Date().toISOString().split('T')[0]
-
-    try {
-      const [totalCount, scheduledCount, departedCount, arrivedCount, delayedCount, cancelledCount] = await Promise.all([
-        this.getFlightCountByDate(today),
-        this.getFlightCountByStatusAndDate(FLIGHT_STATUS.SCHEDULED, today),
-        this.getFlightCountByStatusAndDate(FLIGHT_STATUS.DEPARTED, today),
-        this.getFlightCountByStatusAndDate(FLIGHT_STATUS.ARRIVED, today),
-        this.getFlightCountByStatusAndDate(FLIGHT_STATUS.DELAYED, today),
-        this.getFlightCountByStatusAndDate(FLIGHT_STATUS.CANCELLED, today)
-      ])
-
-      return {
-        total: totalCount,
-        scheduled: scheduledCount,
-        departed: departedCount,
-        arrived: arrivedCount,
-        delayed: delayedCount,
-        cancelled: cancelledCount
-      }
-    } catch (error) {
-      console.error('Error fetching today flight stats:', error)
-      return {
-        total: 0,
-        scheduled: 0,
-        departed: 0,
-        arrived: 0,
-        delayed: 0,
-        cancelled: 0
-      }
-    }
+    return this.getDashboardStats(today)
   }
 
-  /**
-   * Get flight statistics for dashboard
-   */
   async getDashboardKPIs() {
-    try {
-      const today = new Date().toISOString().split('T')[0]
+    const today = new Date().toISOString().split('T')[0]
+    const [counts, delayedFlights, stats] = await Promise.all([
+      this.getFlightCounts(today),
+      this.getDelayedFlights(15),
+      this.getFlightStats()
+    ])
 
-      const stats = await this.getDashboardStats(today)
-
-      return {
-        scheduledFlights: stats.scheduled || stats.scheduledFlights || 0,
-        activeFlights: (stats.departed || stats.departedFlights || 0) - (stats.arrived || stats.arrivedFlights || 0),
-        completedFlights: stats.arrived || stats.arrivedFlights || 0,
-        delayedFlights: stats.delayed || stats.delayedFlights || 0,
-        onTimePerformance: stats.onTimePerformance || 0,
-        cancellationRate: stats.cancellationRate || 0
-      }
-    } catch (error) {
-      console.error('Error fetching dashboard KPIs:', error)
-
-      // Fallback: Tüm uçuşları say
-      try {
-        console.log('Trying fallback: getting all flights')
-        const allFlights = await this.getAllFlights()
-        console.log('All flights count:', allFlights?.length || 0)
-
-        return {
-          scheduledFlights: allFlights?.length || 0,
-          activeFlights: 0,
-          completedFlights: 0,
-          delayedFlights: 0,
-          onTimePerformance: 0,
-          cancellationRate: 0
-        }
-      } catch (fallbackError) {
-        console.error('Fallback also failed:', fallbackError)
-        return {
-          scheduledFlights: 0,
-          activeFlights: 0,
-          completedFlights: 0,
-          delayedFlights: 0,
-          onTimePerformance: 0,
-          cancellationRate: 0
-        }
-      }
+    return {
+      totalFlights: counts.totalFlights || 0,
+      activeFlights: counts.activeFlights || 0,
+      delayedFlights: delayedFlights.length,
+      onTimePercentage: counts.onTimePercentage || 0,
+      averageDelay: stats.averageDelay || 0,
+      completionRate: stats.completionRate || 0
     }
   }
 
-  /**
-   * Search flights with filters
-   */
-  /**
-   * Search flights with filters using existing endpoints
-   */
-  async searchFlights(filters = {}) {
-    const {
-      flightNumber,
-      airlineId,
-      originAirportId,
-      destinationAirportId,
-      status,
-      flightDate,
-      page = 0,
-      size = 20
-    } = filters
+  // ========================
+  // VALIDATION
+  // ========================
 
-    try {
-      let flights = []
-
-      // Filtreleme öncelik sırası:
-      // 1. Tarih filtresine göre getir (en spesifik)
-      if (flightDate) {
-        flights = await this.getFlightsByDate(flightDate)
-      }
-      // 2. Havayolu filtresine göre getir
-      else if (airlineId) {
-        flights = await this.getFlightsByAirline(parseInt(airlineId))
-      }
-      // 3. Havaalanı filtresine göre getir
-      else if (originAirportId || destinationAirportId) {
-        const airportId = originAirportId || destinationAirportId
-        flights = await this.getFlightsByAirport(parseInt(airportId))
-      }
-      // 4. Durum filtresine göre getir
-      else if (status) {
-        const statusArray = status.split(',')
-        if (statusArray.length === 1) {
-          flights = await this.getFlightsByStatus(statusArray[0])
-        } else {
-          // Multiple status - get all and filter client-side
-          flights = await this.getAllFlights()
-          flights = flights.filter(flight => statusArray.includes(flight.status))
-        }
-      }
-      // 5. Hiç filtre yoksa tümünü getir
-      else {
-        flights = await this.getAllFlights()
-      }
-
-      // Client-side filtering for additional filters
-      if (flightNumber) {
-        flights = flights.filter(flight =>
-          flight.flightNumber?.toLowerCase().includes(flightNumber.toLowerCase())
-        )
-      }
-
-      // Havayolu filtresi - eğer tarih ile beraber kullanılıyorsa
-      if (airlineId && flightDate) {
-        flights = flights.filter(flight => flight.airlineId === parseInt(airlineId))
-      }
-
-      // Origin/Destination airport filters - diğer filtrelerle beraber kullanılıyorsa
-      if (originAirportId && (flightDate || airlineId || status)) {
-        flights = flights.filter(flight => flight.originAirportId === parseInt(originAirportId))
-      }
-
-      if (destinationAirportId && (flightDate || airlineId || status)) {
-        flights = flights.filter(flight => flight.destinationAirportId === parseInt(destinationAirportId))
-      }
-
-      // Status filter - diğer filtrelerle beraber kullanılıyorsa
-      if (status && (flightDate || airlineId)) {
-        const statusArray = status.split(',')
-        flights = flights.filter(flight => statusArray.includes(flight.status))
-      }
-
-      // Client-side pagination
-      const total = flights.length
-      const startIndex = page * size
-      const endIndex = startIndex + size
-      const paginatedFlights = flights.slice(startIndex, endIndex)
-
-      return {
-        content: paginatedFlights,
-        totalElements: total,
-        totalPages: Math.ceil(total / size),
-        size: size,
-        number: page
-      }
-
-    } catch (error) {
-      console.error('Error searching flights:', error)
-      throw error
-    }
-  }
-
-  /**
-   * Validate flight data before submission
-   */
   validateFlightData(flightData) {
     const errors = []
 
-    if (!flightData.flightNumber?.trim()) {
-      errors.push('Uçuş numarası gereklidir')
+    if (!flightData.flightNumber) {
+      errors.push('Flight number is required')
+    } else if (!/^[A-Z]{2}\d{1,4}$/.test(flightData.flightNumber)) {
+      errors.push('Flight number must be in format: TK123')
     }
 
     if (!flightData.airlineId) {
-      errors.push('Havayolu seçimi gereklidir')
+      errors.push('Airline is required')
     }
 
     if (!flightData.aircraftId) {
-      errors.push('Uçak seçimi gereklidir')
+      errors.push('Aircraft is required')
     }
 
-    if (!flightData.originAirportId) {
-      errors.push('Kalkış havalimanı seçimi gereklidir')
-    }
-
-    if (!flightData.destinationAirportId) {
-      errors.push('Varış havalimanı seçimi gereklidir')
-    }
-
-    if (flightData.originAirportId === flightData.destinationAirportId) {
-      errors.push('Kalkış ve varış havalimanı aynı olamaz')
+    if (!flightData.routeId) {
+      errors.push('Route is required')
     }
 
     if (!flightData.flightDate) {
-      errors.push('Uçuş tarihi gereklidir')
+      errors.push('Flight date is required')
     }
 
     if (!flightData.scheduledDeparture) {
-      errors.push('Planlanan kalkış zamanı gereklidir')
+      errors.push('Scheduled departure is required')
     }
 
     if (!flightData.scheduledArrival) {
-      errors.push('Planlanan varış zamanı gereklidir')
+      errors.push('Scheduled arrival is required')
+    }
+
+    if (!flightData.type) {
+      errors.push('Flight type is required')
     }
 
     if (flightData.scheduledDeparture && flightData.scheduledArrival) {
       const departure = new Date(flightData.scheduledDeparture)
       const arrival = new Date(flightData.scheduledArrival)
-
       if (arrival <= departure) {
-        errors.push('Varış zamanı kalkış zamanından sonra olmalıdır')
+        errors.push('Arrival time must be after departure time')
       }
-    }
-
-    if (!flightData.type) {
-      errors.push('Uçuş tipi seçimi gereklidir')
     }
 
     return errors
   }
 }
 
-// Singleton instance
-const flightService = new FlightService()
-export default flightService
+export default new FlightService()

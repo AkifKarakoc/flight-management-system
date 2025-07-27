@@ -454,6 +454,49 @@ export const useFlightStore = defineStore('flights', () => {
     }
   }
 
+  const handleWebSocketFlightUpdate = (flightEvent) => {
+    const { type, data } = flightEvent;
+    console.log(`WebSocket olayı işleniyor: ${type}`, data);
+
+    const findIndex = (id) => flights.value.findIndex(f => f.id === id);
+
+    switch (type) {
+      case 'CREATE':
+        // Eğer listede yoksa yeni uçuşu en başa ekle (duplikasyonu önle)
+        if (findIndex(data.id) === -1) {
+          flights.value.unshift(data);
+          pagination.value.total++;
+        }
+        break;
+
+      case 'UPDATE':
+      case 'STATUS_CHANGE': {
+        const index = findIndex(data.id);
+        if (index !== -1) {
+          // Reaktiviteyi korumak için nesneyi güncelle
+          flights.value[index] = { ...flights.value[index], ...data };
+        }
+        // Eğer güncellenen uçuş, detay sayfasında açık olan uçuş ise onu da güncelle
+        if (currentFlight.value?.id === data.id) {
+          currentFlight.value = { ...currentFlight.value, ...data };
+        }
+        break;
+      }
+
+      case 'DELETE': {
+        const index = findIndex(data.id);
+        if (index !== -1) {
+          flights.value.splice(index, 1);
+          pagination.value.total--;
+        }
+        if (currentFlight.value?.id === data.id) {
+          currentFlight.value = null;
+        }
+        break;
+      }
+    }
+  };
+
   return {
     // State
     flights,
@@ -506,9 +549,7 @@ export const useFlightStore = defineStore('flights', () => {
     clearCurrentFlight,
     validateFlightData,
 
-    // Real-time handlers
-    handleFlightUpdate,
-    handleFlightCreate,
-    handleFlightDelete
+    // Real-time updates
+    handleWebSocketFlightUpdate
   }
 })

@@ -112,7 +112,7 @@
         title="Sistem Bildirimleri"
         class="notifications-card"
         :actions="[
-          { key: 'mark-all-read', label: 'Tümünü Okundu İşaretle', handler: markAllNotificationsRead }
+          { key: 'mark-all-read', label: 'Tümünü Okundu İşaretle', handler: markAllNotificationsRead, props: { link: true, size: 'small' } }
         ]"
       >
         <NotificationsList
@@ -157,25 +157,29 @@ import { ElMessage } from 'element-plus'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseCard from '@/components/ui/BaseCard.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
-import KpiCard from '@/components/charts/KpiCards.vue'
+import KpiCard from '@/components/charts/KpiCard.vue'
 import RecentFlightsTable from '@/components/tables/RecentFlightsTable.vue'
 import FlightStatusChart from '@/components/charts/FlightStatusChart.vue'
 import DailyOperationsChart from '@/components/charts/DailyOperationsChart.vue'
 import NotificationsList from '@/components/common/NotificationsList.vue'
 import PerformanceMetrics from '@/components/charts/PerformanceMetrics.vue'
 import ExportReportForm from '@/components/forms/ExportReportForm.vue'
+import { useWebSocket } from '@/composables/useWebSocket'; // YENİ
 
 import { useAuthStore } from '@/stores/auth'
 import { useDashboardStore } from '@/stores/dashboard'
 import { useFlightStore } from '@/stores/flights'
 import { formatRelativeTime, formatNumber } from '@/utils/formatters'
 import { debounce } from '@/utils/helpers'
+import { useNotification } from '@/composables/useNotification'
 
 // Composables
 const router = useRouter()
 const authStore = useAuthStore()
 const dashboardStore = useDashboardStore()
 const flightStore = useFlightStore()
+const { showSuccess, showError, showInfo } = useNotification();
+
 
 // Reactive state
 const refreshing = ref(false)
@@ -280,6 +284,29 @@ const quickActions = computed(() => [
 const debouncedRefresh = debounce(async () => {
   await loadDashboardData()
 }, 1000)
+
+useWebSocket({
+  '/topic/updates': (message) => {
+    // Genel bildirimleri işleyebiliriz
+    console.log('General update received:', message);
+    showInfo(`Sistem Bildirimi: ${message.content || 'Yeni bir güncelleme var.'}`);
+    // Dashboard verilerini yenileme tetiklenebilir
+    refreshDashboard();
+  },
+  '/topic/flights': (flightEvent) => {
+    // Uçuşla ilgili anlık güncellemeleri işleyelim
+    console.log('Flight event received:', flightEvent);
+    flightStore.handleWebSocketFlightUpdate(flightEvent);
+
+    // Kullanıcıya küçük bir bildirim gösterebiliriz
+    const flightNumber = flightEvent.data?.flightNumber || '';
+    if (flightEvent.type === 'CREATE') {
+      showSuccess(`${flightNumber} numaralı yeni uçuş eklendi.`);
+    } else if (flightEvent.type === 'STATUS_CHANGE') {
+      showInfo(`${flightNumber} numaralı uçuşun durumu güncellendi: ${flightEvent.data.status}`);
+    }
+  }
+});
 
 // Methods
 const refreshDashboard = async () => {
@@ -481,12 +508,6 @@ onUnmounted(() => {
   document.removeEventListener('visibilitychange', handleVisibilityChange)
 })
 
-// Page meta
-definePageMeta({
-  title: 'Kontrol Paneli',
-  breadcrumb: 'Kontrol Paneli',
-  requiresAuth: true
-})
 </script>
 
 <style scoped>

@@ -1,5 +1,5 @@
 import { referenceAPI } from './api'
-import { STORAGE_KEYS } from '@/utils/constants'
+import { STORAGE_KEYS, REFERENCE_API_ENDPOINTS } from '@/utils/constants'
 
 class AuthService {
 
@@ -10,7 +10,10 @@ class AuthService {
    */
   async login(credentials) {
     try {
-      const response = await referenceAPI.post('/auth/login', credentials)
+      const response = await referenceAPI.post(
+        REFERENCE_API_ENDPOINTS.AUTH.LOGIN,
+        credentials
+      )
       const { accessToken, tokenType, expiresIn } = response.data
 
       // Token'ı localStorage'a kaydet
@@ -36,11 +39,47 @@ class AuthService {
    * Kullanıcı çıkışı
    */
   logout() {
-    localStorage.removeItem(STORAGE_KEYS.TOKEN)
-    localStorage.removeItem(STORAGE_KEYS.USER)
+    this.clearAuthData()
 
     // Opsiyonel: Backend'e logout isteği gönderilebilir
     // await referenceAPI.post('/auth/logout')
+  }
+
+  /**
+   * Auth verilerini temizle
+   */
+  clearAuthData() {
+    localStorage.removeItem(STORAGE_KEYS.TOKEN)
+    localStorage.removeItem(STORAGE_KEYS.USER)
+  }
+
+  /**
+   * Geçersiz token'ları temizle ve auth durumunu sıfırla
+   */
+  clearInvalidTokens() {
+    try {
+      const token = localStorage.getItem(STORAGE_KEYS.TOKEN)
+      if (token) {
+        // Token format kontrolü
+        if (typeof token !== 'string' || token.trim() === '') {
+          this.clearAuthData()
+          return
+        }
+        
+        // JWT format kontrolü
+        const parts = token.split('.')
+        if (parts.length !== 3) {
+          this.clearAuthData()
+          return
+        }
+        
+        // Token'ı test et
+        this.extractUserFromToken(token)
+      }
+    } catch (error) {
+      console.log('Clearing invalid token from localStorage:', error.message)
+      this.clearAuthData()
+    }
   }
 
   /**
@@ -48,10 +87,23 @@ class AuthService {
    * @returns {boolean}
    */
   isAuthenticated() {
-    const token = localStorage.getItem(STORAGE_KEYS.TOKEN)
-    if (!token) return false
-
     try {
+      const token = localStorage.getItem(STORAGE_KEYS.TOKEN)
+      if (!token) return false
+
+      // Token format kontrolü
+      if (typeof token !== 'string' || token.trim() === '') {
+        this.clearAuthData()
+        return false
+      }
+
+      // JWT format kontrolü
+      const parts = token.split('.')
+      if (parts.length !== 3) {
+        this.clearAuthData()
+        return false
+      }
+
       const payload = this.extractUserFromToken(token)
       const currentTime = Date.now() / 1000
 
@@ -59,6 +111,8 @@ class AuthService {
       return payload.exp > currentTime
     } catch (error) {
       console.error('Token validation error:', error)
+      // Token geçersizse localStorage'dan temizle
+      this.clearAuthData()
       return false
     }
   }
@@ -104,7 +158,7 @@ class AuthService {
    * @returns {boolean}
    */
   isAdmin() {
-    return this.hasRole('ROLE_ADMIN')
+    return this.hasRole('ADMIN')
   }
 
   /**
@@ -114,23 +168,52 @@ class AuthService {
    */
   extractUserFromToken(token) {
     try {
-      // JWT token format: header.payload.signature
-      const base64Url = token.split('.')[1]
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
-      const jsonPayload = decodeURIComponent(
-        atob(base64)
-          .split('')
-          .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-          .join('')
-      )
+      // Token kontrolü
+      if (!token || typeof token !== 'string') {
+        throw new Error('Invalid token: token is null, undefined, or not a string')
+      }
 
-      const payload = JSON.parse(jsonPayload)
+      // Token boş mu kontrol et
+      if (token.trim() === '') {
+        throw new Error('Invalid token: token is empty')
+      }
 
-      return {
-        username: payload.sub,
-        roles: payload.roles ? payload.roles.split(',') : [],
-        exp: payload.exp,
-        iat: payload.iat
+      // JWT token format kontrolü: header.payload.signature
+      const parts = token.split('.')
+      if (parts.length !== 3) {
+        throw new Error(`Invalid token format: expected 3 parts, got ${parts.length}`)
+      }
+
+      const base64Url = parts[1]
+      if (!base64Url) {
+        throw new Error('Invalid token: missing payload')
+      }
+
+      // Base64 decode kontrolü
+      try {
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
+        const jsonPayload = decodeURIComponent(
+          atob(base64)
+            .split('')
+            .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+            .join('')
+        )
+
+        const payload = JSON.parse(jsonPayload)
+
+        // Gerekli alanları kontrol et
+        if (!payload.sub) {
+          throw new Error('Invalid token: missing subject (sub)')
+        }
+
+        return {
+          username: payload.sub,
+          roles: payload.roles ? payload.roles.split(',') : [],
+          exp: payload.exp,
+          iat: payload.iat
+        }
+      } catch (decodeError) {
+        throw new Error(`Token decode failed: ${decodeError.message}`)
       }
     } catch (error) {
       console.error('Token decode error:', error)
@@ -145,6 +228,41 @@ class AuthService {
   async refreshToken() {
     // Bu özellik backend'de implement edildiğinde aktif edilecek
     throw new Error('Token refresh not implemented yet')
+  }
+
+  /**
+   * Token'ı backend'de doğrula
+   * @returns {Promise<Object>}
+   */
+  async validateToken() {
+    try {
+      const token = this.getToken()
+      if (!token) {
+        return { valid: false }
+      }
+
+      // Backend'de token doğrulama endpoint'i varsa kullan
+      // Şu an için local validation yapıyoruz
+      const payload = this.extractUserFromToken(token)
+      const currentTime = Date.now() / 1000
+
+      if (payload.exp > currentTime) {
+        return {
+          valid: true,
+          token: token,
+          user: this.getCurrentUser()
+        }
+      } else {
+        // Token süresi dolmuş, temizle
+        this.clearAuthData()
+        return { valid: false }
+      }
+    } catch (error) {
+      console.error('Token validation error:', error)
+      // Token geçersiz, temizle
+      this.clearAuthData()
+      return { valid: false }
+    }
   }
 }
 

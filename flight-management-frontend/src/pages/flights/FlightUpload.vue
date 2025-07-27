@@ -1,70 +1,71 @@
 <template>
-  <div class="page-container">
-    <el-card shadow="never">
-      <template #header>
-        <div class="page-header">
-          <h2>Flight Upload</h2>
-          <div class="header-actions">
-            <el-button v-if="authStore.isAdmin" type="primary" @click="$router.push('/flights/create')">
-              <el-icon><Plus /></el-icon>
-              Yeni Uçuş
-            </el-button>
-            <el-button v-if="authStore.isAdmin" @click="$router.push('/flights/upload')">
-              <el-icon><Upload /></el-icon>
-              CSV Yükleme
-            </el-button>
+  <div>
+    <PageHeader title="Toplu Uçuş Yükleme (CSV)" />
+    <el-row :gutter="20">
+      <el-col :span="8">
+        <BaseCard>
+          <template #header>
+            <div class="flex items-center">
+              <font-awesome-icon :icon="['fas', 'info-circle']" class="mr-2 text-blue-500" />
+              <h3 class="font-semibold text-lg">Nasıl Çalışır?</h3>
+            </div>
+          </template>
+          <div class="text-sm text-gray-700 space-y-3">
+            <p>1. Sisteme toplu olarak uçuş eklemek için lütfen sağlanan CSV şablonunu kullanın.</p>
+            <p>2. Şablonu indirin, uçuş bilgilerinizi Excel veya benzeri bir programla doldurun ve dosyayı kaydedin.</p>
+            <p>3. Doldurduğunuz dosyayı aşağıdaki yükleme alanına sürükleyip bırakın veya seçerek yükleyin.</p>
+            <p>4. Sistem, dosyayı doğruladıktan sonra uçuşları veritabanına ekleyecektir.</p>
           </div>
-        </div>
-      </template>
+          <template #footer>
+            <BaseButton variant="success" class="w-full" @click="downloadTemplate">
+              <font-awesome-icon :icon="['fas', 'download']" class="mr-2" />
+              CSV Şablonunu İndir
+            </BaseButton>
+          </template>
+        </BaseCard>
+      </el-col>
 
-      <div class="coming-soon">
-        <el-icon :size="80" color="#C0C4CC">
-          <Construction />
-        </el-icon>
-        <h3>Yakında Gelecek</h3>
-        <p>Uçuş listesi ve yönetim özellikleri yakında eklenecek.</p>
-      </div>
-    </el-card>
+      <el-col :span="16">
+        <BaseCard>
+          <template #header>
+            <div class="flex items-center">
+              <font-awesome-icon :icon="['fas', 'upload']" class="mr-2 text-gray-600" />
+              <h3 class="font-semibold text-lg">CSV Dosyasını Yükle</h3>
+            </div>
+          </template>
+          <CsvUpload @upload="handleUpload" />
+        </BaseCard>
+      </el-col>
+    </el-row>
   </div>
 </template>
 
 <script setup>
-import { Plus, Upload, Construction } from '@element-plus/icons-vue'
-import { useAuthStore } from '@/stores/auth'
+import { useFlightStore } from '@/stores/flights';
+import { useNotification } from '@/composables/useNotification';
+import { useRouter } from 'vue-router';
+import PageHeader from '@/components/common/PageHeader.vue';
+import CsvUpload from '@/components/upload/CsvUpload.vue';
+import BaseCard from '@/components/ui/BaseCard.vue';
+import BaseButton from '@/components/ui/BaseButton.vue';
+import { ElRow, ElCol } from 'element-plus';
 
-const authStore = useAuthStore()
+const flightStore = useFlightStore();
+const { showSuccess, showError } = useNotification();
+const router = useRouter();
+
+const handleUpload = async (file, onProgress) => {
+  try {
+    const response = await flightStore.uploadFlightsCsv(file, onProgress);
+    showSuccess(`${response.data.importedCount} uçuş başarıyla yüklendi!`);
+    router.push({ name: 'FlightManagement' });
+  } catch (error) {
+    showError(error.message || 'CSV yüklenirken bir hata oluştu.');
+  }
+};
+
+const downloadTemplate = () => {
+  // API'den şablonu indirme mantığı flightStore'a eklenecek
+  flightStore.downloadCsvTemplate();
+};
 </script>
-
-<style scoped>
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.page-header h2 {
-  margin: 0;
-}
-
-.header-actions {
-  display: flex;
-  gap: 12px;
-}
-
-.coming-soon {
-  text-align: center;
-  padding: 60px 20px;
-}
-
-.coming-soon h3 {
-  font-size: 24px;
-  color: #303133;
-  margin: 20px 0 12px 0;
-}
-
-.coming-soon p {
-  color: #909399;
-  font-size: 16px;
-  margin: 0;
-}
-</style>

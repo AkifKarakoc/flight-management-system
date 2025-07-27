@@ -1,4 +1,4 @@
-import { VALIDATION_PATTERNS, FLIGHT_STATUS, FLIGHT_TYPE, AIRLINE_TYPE, AIRPORT_TYPE, AIRCRAFT_STATUS, CREW_TYPE, CREW_STATUS, ROUTE_TYPE, ROUTE_VISIBILITY, GENDER } from './constants'
+import { VALIDATION_RULES, FLIGHT_STATUS, FLIGHT_TYPE, AIRLINE_TYPE, AIRPORT_TYPE, AIRCRAFT_STATUS, CREW_TYPE, CREW_STATUS, ROUTE_TYPES, GENDER } from './constants'
 
 // ========================
 // BASIC VALIDATION RULES
@@ -58,7 +58,7 @@ export const maxLength = (max, message) => {
  */
 export const email = (message = 'Geçerli bir e-posta adresi giriniz') => {
   return (rule, value, callback) => {
-    if (value && !VALIDATION_PATTERNS.EMAIL.test(value)) {
+    if (value && !VALIDATION_RULES.EMAIL.test(value)) {
       callback(new Error(message))
     } else {
       callback()
@@ -73,7 +73,7 @@ export const email = (message = 'Geçerli bir e-posta adresi giriniz') => {
  */
 export const phone = (message = 'Geçerli bir telefon numarası giriniz') => {
   return (rule, value, callback) => {
-    if (value && !VALIDATION_PATTERNS.PHONE.test(value)) {
+    if (value && !VALIDATION_RULES.PHONE.test(value)) {
       callback(new Error(message))
     } else {
       callback()
@@ -92,7 +92,7 @@ export const phone = (message = 'Geçerli bir telefon numarası giriniz') => {
  */
 export const flightNumber = (message = 'Geçerli bir uçuş numarası giriniz (örn: TK123)') => {
   return (rule, value, callback) => {
-    if (value && !VALIDATION_PATTERNS.FLIGHT_NUMBER.test(value)) {
+    if (value && !VALIDATION_RULES.FLIGHT_NUMBER.test(value)) {
       callback(new Error(message))
     } else {
       callback()
@@ -107,7 +107,7 @@ export const flightNumber = (message = 'Geçerli bir uçuş numarası giriniz (�
  */
 export const iataCode = (message = 'IATA kodu 2 büyük harf olmalıdır (örn: TK)') => {
   return (rule, value, callback) => {
-    if (value && !VALIDATION_PATTERNS.IATA_CODE.test(value)) {
+    if (value && !VALIDATION_RULES.IATA_CODE.test(value)) {
       callback(new Error(message))
     } else {
       callback()
@@ -122,7 +122,7 @@ export const iataCode = (message = 'IATA kodu 2 büyük harf olmalıdır (örn: 
  */
 export const icaoCode = (message = 'ICAO kodu 3-4 büyük harf olmalıdır (örn: THY)') => {
   return (rule, value, callback) => {
-    if (value && !VALIDATION_PATTERNS.ICAO_CODE.test(value)) {
+    if (value && !VALIDATION_RULES.ICAO_CODE.test(value)) {
       callback(new Error(message))
     } else {
       callback()
@@ -246,22 +246,7 @@ export const crewStatus = (message = 'Geçerli bir mürettebat durumu seçiniz')
  */
 export const routeType = (message = 'Geçerli bir rota tipi seçiniz') => {
   return (rule, value, callback) => {
-    if (value && !Object.values(ROUTE_TYPE).includes(value)) {
-      callback(new Error(message))
-    } else {
-      callback()
-    }
-  }
-}
-
-/**
- * Rota görünürlüğü validasyonu
- * @param {string} message - Hata mesajı
- * @returns {Function} Validasyon fonksiyonu
- */
-export const routeVisibility = (message = 'Geçerli bir görünürlük seviyesi seçiniz') => {
-  return (rule, value, callback) => {
-    if (value && !Object.values(ROUTE_VISIBILITY).includes(value)) {
+    if (value && !Object.values(ROUTE_TYPES).includes(value)) {
       callback(new Error(message))
     } else {
       callback()

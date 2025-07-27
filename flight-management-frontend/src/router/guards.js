@@ -11,7 +11,6 @@ import { getStorageItem, setStorageItem, logError } from '@/utils/helpers'
 export const authGuard = async (to, from, next) => {
   try {
     const authStore = useAuthStore()
-    const token = getStorageItem(STORAGE_KEYS.AUTH_TOKEN)
 
     // Route auth gerektirmiyor ve kullanıcı giriş yapmış - dashboard'a yönlendir
     if (!to.meta.requiresAuth && authStore.isAuthenticated) {
@@ -23,20 +22,6 @@ export const authGuard = async (to, from, next) => {
 
     // Route auth gerektiriyor ancak kullanıcı giriş yapmamış
     if (to.meta.requiresAuth && !authStore.isAuthenticated) {
-      // Token varsa doğrulamaya çalış
-      if (token) {
-        try {
-          await authStore.validateToken()
-          if (authStore.isAuthenticated) {
-            next()
-            return
-          }
-        } catch (error) {
-          // Token geçersiz, temizle
-          authStore.logout()
-        }
-      }
-
       // Son ziyaret edilen sayfayı kaydet
       if (to.path !== '/login') {
         setStorageItem(STORAGE_KEYS.LAST_ROUTE, to.fullPath)
@@ -262,50 +247,37 @@ export const setupRouterGuards = (router) => {
   // Before each navigation
   router.beforeEach(async (to, from, next) => {
     try {
-      // Guard'ları sırayla çalıştır
-      await authGuard(to, from, (result) => {
-        if (result === undefined || result === true) {
-          permissionGuard(to, from, (result2) => {
-            if (result2 === undefined || result2 === true) {
-              routeParamsGuard(to, from, (result3) => {
-                if (result3 === undefined || result3 === true) {
-                  networkGuard(to, from, (result4) => {
-                    if (result4 === undefined || result4 === true) {
-                      titleGuard(to, from, (result5) => {
-                        if (result5 === undefined || result5 === true) {
-                          breadcrumbGuard(to, from, (result6) => {
-                            if (result6 === undefined || result6 === true) {
-                              loadingGuard(to, from, (result7) => {
-                                if (result7 === undefined || result7 === true) {
-                                  developmentGuard(to, from, next)
-                                } else {
-                                  next(result7)
-                                }
-                              })
-                            } else {
-                              next(result6)
-                            }
-                          })
-                        } else {
-                          next(result5)
-                        }
-                      })
-                    } else {
-                      next(result4)
-                    }
-                  })
-                } else {
-                  next(result3)
-                }
-              })
-            } else {
-              next(result2)
-            }
-          })
-        } else {
-          next(result)
+      // Basit auth kontrolü
+      const authStore = useAuthStore()
+      
+      // Route auth gerektirmiyor ve kullanıcı giriş yapmış - dashboard'a yönlendir
+      if (!to.meta.requiresAuth && authStore.isAuthenticated) {
+        if (to.name === 'Login') {
+          next({ name: 'Dashboard' })
+          return
         }
-      })
+      }
+
+      // Route auth gerektiriyor ancak kullanıcı giriş yapmamış
+      if (to.meta.requiresAuth && !authStore.isAuthenticated) {
+        // Son ziyaret edilen sayfayı kaydet
+        if (to.path !== '/login') {
+          setStorageItem(STORAGE_KEYS.LAST_ROUTE, to.fullPath)
+        }
+
+        next({ name: 'Login' })
+        return
+      }
+
+      // Title güncelle
+      const baseTitle = 'Uçuş Yönetim Sistemi'
+      if (to.meta.title) {
+        document.title = `${to.meta.title} - ${baseTitle}`
+      } else {
+        document.title = baseTitle
+      }
+
+      next()
     } catch (error) {
       logError('router.beforeEach', error, { to: to.path, from: from.path })
       next({ name: 'ServerError' })
@@ -318,19 +290,6 @@ export const setupRouterGuards = (router) => {
       if (failure) {
         logError('router.afterEach', failure, { to: to.path, from: from.path })
         return
-      }
-
-      // Loading durumunu durdur
-      // const loadingStore = useLoadingStore()
-      // loadingStore.stopPageTransition()
-
-      // Analytics tracking (production'da)
-      if (import.meta.env.PROD) {
-        // Google Analytics, Mixpanel vs. tracking
-        // gtag('config', 'GA_MEASUREMENT_ID', {
-        //   page_title: to.meta.title,
-        //   page_location: window.location.href
-        // })
       }
 
       // Development logging

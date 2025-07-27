@@ -1,193 +1,55 @@
 <template>
-  <el-table
-    :data="routes"
-    :loading="loading"
-    stripe
-    class="data-table"
-    @sort-change="$emit('sort-change', $event)"
-  >
-    <el-table-column type="index" width="60" />
-
-    <el-table-column
-      label="Rota"
-      min-width="250"
-    >
-      <template #default="{ row }">
-        <div class="route-info">
-          <div class="route-path">
-            <span class="airport-code">{{ row.originAirport?.iataCode || 'N/A' }}</span>
-            <el-icon class="route-arrow"><Right /></el-icon>
-            <span class="airport-code">{{ row.destinationAirport?.iataCode || 'N/A' }}</span>
-          </div>
-          <div class="route-names">
-            <span class="origin-name">{{ row.originAirport?.city }}</span>
-            <span class="destination-name">{{ row.destinationAirport?.city }}</span>
-          </div>
-        </div>
-      </template>
-    </el-table-column>
-
-    <el-table-column
-      prop="distance"
-      label="Mesafe (km)"
-      width="120"
-      sortable="custom"
-    >
-      <template #default="{ row }">
-        {{ row.distance || 'N/A' }}
-      </template>
-    </el-table-column>
-
-    <el-table-column
-      prop="estimatedFlightTime"
-      label="Tahmini Süre"
-      width="130"
-    >
-      <template #default="{ row }">
-        {{ formatFlightTime(row.estimatedFlightTime) }}
-      </template>
-    </el-table-column>
-
-    <el-table-column
-      prop="routeType"
-      label="Tip"
-      width="120"
-    >
-      <template #default="{ row }">
-        <el-tag :type="getRouteTypeTagType(row.routeType)">
-          {{ ROUTE_TYPE_LABELS[row.routeType] || row.routeType }}
-        </el-tag>
-      </template>
-    </el-table-column>
-
-    <el-table-column
-      prop="active"
-      label="Durum"
-      width="100"
-    >
-      <template #default="{ row }">
-        <el-tag :type="row.active ? 'success' : 'danger'">
-          {{ row.active ? 'Aktif' : 'Pasif' }}
-        </el-tag>
-      </template>
-    </el-table-column>
-
-    <el-table-column
-      label="İşlemler"
-      width="200"
-      fixed="right"
-    >
-      <template #default="{ row }">
-        <el-button
-          size="small"
-          @click="$emit('view', row)"
-        >
-          <el-icon><View /></el-icon>
-          Görüntüle
-        </el-button>
-
-        <el-button
-          v-if="showEditButton"
-          size="small"
-          type="primary"
-          @click="$emit('edit', row)"
-        >
-          <el-icon><Edit /></el-icon>
-          Düzenle
-        </el-button>
-
-        <el-button
-          v-if="showDeleteButton"
-          size="small"
-          type="danger"
-          @click="$emit('delete', row)"
-        >
-          <el-icon><Delete /></el-icon>
-          Sil
-        </el-button>
-      </template>
-    </el-table-column>
-  </el-table>
+  <BaseTable :data="routes" :loading="loading" :columns="columns" row-key="id">
+    <template #routePath="{ row }">
+      <div class="font-mono text-sm">
+        <span v-for="(segment, index) in row.segments" :key="segment.id">
+          <span class="font-semibold">{{ segment.originAirport.iataCode }}</span>
+          <font-awesome-icon :icon="['fas', 'arrow-right']" class="mx-2 text-gray-400" />
+          <span v-if="index === row.segments.length - 1" class="font-semibold">{{ segment.destinationAirport.iataCode }}</span>
+        </span>
+      </div>
+    </template>
+    <template #totalDistance="{ row }">
+      {{ row.totalDistance }} km
+    </template>
+    <template #active="{ row }">
+      <StatusBadge :status="row.active ? 'ACTIVE' : 'INACTIVE'" :status-map="statusMap" />
+    </template>
+    <template #actions="{ row }">
+      <div class="flex space-x-2">
+        <BaseButton size="small" @click="$emit('edit', row)">Edit</BaseButton>
+        <BaseButton size="small" variant="danger" @click="$emit('delete', row)">Delete</BaseButton>
+      </div>
+    </template>
+  </BaseTable>
 </template>
 
 <script setup>
-import { Right, View, Edit, Delete } from '@element-plus/icons-vue'
-import { ROUTE_TYPE_LABELS } from '@/utils/constants'
+import BaseTable from '@/components/tables/BaseTable.vue';
+import BaseButton from '@/components/ui/BaseButton.vue';
+import StatusBadge from '@/components/ui/StatusBadge.vue';
+import { ref } from 'vue';
 
-// Props
 defineProps({
-  routes: {
-    type: Array,
-    default: () => []
-  },
-  loading: {
-    type: Boolean,
-    default: false
-  },
-  showEditButton: {
-    type: Boolean,
-    default: true
-  },
-  showDeleteButton: {
-    type: Boolean,
-    default: true
-  }
-})
+  routes: { type: Array, required: true },
+  loading: { type: Boolean, default: false },
+});
 
-// Emits
-defineEmits(['view', 'edit', 'delete', 'sort-change'])
+defineEmits(['edit', 'delete']);
 
-// Methods
-const formatFlightTime = (minutes) => {
-  if (!minutes) return 'N/A'
-  const hours = Math.floor(minutes / 60)
-  const mins = minutes % 60
-  if (hours > 0) {
-    return `${hours}s ${mins}dk`
-  }
-  return `${mins}dk`
-}
+const columns = ref([
+  { prop: 'routeName', label: 'Route Name', sortable: true, minWidth: 200 },
+  { prop: 'routeCode', label: 'Code', sortable: true, width: 120 },
+  { slot: 'routePath', label: 'Path', minWidth: 250 },
+  { prop: 'segmentCount', label: 'Segments', sortable: true, width: 120 },
+  { slot: 'totalDistance', label: 'Distance', sortable: true, width: 150 },
+  { prop: 'routeType', label: 'Type', sortable: true, width: 150 },
+  { slot: 'active', label: 'Status', sortable: true, width: 120 },
+  { slot: 'actions', label: 'Actions', width: 150, align: 'right' },
+]);
 
-const getRouteTypeTagType = (type) => {
-  const typeMap = {
-    'DOMESTIC': 'success',
-    'INTERNATIONAL': 'warning'
-  }
-  return typeMap[type] || 'info'
-}
+const statusMap = {
+  ACTIVE: { text: 'Active', type: 'success' },
+  INACTIVE: { text: 'Inactive', type: 'danger' },
+};
 </script>
-
-<style scoped>
-.route-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.route-path {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600;
-}
-
-.airport-code {
-  color: #409EFF;
-  font-size: 14px;
-}
-
-.route-arrow {
-  color: #909399;
-}
-
-.route-names {
-  display: flex;
-  justify-content: space-between;
-  font-size: 12px;
-  color: #909399;
-}
-
-.data-table {
-  width: 100%;
-}
-</style>

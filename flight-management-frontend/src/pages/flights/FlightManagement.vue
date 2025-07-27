@@ -1241,6 +1241,8 @@ onMounted(async () => {
     ElMessage.error('Veriler yüklenirken hata oluştu: ' + error.message)
   }
 })
+
+
 </script>
 
 <style scoped>

@@ -393,4 +393,8 @@ const router = createRouter({
   }
 })
 
+// Apply router guards
+import { setupRouterGuards } from './guards'
+setupRouterGuards(router)
+
 export default router

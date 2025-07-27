@@ -1,70 +1,41 @@
 <template>
-  <div class="page-container">
-    <el-card shadow="never">
-      <template #header>
-        <div class="page-header">
-          <h2>Flight Create</h2>
-          <div class="header-actions">
-            <el-button v-if="authStore.isAdmin" type="primary" @click="$router.push('/flights/create')">
-              <el-icon><Plus /></el-icon>
-              Yeni Uçuş
-            </el-button>
-            <el-button v-if="authStore.isAdmin" @click="$router.push('/flights/upload')">
-              <el-icon><Upload /></el-icon>
-              CSV Yükleme
-            </el-button>
-          </div>
-        </div>
-      </template>
-
-      <div class="coming-soon">
-        <el-icon :size="80" color="#C0C4CC">
-          <Construction />
-        </el-icon>
-        <h3>Yakında Gelecek</h3>
-        <p>Uçuş listesi ve yönetim özellikleri yakında eklenecek.</p>
+  <BaseCard>
+    <template #header>
+      <div class="flex items-center justify-between">
+        <h2 class="text-xl font-semibold">Yeni Uçuş Oluştur</h2>
+        <BaseButton variant="secondary" @click="$router.push({ name: 'FlightManagement' })">
+          Listeye Geri Dön
+        </BaseButton>
       </div>
-    </el-card>
-  </div>
+    </template>
+    <FlightForm :loading="loading" @submit="handleCreateFlight" />
+  </BaseCard>
 </template>
 
 <script setup>
-import { Plus, Upload, Construction } from '@element-plus/icons-vue'
-import { useAuthStore } from '@/stores/auth'
+import { ref } from 'vue';
+import { useRouter } from 'vue-router';
+import { useFlightStore } from '@/stores/flights';
+import { useNotification } from '@/composables/useNotification';
+import FlightForm from '@/components/forms/FlightForm.vue';
+import BaseCard from '@/components/ui/BaseCard.vue';
+import BaseButton from '@/components/ui/BaseButton.vue';
 
-const authStore = useAuthStore()
+const router = useRouter();
+const flightStore = useFlightStore();
+const { showSuccess, showError } = useNotification();
+const loading = ref(false);
+
+const handleCreateFlight = async (formData) => {
+  loading.value = true;
+  try {
+    await flightStore.createFlight(formData);
+    showSuccess('Uçuş başarıyla oluşturuldu!');
+    router.push({ name: 'FlightManagement' });
+  } catch (error) {
+    showError(error.message || 'Uçuş oluşturulamadı.');
+  } finally {
+    loading.value = false;
+  }
+};
 </script>
-
-<style scoped>
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.page-header h2 {
-  margin: 0;
-}
-
-.header-actions {
-  display: flex;
-  gap: 12px;
-}
-
-.coming-soon {
-  text-align: center;
-  padding: 60px 20px;
-}
-
-.coming-soon h3 {
-  font-size: 24px;
-  color: #303133;
-  margin: 20px 0 12px 0;
-}
-
-.coming-soon p {
-  color: #909399;
-  font-size: 16px;
-  margin: 0;
-}
-</style>

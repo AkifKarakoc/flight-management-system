@@ -1,215 +1,142 @@
 <template>
-  <el-form
-    ref="formRef"
-    :model="form"
-    :rules="rules"
-    label-width="140px"
-  >
-    <el-row :gutter="16">
+  <BaseForm :loading="loading" :initial-data="initialData" @submit="handleSubmit">
+    <h3 class="text-lg font-semibold mb-2 border-b pb-2">Route Details</h3>
+    <el-row :gutter="20">
       <el-col :span="12">
-        <el-form-item label="Kalkış Havalimanı" prop="originAirportId">
-          <el-select
-            v-model="form.originAirportId"
-            placeholder="Kalkış seçiniz"
-            filterable
-            style="width: 100%"
-          >
-            <el-option
-              v-for="airport in airportOptions"
-              :key="airport.value"
-              :label="airport.label"
-              :value="airport.value"
-            />
-          </el-select>
+        <el-form-item label="Route Name" prop="routeName" :rules="rules.routeName">
+          <el-input v-model="form.routeName" placeholder="e.g., Istanbul-Ankara-Izmir Route" />
         </el-form-item>
       </el-col>
       <el-col :span="12">
-        <el-form-item label="Varış Havalimanı" prop="destinationAirportId">
-          <el-select
-            v-model="form.destinationAirportId"
-            placeholder="Varış seçiniz"
-            filterable
-            style="width: 100%"
-          >
-            <el-option
-              v-for="airport in airportOptions"
-              :key="airport.value"
-              :label="airport.label"
-              :value="airport.value"
-            />
+        <el-form-item label="Route Code" prop="routeCode">
+          <el-input v-model="form.routeCode" placeholder="e.g., TK-001" />
+        </el-form-item>
+      </el-col>
+      <el-col :span="8">
+        <el-form-item label="Route Type" prop="routeType" :rules="rules.routeType">
+          <el-select v-model="form.routeType" class="w-full">
+            <el-option label="Domestic" value="DOMESTIC" />
+            <el-option label="International" value="INTERNATIONAL" />
+            <el-option label="Continental" value="CONTINENTAL" />
           </el-select>
+        </el-form-item>
+      </el-col>
+      <el-col :span="8">
+        <el-form-item label="Visibility" prop="visibility" :rules="rules.visibility">
+          <el-select v-model="form.visibility" class="w-full">
+            <el-option label="Private (Only me)" value="PRIVATE" />
+            <el-option label="Shared (My airline)" value="SHARED" />
+            <el-option label="Public" value="PUBLIC" />
+          </el-select>
+        </el-form-item>
+      </el-col>
+      <el-col :span="8">
+        <el-form-item label="Status" prop="active">
+          <el-switch v-model="form.active" active-text="Active" inactive-text="Inactive" />
         </el-form-item>
       </el-col>
     </el-row>
 
-    <el-row :gutter="16">
-      <el-col :span="8">
-        <el-form-item label="Mesafe (km)" prop="distance">
-          <el-input-number
-            v-model="form.distance"
-            :min="0"
-            :max="50000"
-            style="width: 100%"
-          />
-        </el-form-item>
-      </el-col>
-      <el-col :span="8">
-        <el-form-item label="Tahmini Süre (dk)" prop="estimatedFlightTime">
-          <el-input-number
-            v-model="form.estimatedFlightTime"
-            :min="0"
-            :max="2000"
-            style="width: 100%"
-          />
-        </el-form-item>
-      </el-col>
-      <el-col :span="8">
-        <el-form-item label="Route Tipi" prop="routeType">
-          <el-select
-            v-model="form.routeType"
-            placeholder="Tip seçiniz"
-            style="width: 100%"
-          >
-            <el-option
-              v-for="(label, value) in ROUTE_TYPE_LABELS"
-              :key="value"
-              :label="label"
-              :value="value"
-            />
-          </el-select>
-        </el-form-item>
-      </el-col>
-    </el-row>
-
-    <el-form-item label="Durum">
-      <el-switch
-        v-model="form.active"
-        active-text="Aktif"
-        inactive-text="Pasif"
-      />
-    </el-form-item>
-  </el-form>
+    <h3 class="text-lg font-semibold my-4 border-b pb-2">Route Segments</h3>
+    <div v-for="(segment, index) in form.segments" :key="index" class="mb-4 p-4 border rounded-md relative">
+      <el-row :gutter="16">
+        <el-col :span="8">
+          <el-form-item :label="`Segment ${index + 1}: Origin`" :prop="`segments.${index}.originAirportId`" :rules="rules.segmentAirport">
+            <el-select v-model="segment.originAirportId" filterable remote :remote-method="searchAirports" placeholder="Select origin" class="w-full">
+              <el-option v-for="airport in airports" :key="airport.id" :label="`${airport.name} (${airport.iataCode})`" :value="airport.id" />
+            </el-select>
+          </el-form-item>
+        </el-col>
+        <el-col :span="8">
+          <el-form-item :label="`Destination`" :prop="`segments.${index}.destinationAirportId`" :rules="rules.segmentAirport">
+            <el-select v-model="segment.destinationAirportId" filterable remote :remote-method="searchAirports" placeholder="Select destination" class="w-full">
+              <el-option v-for="airport in airports" :key="airport.id" :label="`${airport.name} (${airport.iataCode})`" :value="airport.id" />
+            </el-select>
+          </el-form-item>
+        </el-col>
+        <el-col :span="6">
+          <el-form-item label="Distance (km)">
+            <el-input-number v-model="segment.distance" :min="0" class="w-full" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="2" class="flex items-center">
+          <BaseButton v-if="form.segments.length > 1" variant="danger" circle @click="removeSegment(index)" class="mt-2">
+            <font-awesome-icon :icon="['fas', 'trash']" />
+          </BaseButton>
+        </el-col>
+      </el-row>
+    </div>
+    <BaseButton @click="addSegment" variant="secondary" class="mt-2">
+      <font-awesome-icon :icon="['fas', 'plus']" class="mr-2" />
+      Add Segment
+    </BaseButton>
+  </BaseForm>
 </template>
 
 <script setup>
-import { ref, reactive, watch, onMounted } from 'vue'
-import { useReferenceStore } from '@/stores/reference'
-import { ROUTE_TYPE_LABELS } from '@/utils/constants'
+import { ref, onMounted } from 'vue';
+import { storeToRefs } from 'pinia';
+import { useReferenceStore } from '@/stores/reference';
+import { useForm } from '@/composables/useForm';
+import BaseForm from '@/components/forms/BaseForm.vue';
+import BaseButton from '@/components/ui/BaseButton.vue';
+import { ElRow, ElCol, ElFormItem, ElInput, ElSelect, ElOption, ElInputNumber, ElSwitch } from 'element-plus';
 
-const referenceStore = useReferenceStore()
-
-// Props & Emits
 const props = defineProps({
-  modelValue: {
+  initialData: {
     type: Object,
-    default: () => ({})
-  },
-  editMode: {
-    type: Boolean,
-    default: false
-  }
-})
-
-const emit = defineEmits(['update:modelValue'])
-
-// Refs
-const formRef = ref()
-const airportOptions = ref([])
-
-// Form Data
-const form = reactive({
-  originAirportId: null,
-  destinationAirportId: null,
-  distance: null,
-  estimatedFlightTime: null,
-  routeType: 'DOMESTIC',
-  active: true
-})
-
-// Validation Rules
-const rules = {
-  originAirportId: [
-    { required: true, message: 'Kalkış havalimanı seçimi gereklidir', trigger: 'change' }
-  ],
-  destinationAirportId: [
-    { required: true, message: 'Varış havalimanı seçimi gereklidir', trigger: 'change' },
-    {
-      validator: (rule, value, callback) => {
-        if (value === form.originAirportId) {
-          callback(new Error('Kalkış ve varış havalimanı aynı olamaz'))
-        } else {
-          callback()
-        }
-      },
-      trigger: 'change'
-    }
-  ],
-  distance: [
-    { required: true, message: 'Mesafe gereklidir', trigger: 'change' }
-  ],
-  estimatedFlightTime: [
-    { required: true, message: 'Tahmini süre gereklidir', trigger: 'change' }
-  ],
-  routeType: [
-    { required: true, message: 'Route tipi seçimi gereklidir', trigger: 'change' }
-  ]
-}
-
-// Watchers
-watch(() => props.modelValue, (newValue) => {
-  if (newValue && typeof newValue === 'object') {
-    Object.assign(form, {
-      originAirportId: newValue.originAirportId || null,
-      destinationAirportId: newValue.destinationAirportId || null,
-      distance: newValue.distance || null,
-      estimatedFlightTime: newValue.estimatedFlightTime || null,
-      routeType: newValue.routeType || 'DOMESTIC',
-      active: newValue.active !== undefined ? newValue.active : true
+    default: () => ({
+      routeName: '',
+      routeCode: '',
+      routeType: 'DOMESTIC',
+      visibility: 'PRIVATE',
+      active: true,
+      segments: [{ originAirportId: null, destinationAirportId: null, distance: 0 }],
     })
+  },
+  loading: Boolean,
+});
+
+const emit = defineEmits(['submit']);
+
+const referenceStore = useReferenceStore();
+const { airports } = storeToRefs(referenceStore);
+
+const { form, rules, handleSubmit } = useForm({
+  initialData: props.initialData,
+  rules: {
+    routeName: [{ required: true, message: 'Route name is required' }],
+    routeType: [{ required: true, message: 'Route type is required' }],
+    visibility: [{ required: true, message: 'Visibility is required' }],
+    segmentAirport: [{ required: true, message: 'Origin and Destination are required' }],
+  },
+  onSubmit: (formData) => {
+    // API'ye göndermeden önce segment sırasını ayarla
+    const preparedData = {
+      ...formData,
+      segments: formData.segments.map((seg, index) => ({ ...seg, segmentOrder: index + 1 }))
+    };
+    emit('submit', preparedData);
   }
-}, { immediate: true, deep: true })
+});
 
-watch(form, (newValue) => {
-  emit('update:modelValue', { ...newValue })
-}, { deep: true })
+const searchAirports = (query) => {
+  if (query) {
+    referenceStore.fetchAirports({ name: query, size: 50 });
+  }
+};
 
-// Methods
-const validate = async () => {
-  return await formRef.value.validate()
-}
+const addSegment = () => {
+  form.segments.push({ originAirportId: null, destinationAirportId: null, distance: 0 });
+};
 
-const clearValidate = () => {
-  formRef.value?.clearValidate()
-}
+const removeSegment = (index) => {
+  form.segments.splice(index, 1);
+};
 
-const resetForm = () => {
-  Object.assign(form, {
-    originAirportId: null,
-    destinationAirportId: null,
-    distance: null,
-    estimatedFlightTime: null,
-    routeType: 'DOMESTIC',
-    active: true
-  })
-  clearValidate()
-}
-
-// Expose methods
-defineExpose({
-  validate,
-  clearValidate,
-  resetForm
-})
-
-// Lifecycle
-onMounted(async () => {
-  await referenceStore.loadAirports()
-  airportOptions.value = referenceStore.airportOptions
-})
+onMounted(() => {
+  if (airports.value.length === 0) {
+    referenceStore.fetchAirports({ size: 1000 });
+  }
+});
 </script>
-
-<style scoped>
-.el-form {
-  max-width: 100%;
-}
-</style>

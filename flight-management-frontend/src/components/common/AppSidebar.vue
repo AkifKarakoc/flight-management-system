@@ -2,7 +2,7 @@
   <div class="sidebar-wrapper">
     <!-- Logo -->
     <div class="sidebar-logo">
-      <router-link to="/dashboard" class="logo-link">
+      <router-link to="/" class="logo-link">
         <el-icon :size="collapsed ? 24 : 32" color="#409eff">
           <Ship />
         </el-icon>
@@ -22,7 +22,7 @@
       router
     >
       <!-- Dashboard -->
-      <el-menu-item index="/dashboard">
+      <el-menu-item index="/">
         <el-icon><Odometer /></el-icon>
         <template #title>Dashboard</template>
       </el-menu-item>
@@ -53,29 +53,43 @@
           <el-icon><Setting /></el-icon>
           <span>Referans Yönetimi</span>
         </template>
-        <el-menu-item index="/airlines">
+        <el-menu-item index="/reference/airlines">
           <el-icon><Ship /></el-icon>
           <template #title>Havayolları</template>
         </el-menu-item>
-        <el-menu-item index="/airports">
+        <el-menu-item index="/reference/airports">
           <el-icon><Place /></el-icon>
           <template #title>Havalimanları</template>
         </el-menu-item>
-        <el-menu-item index="/routes">
+        <el-menu-item index="/reference/routes">
           <el-icon><MapLocation /></el-icon>
           <template #title>Rotalar</template>
         </el-menu-item>
-        <el-menu-item index="/crew-members">
+        <el-menu-item index="/reference/crew">
           <el-icon><User /></el-icon>
           <template #title>Mürettebat</template>
         </el-menu-item>
       </el-sub-menu>
 
       <!-- Raporlar -->
-      <el-menu-item index="/reports">
-        <el-icon><DocumentCopy /></el-icon>
-        <template #title>Raporlar</template>
-      </el-menu-item>
+      <el-sub-menu index="reports">
+        <template #title>
+          <el-icon><DocumentCopy /></el-icon>
+          <span>Raporlar</span>
+        </template>
+        <el-menu-item index="/reports/archive">
+          <el-icon><Document /></el-icon>
+          <template #title>Arşiv Raporları</template>
+        </el-menu-item>
+        <el-menu-item index="/reports/flights">
+          <el-icon><DocumentCopy /></el-icon>
+          <template #title>Uçuş Raporları</template>
+        </el-menu-item>
+        <el-menu-item v-if="authStore.isAdmin" index="/reports/kpi">
+          <el-icon><TrendCharts /></el-icon>
+          <template #title>KPI Raporları</template>
+        </el-menu-item>
+      </el-sub-menu>
     </el-menu>
   </div>
 </template>
@@ -93,7 +107,9 @@ import {
   Place,
   MapLocation,
   User,
-  DocumentCopy
+  DocumentCopy,
+  Document,
+  TrendCharts
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 

@@ -233,6 +233,42 @@ export const shuffle = (array) => {
   return shuffled
 }
 
+/**
+ * Deep equality check for two objects
+ * @param {any} obj1
+ * @param {any} obj2
+ * @returns {boolean}
+ */
+export const deepEqual = (obj1, obj2) => {
+  if (obj1 === obj2) return true
+
+  if (obj1 === null || obj1 === undefined || obj2 === null || obj2 === undefined) {
+    return obj1 === obj2
+  }
+
+  if (obj1.constructor !== obj2.constructor) return false
+
+  if (Array.isArray(obj1)) {
+    if (obj1.length !== obj2.length) return false
+    for (let i = 0; i < obj1.length; i++) {
+      if (!deepEqual(obj1[i], obj2[i])) return false
+    }
+    return true
+  }
+
+  if (typeof obj1 === 'object') {
+    const keys1 = Object.keys(obj1)
+    const keys2 = Object.keys(obj2)
+    if (keys1.length !== keys2.length) return false
+    for (const key of keys1) {
+      if (!keys2.includes(key) || !deepEqual(obj1[key], obj2[key])) return false
+    }
+    return true
+  }
+
+  return false
+}
+
 // ========================
 // OBJECT HELPERS
 // ========================

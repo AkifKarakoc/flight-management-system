@@ -3,7 +3,7 @@
     <div class="header-left">
       <!-- Sidebar toggle button -->
       <BaseButton
-        type="text"
+        link
         :icon="sidebarCollapsed ? 'Menu' : 'MenuFold'"
         class="sidebar-toggle"
         @click="handleSidebarToggle"
@@ -11,7 +11,7 @@
 
       <!-- Mobile sidebar toggle -->
       <BaseButton
-        type="text"
+        link
         icon="Menu"
         class="mobile-sidebar-toggle"
         @click="handleMobileSidebarToggle"
@@ -61,7 +61,7 @@
         <!-- Theme toggle -->
         <BaseButton
           v-if="showThemeToggle"
-          type="text"
+          link
           :icon="isDarkMode ? 'Sunny' : 'Moon'"
           :title="isDarkMode ? 'Açık tema' : 'Koyu tema'"
           @click="toggleTheme"
@@ -70,8 +70,8 @@
         <!-- Fullscreen toggle -->
         <BaseButton
           v-if="showFullscreenToggle"
-          type="text"
-          :icon="isFullscreen ? 'FullscreenExit' : 'Fullscreen'"
+          link
+          :icon="isFullscreen ? 'Close' : 'FullScreen'"
           :title="isFullscreen ? 'Tam ekrandan çık' : 'Tam ekran'"
           @click="toggleFullscreen"
         />
@@ -84,7 +84,7 @@
             @visible-change="handleNotificationDropdown"
           >
             <BaseButton
-              type="text"
+              link
               icon="Bell"
               :title="`${unreadNotifications} okunmamış bildirim`"
             >
@@ -102,7 +102,7 @@
                   <span class="notification-title">Bildirimler</span>
                   <BaseButton
                     v-if="unreadNotifications > 0"
-                    type="text"
+                    link
                     size="small"
                     @click="markAllAsRead"
                   >
@@ -129,7 +129,7 @@
 
                 <div class="notification-footer">
                   <BaseButton
-                    type="text"
+                    link
                     size="small"
                     @click="viewAllNotifications"
                   >
@@ -196,11 +196,11 @@ import {
   Bell,
   Search,
   Menu,
-  MenuFold,
+  Fold,
   Sunny,
   Moon,
-  Fullscreen,
-  FullscreenExit
+  FullScreen,
+  Close
 } from '@element-plus/icons-vue'
 
 import BaseButton from '@/components/ui/BaseButton.vue'

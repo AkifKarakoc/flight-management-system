@@ -65,14 +65,6 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
-  text: {
-    type: Boolean,
-    default: false
-  },
-  bg: {
-    type: Boolean,
-    default: false
-  },
   link: {
     type: Boolean,
     default: false
@@ -114,6 +106,9 @@ const emit = defineEmits(['click', 'confirm'])
 
 // Computed properties
 const buttonType = computed(() => {
+  if (props.link) {
+    return 'default' // veya 'primary' vs. olabilir, link prop'u tipi etkilemez
+  }
   if (props.variant === 'outline') {
     return props.type === 'default' ? 'default' : props.type
   }

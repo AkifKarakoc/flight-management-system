@@ -110,7 +110,7 @@
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import BaseButton from '@/components/ui/BaseButton.vue'
-import FormField from './FormField.vue'
+//import FormField from './FormField.vue'
 import { deepClone, deepEqual } from '@/utils/helpers'
 
 const props = defineProps({
@@ -767,7 +767,7 @@ defineExpose({
 }
 
 /* High contrast mode */
-@media (prefers-contrast: high) {
+@media (prefers-contrast: more) {
   .section-header {
     border-bottom-width: 2px;
   }

@@ -1,70 +1,65 @@
 <template>
-  <div class="page-container">
-    <el-card shadow="never">
-      <template #header>
-        <div class="page-header">
-          <h2>Flight Edit</h2>
-          <div class="header-actions">
-            <el-button v-if="authStore.isAdmin" type="primary" @click="$router.push('/flights/create')">
-              <el-icon><Plus /></el-icon>
-              Yeni Uçuş
-            </el-button>
-            <el-button v-if="authStore.isAdmin" @click="$router.push('/flights/upload')">
-              <el-icon><Upload /></el-icon>
-              CSV Yükleme
-            </el-button>
-          </div>
-        </div>
-      </template>
-
-      <div class="coming-soon">
-        <el-icon :size="80" color="#C0C4CC">
-          <Construction />
-        </el-icon>
-        <h3>Yakında Gelecek</h3>
-        <p>Uçuş listesi ve yönetim özellikleri yakında eklenecek.</p>
+  <BaseCard>
+    <template #header>
+      <div class="flex items-center justify-between">
+        <h2 class="text-xl font-semibold">Uçuşu Düzenle</h2>
+        <BaseButton variant="secondary" @click="$router.push({ name: 'FlightManagement' })">
+          Listeye Geri Dön
+        </BaseButton>
       </div>
-    </el-card>
-  </div>
+    </template>
+    <div v-if="initialLoading" class="text-center p-8">Yükleniyor...</div>
+    <FlightForm v-else :initial-data="flight" :loading="formLoading" @submit="handleUpdateFlight" />
+  </BaseCard>
 </template>
 
 <script setup>
-import { Plus, Upload, Construction } from '@element-plus/icons-vue'
-import { useAuthStore } from '@/stores/auth'
+import { ref, onMounted } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { useFlightStore } from '@/stores/flights';
+import { useNotification } from '@/composables/useNotification';
+import FlightForm from '@/components/forms/FlightForm.vue';
+import BaseCard from '@/components/ui/BaseCard.vue';
+import BaseButton from '@/components/ui/BaseButton.vue';
 
-const authStore = useAuthStore()
+const route = useRoute();
+const router = useRouter();
+const flightStore = useFlightStore();
+const { showSuccess, showError } = useNotification();
+
+const flight = ref(null);
+const initialLoading = ref(true);
+const formLoading = ref(false);
+const flightId = route.params.id;
+
+onMounted(async () => {
+  try {
+    const flightData = await flightStore.fetchFlightById(flightId);
+    // Formun `initial-data` prop'u için DTO'yu sadeleştirmemiz gerekebilir.
+    // API'den gelen `airline`, `aircraft` gibi nesneleri `airlineId` gibi ID'lere dönüştürüyoruz.
+    flight.value = {
+      ...flightData,
+      airlineId: flightData.airline?.id,
+      aircraftId: flightData.aircraft?.id,
+      routeId: flightData.route?.id,
+    };
+  } catch (error) {
+    showError('Uçuş verileri getirilemedi.');
+  } finally {
+    initialLoading.value = false;
+  }
+});
+
+const handleUpdateFlight = async (formData) => {
+  formLoading.value = true;
+  try {
+    await flightStore.updateFlight(flightId, formData);
+    showSuccess('Uçuş başarıyla güncellendi!');
+    router.push({ name: 'FlightManagement' });
+  } catch (error) {
+    showError(error.message || 'Uçuş güncellenemedi.');
+  } finally {
+    formLoading.value = false;
+  }
+};
 </script>
-
-<style scoped>
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.page-header h2 {
-  margin: 0;
-}
-
-.header-actions {
-  display: flex;
-  gap: 12px;
-}
-
-.coming-soon {
-  text-align: center;
-  padding: 60px 20px;
-}
-
-.coming-soon h3 {
-  font-size: 24px;
-  color: #303133;
-  margin: 20px 0 12px 0;
-}
-
-.coming-soon p {
-  color: #909399;
-  font-size: 16px;
-  margin: 0;
-}
-</style>

@@ -12,7 +12,14 @@ export const useAuthStore = defineStore('auth', () => {
 
   // Getters
   const isAdmin = computed(() => {
-    return user.value?.roles?.includes(USER_ROLES.ADMIN) || false
+    // Spring Security genellikle 'ROLE_' önekini ekler.
+    // Backend'den gelen roleler 'ROLE_ADMIN' formatında olabilir.
+    const hasAdminRole =
+      user.value?.roles?.includes(USER_ROLES.ADMIN) ||
+      user.value?.roles?.includes('ROLE_ADMIN') ||
+      false
+    console.log('User roles:', user.value?.roles, 'Is admin:', hasAdminRole)
+    return hasAdminRole
   })
 
   const isUser = computed(() => {
@@ -66,6 +73,9 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   const checkAuth = () => {
+    // Önce geçersiz token'ları temizle
+    authService.clearInvalidTokens()
+    
     // Sayfa yenilendiğinde veya uygulama başlarken çalışır
     const isAuth = authService.isAuthenticated()
 
@@ -110,8 +120,29 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  // Initialize auth state when store is created
-  checkAuth()
+  const validateToken = async () => {
+    try {
+      const response = await authService.validateToken()
+      if (response.valid) {
+        token.value = response.token
+        user.value = response.user
+        isAuthenticated.value = true
+        return true
+      } else {
+        // Token geçersiz, temizle
+        token.value = null
+        user.value = null
+        isAuthenticated.value = false
+        return false
+      }
+    } catch (error) {
+      // Token geçersiz, temizle
+      token.value = null
+      user.value = null
+      isAuthenticated.value = false
+      return false
+    }
+  }
 
   return {
     // State
@@ -131,6 +162,7 @@ export const useAuthStore = defineStore('auth', () => {
     logout,
     checkAuth,
     hasRole,
-    hasPermission
+    hasPermission,
+    validateToken
   }
 })

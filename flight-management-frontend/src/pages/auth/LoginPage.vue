@@ -142,7 +142,7 @@ const handleLogin = async () => {
     ElMessage.success('Giriş başarılı!')
 
     // Redirect to intended page or dashboard
-    const redirectPath = route.query.redirect || '/dashboard'
+    const redirectPath = route.query.redirect || { name: 'Dashboard' }
     router.replace(redirectPath)
 
   } catch (error) {

@@ -19,7 +19,7 @@
 
       <div class="coming-soon">
         <el-icon :size="80" color="#C0C4CC">
-          <Construction />
+                      <Tools />
         </el-icon>
         <h3>Yakında Gelecek</h3>
         <p>Uçuş listesi ve yönetim özellikleri yakında eklenecek.</p>
@@ -29,7 +29,7 @@
 </template>
 
 <script setup>
-import { Plus, Upload, Construction } from '@element-plus/icons-vue'
+import { Plus, Upload, Tools } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 
 const authStore = useAuthStore()

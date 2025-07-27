@@ -97,15 +97,7 @@
             </template>
           </el-dropdown>
 
-          <!-- Export -->
-          <BaseButton
-            v-if="exportable"
-            size="small"
-            icon="Download"
-            @click="handleExport"
-          >
-            Dışa Aktar
-          </BaseButton>
+
 
           <!-- Refresh -->
           <BaseButton
@@ -379,8 +371,8 @@ import { ElMessage } from 'element-plus'
 import { Box } from '@element-plus/icons-vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
-import TableCell from './TableCell.vue'
-import { debounce, exportToCSV, exportToExcel } from '@/utils/helpers'
+//import TableCell from './TableCell.vue'
+import { debounce } from '@/utils/helpers'
 
 const props = defineProps({
   // Data
@@ -579,22 +571,7 @@ const props = defineProps({
     default: false
   },
 
-  // Export
-  exportable: {
-    type: Boolean,
-    default: false
-  },
 
-  exportFilename: {
-    type: String,
-    default: 'table-data'
-  },
-
-  exportFormat: {
-    type: String,
-    default: 'xlsx',
-    validator: (value) => ['csv', 'xlsx'].includes(value)
-  },
 
   // Refresh
   refreshable: {
@@ -735,7 +712,7 @@ const emit = defineEmits([
   'action-click',
   'search',
   'filter',
-  'export',
+
   'refresh',
   'page-change',
   'page-size-change',
@@ -870,18 +847,7 @@ const handleColumnToggle = () => {
   // Handle column toggle
 }
 
-const handleExport = () => {
-  const exportData = filteredData.value
-  const filename = `${props.exportFilename}-${new Date().toISOString().split('T')[0]}`
 
-  if (props.exportFormat === 'csv') {
-    exportToCSV(exportData, filename)
-  } else {
-    exportToExcel(exportData, filename)
-  }
-
-  emit('export', { data: exportData, format: props.exportFormat, filename })
-}
 
 const handleRefresh = () => {
   emit('refresh')

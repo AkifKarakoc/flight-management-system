@@ -1,10 +1,5 @@
 <template>
-  <div class="main-layout">
-    <!-- Loading overlay -->
-    <div v-if="globalLoading" class="loading-overlay">
-      <el-loading-spinner />
-    </div>
-
+  <div class="main-layout" v-loading="globalLoading">
     <!-- Sidebar -->
     <AppSidebar
       v-model:collapsed="sidebarCollapsed"
@@ -58,11 +53,9 @@ import AppSidebar from '@/components/common/AppSidebar.vue'
 import AppHeader from '@/components/common/AppHeader.vue'
 import BreadcrumbNav from '@/components/common/BreadcrumbNav.vue'
 import AppFooter from '@/components/common/AppFooter.vue'
-import { useAuthStore } from '@/stores/auth'
 import { getStorageItem, setStorageItem } from '@/utils/helpers'
 
 // Stores
-const authStore = useAuthStore()
 const route = useRoute()
 
 // Reactive state
@@ -155,20 +148,6 @@ onUnmounted(() => {
   display: flex;
   min-height: 100vh;
   background-color: var(--el-bg-color-page);
-}
-
-/* Loading overlay */
-.loading-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
 }
 
 /* Main content area */
