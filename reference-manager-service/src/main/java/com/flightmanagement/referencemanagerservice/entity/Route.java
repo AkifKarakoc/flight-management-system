@@ -26,36 +26,43 @@ public class Route {
     private Long id;
 
     @Column(nullable = false, length = 50)
-    private String routeCode;          // "TK-001", "PC-002" gibi unique kod
+    private String routeCode;
 
     @Column(nullable = false, length = 200)
-    private String routeName;          // "Istanbul-Ankara-Izmir Route"
+    private String routeName;
 
     @Column
-    private Integer distance;          // km (toplam mesafe)
+    private Integer distance;
 
     @Column
-    private Integer estimatedFlightTime; // dakika (toplam süre)
+    private Integer estimatedFlightTime;
 
     @Column
     private Boolean active = true;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private RouteType routeType;       // DOMESTIC, INTERNATIONAL, CONTINENTAL
+    private RouteType routeType;
+
+    // Legacy alanlar - backward compatibility için nullable
+    @Column(name = "origin_airport_id", nullable = true)
+    private Long originAirportId;
+
+    @Column(name = "destination_airport_id", nullable = true)
+    private Long destinationAirportId;
 
     // Yeni ownership alanları
     @Column(name = "created_by_user_id")
-    private Long createdByUserId;      // Route'u oluşturan kullanıcı
+    private Long createdByUserId;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private RouteVisibility visibility = RouteVisibility.PRIVATE;
 
     @Column(name = "airline_id")
-    private Long airlineId;            // Hangi havayolu için
+    private Long airlineId;
 
-    // Aktarmalı route'lar için segment'ler
+    // Multi-segment support
     @OneToMany(mappedBy = "route", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @OrderBy("segmentOrder")
     private List<RouteSegment> segments = new ArrayList<>();
