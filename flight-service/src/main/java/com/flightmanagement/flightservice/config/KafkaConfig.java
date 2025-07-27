@@ -67,45 +67,34 @@ public class KafkaConfig {
         return new KafkaTemplate<>(objectProducerFactory());
     }
 
-    // ✅ İYİLEŞTİRİLMİŞ: Error-tolerant Consumer Configuration
+    // ✅ BASITLEŞTIRILMIŞ Consumer Configuration
     @Bean
-    public ConsumerFactory<String, Object> consumerFactory() {
+    public ConsumerFactory<String, String> consumerFactory() {
         Map<String, Object> configs = new HashMap<>();
         configs.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         configs.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
         configs.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+        configs.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+        configs.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
 
-        // ✅ Error Handling Deserializer kullan
-        configs.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, ErrorHandlingDeserializer.class);
-        configs.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ErrorHandlingDeserializer.class);
-
-        // Delegate deserializer'ları
-        configs.put(ErrorHandlingDeserializer.KEY_DESERIALIZER_CLASS, StringDeserializer.class);
-        configs.put(ErrorHandlingDeserializer.VALUE_DESERIALIZER_CLASS, JsonDeserializer.class);
-
-        // JsonDeserializer konfigürasyonu
-        configs.put(JsonDeserializer.TRUSTED_PACKAGES, "*");
-        configs.put(JsonDeserializer.USE_TYPE_INFO_HEADERS, false);
-        configs.put(JsonDeserializer.REMOVE_TYPE_INFO_HEADERS, false);
-
-        // ✅ Class mapping - farklı package'lardan gelen class'ları map et
-        configs.put(JsonDeserializer.TYPE_MAPPINGS,
-                "referenceEvent:com.flightmanagement.flightservice.event.ReferenceEvent," +
-                        "flightEvent:com.flightmanagement.flightservice.event.FlightEvent");
+        // Session timeout ve heartbeat ayarları
+        configs.put(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, 30000);
+        configs.put(ConsumerConfig.HEARTBEAT_INTERVAL_MS_CONFIG, 10000);
+        configs.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
 
         return new DefaultKafkaConsumerFactory<>(configs);
     }
 
     @Bean
-    public ConcurrentKafkaListenerContainerFactory<String, Object> kafkaListenerContainerFactory() {
-        ConcurrentKafkaListenerContainerFactory<String, Object> factory =
+    public ConcurrentKafkaListenerContainerFactory<String, String> kafkaListenerContainerFactory() {
+        ConcurrentKafkaListenerContainerFactory<String, String> factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(consumerFactory());
 
-        // ✅ Error handler ekle
+        // Error handler ekle
         factory.setCommonErrorHandler(new DefaultErrorHandler(new FixedBackOff(1000L, 3)));
 
-        // ✅ Manual commit mode
+        // Manual commit mode
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
 
         return factory;

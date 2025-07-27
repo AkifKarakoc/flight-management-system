@@ -1,6 +1,7 @@
 package com.flightmanagement.flightservice.service;
 
 import com.flightmanagement.flightservice.dto.cache.RouteCache;
+import com.flightmanagement.flightservice.dto.request.AirportSegmentRequest;
 import com.flightmanagement.flightservice.dto.request.ArchiveSearchRequest;
 import com.flightmanagement.flightservice.dto.request.ConnectingFlightRequest;
 import com.flightmanagement.flightservice.dto.request.FlightRequest;
@@ -17,6 +18,7 @@ import com.flightmanagement.flightservice.exception.ResourceNotFoundException;
 import com.flightmanagement.flightservice.mapper.FlightMapper;
 import com.flightmanagement.flightservice.repository.FlightRepository;
 import com.flightmanagement.flightservice.validator.FlightValidator;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -45,6 +47,8 @@ public class FlightService {
     private final WebSocketMessageService webSocketMessageService;
     private final ConnectingFlightService connectingFlightService;
     private final ArchiveServiceClient archiveServiceClient;
+    private final AutoRouteService autoRouteService;
+
 
     // ===============================
     // TEMEL FLIGHT OPERATIONS
@@ -174,34 +178,26 @@ public class FlightService {
     // ===============================
 
     public FlightResponse createFlight(FlightRequest request) {
-        log.debug("Creating flight: {}", request.getFlightNumber());
+        log.debug("Creating flight: {} (Mode: {})", request.getFlightNumber(),
+                request.getCreationMode() != null ? request.getCreationMode() : "AUTO");
+
+        // Route ID resolution strategy
+        resolveRouteId(request);
 
         // Validation
         flightValidator.validateFlightRequest(request);
 
-        // Duplicate check
-        if (flightRepository.existsByFlightNumberAndFlightDate(request.getFlightNumber(), request.getFlightDate())) {
-            throw new DuplicateResourceException("Flight already exists: " + request.getFlightNumber() + " on " + request.getFlightDate());
+        // Multi-segment airport-based flight ise connecting flight oluştur
+        if (request.isMultiSegmentAirportCreation()) {
+            return createMultiSegmentAirportFlight(request);
         }
 
-        // Aircraft conflict check
-        if (flightRepository.hasAircraftConflict(request.getAircraftId(), request.getFlightDate(),
-                request.getScheduledDeparture(), request.getScheduledArrival())) {
-            throw new BusinessException("Aircraft has conflicting flight schedule");
-        }
+        // Single flight creation
+        return createSingleFlight(request);
+    }
 
-        // Aircraft-Route compatibility check
-        flightValidator.validateAircraftRouteCompatibility(request.getAircraftId(), request.getRouteId());
-
-        Flight flight = flightMapper.toEntity(request);
-        flight = flightRepository.save(flight);
-
-        kafkaProducerService.sendFlightEvent("FLIGHT_CREATED", flight);
-
-        FlightResponse response = buildFlightResponse(flight);
-        webSocketMessageService.sendFlightUpdate("CREATE", response, flight.getId(), flight.getFlightNumber());
-
-        return response;
+    public Map<String, Object> previewRouteForAirports(Long originAirportId, Long destinationAirportId) {
+        return autoRouteService.previewRoute(originAirportId, destinationAirportId);
     }
 
     public FlightResponse updateFlight(Long id, FlightRequest request) {
@@ -695,5 +691,194 @@ public class FlightService {
         if (delayMinutes <= 15) return "MINOR_DELAY";
         if (delayMinutes <= 60) return "MODERATE_DELAY";
         return "MAJOR_DELAY";
+    }
+
+    /**
+     * Route ID çözümleme stratejisi
+     */
+    private void resolveRouteId(FlightRequest request) {
+        // 1. Route ID zaten varsa, doğrula ve devam et
+        if (request.isRouteBasedCreation()) {
+            log.debug("Using provided route ID: {}", request.getRouteId());
+            return;
+        }
+
+        // 2. Single airport-based creation
+        if (request.isAirportBasedCreation()) {
+            log.debug("Auto-finding/creating direct route for airports {} -> {}",
+                    request.getOriginAirportId(), request.getDestinationAirportId());
+
+            Long routeId = autoRouteService.findOrCreateDirectRoute(
+                    request.getOriginAirportId(), request.getDestinationAirportId());
+            request.setRouteId(routeId);
+
+            log.info("Resolved route ID: {} for flight {}", routeId, request.getFlightNumber());
+            return;
+        }
+
+        // 3. Multi-segment airport-based creation
+        if (request.isMultiSegmentAirportCreation()) {
+            log.debug("Auto-finding/creating multi-segment route for {} segments",
+                    request.getAirportSegments().size());
+
+            Long routeId = autoRouteService.findOrCreateMultiSegmentRoute(
+                    request.getAirportSegments(), request.getFlightNumber());
+            request.setRouteId(routeId);
+
+            log.info("Resolved multi-segment route ID: {} for flight {}", routeId, request.getFlightNumber());
+            return;
+        }
+
+        throw new BusinessException("No valid route resolution strategy found");
+    }
+
+    /**
+     * Single flight creation
+     */
+    private FlightResponse createSingleFlight(FlightRequest request) {
+        // Duplicate check
+        if (flightRepository.existsByFlightNumberAndFlightDate(request.getFlightNumber(), request.getFlightDate())) {
+            throw new DuplicateResourceException("Flight already exists: " + request.getFlightNumber() + " on " + request.getFlightDate());
+        }
+
+        // Aircraft conflict check
+        if (flightRepository.hasAircraftConflict(request.getAircraftId(), request.getFlightDate(),
+                request.getScheduledDeparture(), request.getScheduledArrival())) {
+            throw new BusinessException("Aircraft has conflicting flight schedule");
+        }
+
+        // Aircraft-Route compatibility check
+        flightValidator.validateAircraftRouteCompatibility(request.getAircraftId(), request.getRouteId());
+
+        Flight flight = flightMapper.toEntity(request);
+        flight = flightRepository.save(flight);
+
+        kafkaProducerService.sendFlightEvent("FLIGHT_CREATED", flight);
+
+        FlightResponse response = buildFlightResponse(flight);
+        webSocketMessageService.sendFlightUpdate("CREATE", response, flight.getId(), flight.getFlightNumber());
+
+        return response;
+    }
+
+    /**
+     * Multi-segment airport-based flight creation
+     */
+    private FlightResponse createMultiSegmentAirportFlight(FlightRequest request) {
+        log.debug("Creating multi-segment airport-based flight: {}", request.getFlightNumber());
+
+        // Convert airport segments to connecting flight request
+        ConnectingFlightRequest connectingRequest = convertToConnectingFlightRequest(request);
+
+        // Use existing connecting flight service
+        return connectingFlightService.createConnectingFlight(connectingRequest);
+    }
+
+    /**
+     * Airport-based request'i connecting flight request'e çevir
+     */
+    private ConnectingFlightRequest convertToConnectingFlightRequest(FlightRequest request) {
+        ConnectingFlightRequest connectingRequest = new ConnectingFlightRequest();
+
+        // Ana uçuş bilgileri
+        connectingRequest.setMainFlightNumber(request.getFlightNumber());
+        connectingRequest.setAirlineId(request.getAirlineId());
+        connectingRequest.setAircraftId(request.getAircraftId());
+        connectingRequest.setType(request.getType());
+        connectingRequest.setPassengerCount(request.getPassengerCount());
+        connectingRequest.setCargoWeight(request.getCargoWeight());
+        connectingRequest.setNotes(request.getNotes());
+        connectingRequest.setActive(request.getActive());
+
+        // Airport segments'leri flight segments'lere çevir
+        List<FlightSegmentRequest> flightSegments = convertAirportSegmentsToFlightSegments(
+                request.getAirportSegments(), request);
+
+        connectingRequest.setSegments(flightSegments);
+
+        return connectingRequest;
+    }
+
+    /**
+     * Airport segments'leri flight segments'lere çevir
+     */
+    private List<FlightSegmentRequest> convertAirportSegmentsToFlightSegments(
+            List<AirportSegmentRequest> airportSegments, FlightRequest request) {
+
+        List<FlightSegmentRequest> flightSegments = new ArrayList<>();
+
+        // Base timing - ilk segment'in zamanı request'ten gelir
+        LocalDateTime currentDeparture = request.getScheduledDeparture();
+
+        for (int i = 0; i < airportSegments.size(); i++) {
+            AirportSegmentRequest airportSegment = airportSegments.get(i);
+
+            FlightSegmentRequest flightSegment = new FlightSegmentRequest();
+            flightSegment.setSegmentNumber(airportSegment.getSegmentOrder());
+            flightSegment.setOriginAirportId(airportSegment.getOriginAirportId());
+            flightSegment.setDestinationAirportId(airportSegment.getDestinationAirportId());
+            flightSegment.setConnectionTimeMinutes(airportSegment.getConnectionTimeMinutes());
+
+            // Timing calculation
+            flightSegment.setScheduledDeparture(currentDeparture);
+
+            // Flight duration hesapla (airport'lar arası mesafeye göre)
+            Integer estimatedDuration = calculateSegmentDuration(
+                    airportSegment.getOriginAirportId(),
+                    airportSegment.getDestinationAirportId());
+
+            LocalDateTime segmentArrival = currentDeparture.plusMinutes(estimatedDuration);
+            flightSegment.setScheduledArrival(segmentArrival);
+
+            flightSegments.add(flightSegment);
+
+            // Next segment'in departure'ını hesapla (connection time dahil)
+            if (i < airportSegments.size() - 1) {
+                Integer connectionTime = airportSegment.getConnectionTimeMinutes();
+                if (connectionTime == null) {
+                    connectionTime = 60; // Default 1 hour connection
+                }
+                currentDeparture = segmentArrival.plusMinutes(connectionTime);
+            }
+        }
+
+        return flightSegments;
+    }
+
+    /**
+     * Segment duration hesaplama
+     */
+    private Integer calculateSegmentDuration(Long originAirportId, Long destinationAirportId) {
+        try {
+            var originAirport = referenceDataService.getAirport(originAirportId);
+            var destinationAirport = referenceDataService.getAirport(destinationAirportId);
+
+            if (originAirport != null && destinationAirport != null) {
+                // Distance-based calculation
+                Integer distance = calculateDistanceBetweenAirports(originAirport, destinationAirport);
+                return (int) Math.ceil(distance / 800.0 * 60); // 800 km/h average speed
+            }
+        } catch (Exception e) {
+            log.warn("Error calculating segment duration: {}", e.getMessage());
+        }
+
+        return 90; // Default 1.5 hours
+    }
+
+    /**
+     * Airport'lar arası mesafe hesaplama
+     */
+    private Integer calculateDistanceBetweenAirports(Object originAirport, Object destinationAirport) {
+        // AutoRouteService'teki logic'i kullan
+        return 500; // Placeholder - gerçek implementation AutoRouteService'te
+    }
+
+    // Yeni helper method'lar
+    public Map<String, Object> previewMultiSegmentRoute(@Valid List<AirportSegmentRequest> segments) {
+        return autoRouteService.previewMultiSegmentRoute(segments);
+    }
+
+    public Map<String, Object> previewDirectRoute(Long originAirportId, Long destinationAirportId) {
+        return autoRouteService.previewRoute(originAirportId, destinationAirportId);
     }
 }

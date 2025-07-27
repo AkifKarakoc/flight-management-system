@@ -1,6 +1,7 @@
 package com.flightmanagement.flightservice.validator;
 
 import com.flightmanagement.flightservice.dto.cache.RouteCache;
+import com.flightmanagement.flightservice.dto.request.AirportSegmentRequest;
 import com.flightmanagement.flightservice.dto.request.FlightRequest;
 import com.flightmanagement.flightservice.entity.Flight;
 import com.flightmanagement.flightservice.exception.BusinessException;
@@ -10,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Component
 @RequiredArgsConstructor
@@ -20,7 +22,15 @@ public class FlightValidator {
 
     public void validateFlightRequest(FlightRequest request) {
         validateBasicRules(request);
-        validateRouteData(request);
+
+        if (request.isRouteBasedCreation()) {
+            validateRouteData(request);
+        }
+
+        if (request.isMultiSegmentAirportCreation()) {
+            validateMultiSegmentAirportData(request);
+        }
+
         validateReferenceData(request);
         validateBusinessRules(request);
     }
@@ -39,9 +49,9 @@ public class FlightValidator {
             throw new BusinessException("Scheduled arrival must be after scheduled departure");
         }
 
-        // Actual times consistency kontrolü
-        if (!request.areActualTimesValid()) {
-            throw new BusinessException("Actual arrival must be after actual departure");
+        // Route veya Airport bilgisi zorunlu
+        if (!request.hasValidFlightData()) {
+            throw new BusinessException("Either routeId, airport pair, or airport segments must be provided");
         }
 
         // Flight date, scheduled departure ile uyumlu olmalı
@@ -50,26 +60,24 @@ public class FlightValidator {
                 throw new BusinessException("Flight date must match scheduled departure date");
             }
         }
-
-        // Route ID zorunlu kontrolü
-        if (request.getRouteId() == null) {
-            throw new BusinessException("Route ID is required for all flights");
-        }
     }
 
     private void validateRouteData(FlightRequest request) {
         log.debug("Validating route-based flight with route ID: {}", request.getRouteId());
 
-        // Route'un varlığını kontrol et
         try {
             RouteCache route = referenceDataService.getRoute(request.getRouteId());
             if (route == null) {
                 throw new BusinessException("Route not found with ID: " + request.getRouteId());
             }
 
-            // Route aktif mi kontrol et
             if (route.getActive() != null && !route.getActive()) {
                 throw new BusinessException("Route is not active: " + request.getRouteId());
+            }
+
+            // Eğer request'te airport bilgileri de varsa tutarlılık kontrolü yap
+            if (request.isAirportBasedCreation()) {
+                validateRouteAirportConsistency(request, route);
             }
 
             log.debug("Route validation passed for route: {}", route.getRouteCode());
@@ -312,5 +320,80 @@ public class FlightValidator {
         // Bu method aircraft type'a göre route compatibility kontrolü yapar
         // Örneğin: Domestic aircraft international route'ta uçamaz gibi kurallar
         // Business requirement'a göre implement edilebilir
+    }
+
+    private void validateRouteAirportConsistency(FlightRequest request, RouteCache route) {
+        if (route.getOriginAirportId() != null && route.getDestinationAirportId() != null) {
+            if (!route.getOriginAirportId().equals(request.getOriginAirportId()) ||
+                    !route.getDestinationAirportId().equals(request.getDestinationAirportId())) {
+                throw new BusinessException("Route airports don't match provided airport IDs");
+            }
+        }
+    }
+
+    /**
+     * Multi-segment airport data validation
+     */
+    private void validateMultiSegmentAirportData(FlightRequest request) {
+        List<AirportSegmentRequest> segments = request.getAirportSegments();
+
+        if (segments == null || segments.size() < 2) {
+            throw new BusinessException("Multi-segment flight must have at least 2 segments");
+        }
+
+        if (segments.size() > 10) {
+            throw new BusinessException("Multi-segment flight cannot have more than 10 segments");
+        }
+
+        // Segment order validation
+        for (int i = 0; i < segments.size(); i++) {
+            AirportSegmentRequest segment = segments.get(i);
+
+            if (segment.getSegmentOrder() == null || segment.getSegmentOrder() != (i + 1)) {
+                throw new BusinessException("Segment order must be sequential starting from 1");
+            }
+
+            if (!segment.isValidSegment()) {
+                throw new BusinessException("Invalid segment " + (i + 1) + ": origin and destination must be different");
+            }
+
+            if (!segment.hasValidConnectionTime()) {
+                throw new BusinessException("Invalid connection time for segment " + (i + 1) + ": must be between 30-1440 minutes");
+            }
+        }
+
+        // Segment continuity validation
+        for (int i = 0; i < segments.size() - 1; i++) {
+            AirportSegmentRequest current = segments.get(i);
+            AirportSegmentRequest next = segments.get(i + 1);
+
+            if (!current.getDestinationAirportId().equals(next.getOriginAirportId())) {
+                throw new BusinessException(
+                        String.format("Segment %d destination must match segment %d origin", i + 1, i + 2));
+            }
+        }
+
+        // Airport existence validation
+        for (int i = 0; i < segments.size(); i++) {
+            AirportSegmentRequest segment = segments.get(i);
+
+            try {
+                var origin = referenceDataService.getAirport(segment.getOriginAirportId());
+                var destination = referenceDataService.getAirport(segment.getDestinationAirportId());
+
+                if (origin == null || !origin.getActive()) {
+                    throw new BusinessException("Invalid or inactive origin airport in segment " + (i + 1));
+                }
+
+                if (destination == null || !destination.getActive()) {
+                    throw new BusinessException("Invalid or inactive destination airport in segment " + (i + 1));
+                }
+            } catch (Exception e) {
+                if (e instanceof BusinessException) {
+                    throw e;
+                }
+                throw new BusinessException("Error validating airports for segment " + (i + 1) + ": " + e.getMessage());
+            }
+        }
     }
 }

@@ -7,6 +7,7 @@ import com.flightmanagement.flightservice.dto.cache.AirportCache;
 import com.flightmanagement.flightservice.event.ReferenceEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Profile;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.kafka.support.KafkaHeaders;
@@ -19,6 +20,7 @@ import java.util.Map;
 @Service
 @RequiredArgsConstructor
 @Slf4j
+@Profile("disabled")
 public class KafkaConsumerService {
 
     private final CacheService cacheService;

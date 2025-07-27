@@ -26,6 +26,12 @@ public class FlightRequest {
     // YENİ SISTEM: Route bazlı yaklaşım
     @NotNull(message = "Route ID is required")
     private Long routeId;
+    private Long originAirportId;
+    private Long destinationAirportId;
+    // Creation mode indicator (opsiyonel - frontend için)
+    private String creationMode; // "ROUTE" veya "AIRPORTS"
+    private List<AirportSegmentRequest> airportSegments;
+    private Boolean isMultiSegmentAirportFlight = false;
 
     @NotNull(message = "Flight date is required")
     @FutureOrPresent(message = "Flight date cannot be in the past")
@@ -171,5 +177,41 @@ public class FlightRequest {
             }
         }
         return true;
+    }
+
+    public boolean hasBothRouteAndAirports() {
+        return isRouteBasedCreation() && isAirportBasedCreation();
+    }
+
+    public boolean isRouteBasedCreation() {
+        return routeId != null;
+    }
+
+    public boolean isAirportBasedCreation() {
+        return originAirportId != null && destinationAirportId != null && !isMultiSegmentAirportCreation();
+    }
+
+    public boolean isMultiSegmentAirportCreation() {
+        return Boolean.TRUE.equals(isMultiSegmentAirportFlight) &&
+                airportSegments != null && airportSegments.size() >= 2;
+    }
+
+    public boolean hasValidFlightData() {
+        return isRouteBasedCreation() || isAirportBasedCreation() || isMultiSegmentAirportCreation();
+    }
+
+    // Multi-segment helpers
+    public Long getFirstOriginAirportId() {
+        if (isMultiSegmentAirportCreation()) {
+            return airportSegments.get(0).getOriginAirportId();
+        }
+        return originAirportId;
+    }
+
+    public Long getLastDestinationAirportId() {
+        if (isMultiSegmentAirportCreation()) {
+            return airportSegments.get(airportSegments.size() - 1).getDestinationAirportId();
+        }
+        return destinationAirportId;
     }
 }
