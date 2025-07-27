@@ -1,6 +1,7 @@
 package com.flightmanagement.flightservice.validator;
 
 import com.flightmanagement.flightservice.dto.request.FlightRequest;
+import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
 
 public class FlightCreationValidator implements ConstraintValidator<ValidFlightCreation, FlightRequest> {

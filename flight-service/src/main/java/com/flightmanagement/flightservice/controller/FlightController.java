@@ -27,11 +27,17 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.flightmanagement.flightservice.dto.request.AirportSegmentRequest;
 import com.flightmanagement.flightservice.dto.request.ConnectingFlightRequest;
+import com.flightmanagement.flightservice.dto.cache.RouteCache;
+import com.flightmanagement.flightservice.exception.BusinessException;
+import com.flightmanagement.flightservice.service.AutoRouteService;
+import com.flightmanagement.flightservice.service.ReferenceDataService;
 
 @RestController
 @RequestMapping("/api/v1/flights")
@@ -42,6 +48,8 @@ public class FlightController {
     private final FlightService flightService;
     private final CsvProcessingService csvProcessingService;
     private final FlightRepository flightRepository;
+    private final ReferenceDataService referenceDataService;
+    private final AutoRouteService autoRouteService;
 
     // ===============================
     // TEMEL FLIGHT CRUD İŞLEMLERİ
@@ -142,6 +150,246 @@ public class FlightController {
         log.info("Deleting flight with ID: {}", id);
         flightService.deleteFlight(id);
         return ResponseEntity.noContent().build();
+    }
+
+    // ===============================
+    // ROUTE PREVIEW ENDPOİNTLERİ
+    // ===============================
+
+    @GetMapping("/route-preview/direct")
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
+    public ResponseEntity<Map<String, Object>> previewDirectRoute(
+            @RequestParam Long originAirportId,
+            @RequestParam Long destinationAirportId) {
+
+        log.debug("Direct route preview request: {} -> {}", originAirportId, destinationAirportId);
+
+        try {
+            Map<String, Object> preview = flightService.previewDirectRoute(originAirportId, destinationAirportId);
+            return ResponseEntity.ok(preview);
+        } catch (BusinessException e) {
+            log.error("Business error in direct route preview: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", "Business Error",
+                    "message", e.getMessage(),
+                    "timestamp", LocalDateTime.now()
+            ));
+        } catch (Exception e) {
+            log.error("Error creating direct route preview: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
+                    "error", "Internal Server Error",
+                    "message", "Failed to create route preview",
+                    "timestamp", LocalDateTime.now()
+            ));
+        }
+    }
+
+    @PostMapping("/route-preview/multi-segment")
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
+    public ResponseEntity<Map<String, Object>> previewMultiSegmentRoute(
+            @RequestBody @Valid List<AirportSegmentRequest> segments) {
+
+        log.debug("Multi-segment route preview request for {} segments", segments.size());
+
+        if (segments == null || segments.size() < 2) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", "Invalid Request",
+                    "message", "Multi-segment preview requires at least 2 segments",
+                    "timestamp", LocalDateTime.now()
+            ));
+        }
+
+        if (segments.size() > 10) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", "Invalid Request",
+                    "message", "Multi-segment preview cannot have more than 10 segments",
+                    "timestamp", LocalDateTime.now()
+            ));
+        }
+
+        try {
+            Map<String, Object> preview = flightService.previewMultiSegmentRoute(segments);
+            return ResponseEntity.ok(preview);
+        } catch (BusinessException e) {
+            log.error("Business error in multi-segment route preview: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", "Business Error",
+                    "message", e.getMessage(),
+                    "timestamp", LocalDateTime.now()
+            ));
+        } catch (Exception e) {
+            log.error("Error creating multi-segment route preview: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
+                    "error", "Internal Server Error",
+                    "message", "Failed to create route preview",
+                    "timestamp", LocalDateTime.now()
+            ));
+        }
+    }
+
+    // ===============================
+    // CREATION MODE BİLGİ ENDPOİNTLERİ
+    // ===============================
+
+    @GetMapping("/creation-modes")
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
+    public ResponseEntity<Map<String, Object>> getFlightCreationModes() {
+        Map<String, Object> modes = new HashMap<>();
+
+        List<Map<String, Object>> availableModes = new ArrayList<>();
+
+        // Route-based mode
+        Map<String, Object> routeMode = new HashMap<>();
+        routeMode.put("id", "ROUTE");
+        routeMode.put("name", "Existing Route");
+        routeMode.put("description", "Select from existing routes in the system");
+        routeMode.put("icon", "route");
+        routeMode.put("color", "blue");
+        routeMode.put("fields", List.of("routeId"));
+        routeMode.put("complexity", "SIMPLE");
+        routeMode.put("recommended", true);
+        availableModes.add(routeMode);
+
+        // Airport-based mode
+        Map<String, Object> airportMode = new HashMap<>();
+        airportMode.put("id", "AIRPORTS");
+        airportMode.put("name", "Airport Pair");
+        airportMode.put("description", "Select origin and destination airports (direct flight)");
+        airportMode.put("icon", "airplane");
+        airportMode.put("color", "green");
+        airportMode.put("fields", List.of("originAirportId", "destinationAirportId"));
+        airportMode.put("complexity", "SIMPLE");
+        airportMode.put("recommended", false);
+        availableModes.add(airportMode);
+
+        // Multi-segment mode
+        Map<String, Object> multiMode = new HashMap<>();
+        multiMode.put("id", "MULTI_AIRPORTS");
+        multiMode.put("name", "Multi-Segment");
+        multiMode.put("description", "Create connecting flight with multiple segments");
+        multiMode.put("icon", "connecting-flights");
+        multiMode.put("color", "orange");
+        multiMode.put("fields", List.of("airportSegments"));
+        multiMode.put("complexity", "ADVANCED");
+        multiMode.put("recommended", false);
+        availableModes.add(multiMode);
+
+        modes.put("modes", availableModes);
+        modes.put("defaultMode", "ROUTE");
+        modes.put("constraints", Map.of(
+                "maxSegments", 10,
+                "minConnectionTime", 30,
+                "maxConnectionTime", 1440,
+                "minSegmentsForMulti", 2
+        ));
+
+        return ResponseEntity.ok(modes);
+    }
+
+    @PostMapping("/validate-creation-request")
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
+    public ResponseEntity<Map<String, Object>> validateFlightCreationRequest(
+            @RequestBody FlightRequest request) {
+
+        log.debug("Validating flight creation request: mode = {}, flight = {}",
+                request.getCreationMode(), request.getFlightNumber());
+
+        Map<String, Object> validation = new HashMap<>();
+        List<String> errors = new ArrayList<>();
+        List<String> warnings = new ArrayList<>();
+
+        try {
+            // Basic validation
+            if (request.getCreationMode() == null || request.getCreationMode().isEmpty()) {
+                errors.add("Creation mode is required");
+            }
+
+            // Use FlightRequest's built-in validation
+            List<String> requestErrors = request.getValidationErrors();
+            errors.addAll(requestErrors);
+
+            // Mode-specific additional validation
+            if (errors.isEmpty() || request.getCreationMode() != null) {
+                switch (request.getCreationMode()) {
+                    case "ROUTE":
+                        validateRouteBasedCreation(request, errors, warnings);
+                        break;
+                    case "AIRPORTS":
+                        validateAirportBasedCreation(request, errors, warnings);
+                        break;
+                    case "MULTI_AIRPORTS":
+                        validateMultiSegmentCreation(request, errors, warnings);
+                        break;
+                    default:
+                        errors.add("Invalid creation mode: " + request.getCreationMode());
+                }
+            }
+
+            // Flight timing validation
+            if (request.getScheduledDeparture() != null && request.getScheduledArrival() != null) {
+                if (!request.isFlightTimeValid()) {
+                    errors.add("Scheduled arrival must be after scheduled departure");
+                }
+
+                // Duration warnings
+                Integer duration = request.getEstimatedDurationMinutes();
+                if (duration != null) {
+                    if (duration < 30) {
+                        warnings.add("Flight duration seems very short (" + duration + " minutes)");
+                    } else if (duration > 1200) { // 20 hours
+                        warnings.add("Flight duration seems very long (" + duration + " minutes)");
+                    }
+                }
+            }
+
+            // Flight type consistency
+            if (!request.isFlightTypeConsistent()) {
+                errors.add("Flight type is not consistent with passenger/cargo counts");
+            }
+
+            // Duplicate flight number check (if flight date is provided)
+            if (request.getFlightDate() != null && request.getFlightNumber() != null) {
+                try {
+                    boolean exists = flightRepository.existsByFlightNumberAndFlightDate(
+                            request.getFlightNumber(), request.getFlightDate());
+                    if (exists) {
+                        errors.add("Flight number already exists for this date: " + request.getFlightNumber());
+                    }
+                } catch (Exception e) {
+                    warnings.add("Could not check for duplicate flight number");
+                }
+            }
+
+            validation.put("valid", errors.isEmpty());
+            validation.put("errors", errors);
+            validation.put("warnings", warnings);
+            validation.put("errorCount", errors.size());
+            validation.put("warningCount", warnings.size());
+            validation.put("creationMode", request.getCreationMode());
+            validation.put("complexity", getComplexityLevel(request));
+            validation.put("timestamp", LocalDateTime.now());
+
+            if (errors.isEmpty()) {
+                validation.put("message", "Flight creation request is valid");
+                validation.put("readyToCreate", true);
+            } else {
+                validation.put("message", "Flight creation request has validation errors");
+                validation.put("readyToCreate", false);
+            }
+
+            return ResponseEntity.ok(validation);
+
+        } catch (Exception e) {
+            log.error("Error validating flight creation request: {}", e.getMessage());
+
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("valid", false);
+            errorResponse.put("errors", List.of("Validation process failed: " + e.getMessage()));
+            errorResponse.put("warnings", List.of());
+            errorResponse.put("timestamp", LocalDateTime.now());
+
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
     }
 
     // ===============================
@@ -584,9 +832,209 @@ public class FlightController {
     public ResponseEntity<Map<String, Object>> healthCheck() {
         Map<String, Object> health = new HashMap<>();
         health.put("status", "UP");
-        health.put("service", "flight-service");
+        health.put("service", "Flight Service");
         health.put("timestamp", LocalDateTime.now());
-        health.put("version", "2.0-ROUTE-BASED");
         return ResponseEntity.ok(health);
+    }
+
+
+    // ===============================
+    // VALIDATION HELPER METHODS
+    // ===============================
+
+    private void validateRouteBasedCreation(FlightRequest request, List<String> errors, List<String> warnings) {
+        if (request.getRouteId() == null) {
+            errors.add("Route ID is required for route-based creation");
+            return;
+        }
+
+        try {
+            RouteCache route = referenceDataService.getRoute(request.getRouteId());
+            if (route == null) {
+                errors.add("Selected route does not exist");
+            } else if (!route.isActive()) {
+                errors.add("Selected route is inactive");
+            } else {
+                // Add route info to warnings for user information
+                warnings.add("Using route: " + route.getRouteCode() + " (" + route.getRouteName() + ")");
+
+                if (route.isMultiSegmentRoute()) {
+                    warnings.add("Selected route is multi-segment with " + route.getSegmentCount() + " segments");
+                }
+
+                // Distance/time warnings
+                if (route.getDistance() != null && route.getDistance() > 5000) {
+                    warnings.add("This is a long-haul route (" + route.getDistance() + " km)");
+                }
+            }
+        } catch (Exception e) {
+            errors.add("Failed to validate selected route: " + e.getMessage());
+        }
+    }
+
+    private void validateAirportBasedCreation(FlightRequest request, List<String> errors, List<String> warnings) {
+        if (request.getOriginAirportId() == null) {
+            errors.add("Origin airport is required for airport-based creation");
+        }
+        if (request.getDestinationAirportId() == null) {
+            errors.add("Destination airport is required for airport-based creation");
+        }
+
+        if (request.getOriginAirportId() != null && request.getDestinationAirportId() != null) {
+            if (request.getOriginAirportId().equals(request.getDestinationAirportId())) {
+                errors.add("Origin and destination airports cannot be the same");
+                return;
+            }
+
+            try {
+                var originAirport = referenceDataService.getAirport(request.getOriginAirportId());
+                var destAirport = referenceDataService.getAirport(request.getDestinationAirportId());
+
+                if (originAirport == null) {
+                    errors.add("Origin airport does not exist");
+                } else if (!originAirport.getActive()) {
+                    errors.add("Origin airport is inactive");
+                }
+
+                if (destAirport == null) {
+                    errors.add("Destination airport does not exist");
+                } else if (!destAirport.getActive()) {
+                    errors.add("Destination airport is inactive");
+                }
+
+                if (originAirport != null && destAirport != null &&
+                        originAirport.getActive() && destAirport.getActive()) {
+
+                    // Country-based warnings
+                    String originCountry = originAirport.getCountry();
+                    String destCountry = destAirport.getCountry();
+
+                    if (originCountry != null && destCountry != null) {
+                        if (!originCountry.equals(destCountry)) {
+                            warnings.add("This appears to be an international flight");
+                        } else {
+                            warnings.add("This appears to be a domestic flight");
+                        }
+                    }
+
+                    // Check if route already exists
+                    try {
+                        RouteCache existingRoute = autoRouteService.findExistingDirectRoute(
+                                request.getOriginAirportId(), request.getDestinationAirportId());
+
+                        if (existingRoute != null) {
+                            warnings.add("Route already exists: " + existingRoute.getRouteCode());
+                            warnings.add("Will use existing route instead of creating new one");
+                        } else {
+                            warnings.add("Will create new route for this airport pair");
+                        }
+                    } catch (Exception e) {
+                        warnings.add("Could not check for existing route");
+                    }
+                }
+
+            } catch (Exception e) {
+                errors.add("Failed to validate airports: " + e.getMessage());
+            }
+        }
+    }
+
+    private void validateMultiSegmentCreation(FlightRequest request, List<String> errors, List<String> warnings) {
+        if (request.getAirportSegments() == null || request.getAirportSegments().isEmpty()) {
+            errors.add("Airport segments are required for multi-segment creation");
+            return;
+        }
+
+        List<AirportSegmentRequest> segments = request.getAirportSegments();
+
+        if (segments.size() < 2) {
+            errors.add("Multi-segment creation requires at least 2 segments");
+        }
+
+        if (segments.size() > 10) {
+            errors.add("Multi-segment creation cannot have more than 10 segments");
+        }
+
+        // Complexity warnings
+        if (segments.size() > 5) {
+            warnings.add("This is a complex multi-segment flight with " + segments.size() + " segments");
+        }
+
+        if (segments.size() > 3) {
+            warnings.add("Consider using fewer segments for better operational efficiency");
+        }
+
+        // Validate each segment
+        for (int i = 0; i < segments.size(); i++) {
+            AirportSegmentRequest segment = segments.get(i);
+
+            try {
+                var originAirport = referenceDataService.getAirport(segment.getOriginAirportId());
+                var destAirport = referenceDataService.getAirport(segment.getDestinationAirportId());
+
+                if (originAirport == null) {
+                    errors.add("Segment " + (i + 1) + ": Origin airport does not exist");
+                } else if (!originAirport.getActive()) {
+                    errors.add("Segment " + (i + 1) + ": Origin airport is inactive");
+                }
+
+                if (destAirport == null) {
+                    errors.add("Segment " + (i + 1) + ": Destination airport does not exist");
+                } else if (!destAirport.getActive()) {
+                    errors.add("Segment " + (i + 1) + ": Destination airport is inactive");
+                }
+
+                // Connection time warnings
+                if (segment.getConnectionTimeMinutes() != null) {
+                    if (segment.getConnectionTimeMinutes() < 45) {
+                        warnings.add("Segment " + (i + 1) + ": Tight connection time (" +
+                                segment.getConnectionTimeMinutes() + " minutes)");
+                    } else if (segment.getConnectionTimeMinutes() > 480) {
+                        warnings.add("Segment " + (i + 1) + ": Very long connection time (" +
+                                segment.getConnectionTimeMinutes() + " minutes)");
+                    }
+                }
+
+            } catch (Exception e) {
+                errors.add("Segment " + (i + 1) + ": Failed to validate airports");
+            }
+        }
+
+        // Check if multi-segment route already exists
+        try {
+            RouteCache existingRoute = autoRouteService.findExistingMultiSegmentRoute(segments);
+            if (existingRoute != null) {
+                warnings.add("Multi-segment route already exists: " + existingRoute.getRouteCode());
+                warnings.add("Will use existing route instead of creating new one");
+            } else {
+                warnings.add("Will create new multi-segment route");
+            }
+        } catch (Exception e) {
+            warnings.add("Could not check for existing multi-segment route");
+        }
+    }
+
+    private String getComplexityLevel(FlightRequest request) {
+        if (request.getCreationMode() == null) {
+            return "UNKNOWN";
+        }
+
+        switch (request.getCreationMode()) {
+            case "ROUTE":
+                return "SIMPLE";
+            case "AIRPORTS":
+                return "MODERATE";
+            case "MULTI_AIRPORTS":
+                int segmentCount = request.getAirportSegments() != null ? request.getAirportSegments().size() : 0;
+                if (segmentCount <= 3) {
+                    return "MODERATE";
+                } else if (segmentCount <= 6) {
+                    return "COMPLEX";
+                } else {
+                    return "VERY_COMPLEX";
+                }
+            default:
+                return "UNKNOWN";
+        }
     }
 }

@@ -52,6 +52,22 @@ public class AutoRouteService {
     }
 
     /**
+     * PUBLIC: Mevcut direct route bulma (FlightService için)
+     */
+    public RouteCache findExistingDirectRoute(Long originAirportId, Long destinationAirportId) {
+        log.debug("Finding existing direct route for {} -> {}", originAirportId, destinationAirportId);
+        return findExactDirectRoute(originAirportId, destinationAirportId);
+    }
+
+    /**
+     * PUBLIC: Mevcut multi-segment route bulma (FlightService için)
+     */
+    public RouteCache findExistingMultiSegmentRoute(List<AirportSegmentRequest> segments) {
+        log.debug("Finding existing multi-segment route for {} segments", segments.size());
+        return findExactMultiSegmentRoute(segments);
+    }
+
+    /**
      * Multi-segment için route bulur veya oluşturur
      */
     public Long findOrCreateMultiSegmentRoute(List<AirportSegmentRequest> airportSegments, String mainFlightNumber) {
@@ -74,51 +90,60 @@ public class AutoRouteService {
         }
     }
 
-    /**
-     * Exact direct route bulma
-     */
     private RouteCache findExactDirectRoute(Long originAirportId, Long destinationAirportId) {
         try {
             RouteCache[] existingRoutes = referenceDataService.getActiveRoutes();
 
+            if (existingRoutes == null || existingRoutes.length == 0) {
+                log.debug("No active routes found in system");
+                return null;
+            }
+
             for (RouteCache route : existingRoutes) {
                 if (isExactDirectMatch(route, originAirportId, destinationAirportId)) {
+                    log.debug("Found exact direct route match: {} ({})", route.getRouteCode(), route.getId());
                     return route;
                 }
             }
+
+            log.debug("No direct route found for {} -> {}", originAirportId, destinationAirportId);
+            return null;
+
         } catch (Exception e) {
             log.warn("Error searching existing direct routes: {}", e.getMessage());
+            return null;
         }
-        return null;
     }
 
-    /**
-     * Exact multi-segment route bulma
-     */
     private RouteCache findExactMultiSegmentRoute(List<AirportSegmentRequest> segments) {
         try {
             RouteCache[] existingRoutes = referenceDataService.getActiveRoutes();
 
+            if (existingRoutes == null || existingRoutes.length == 0) {
+                log.debug("No active routes found in system");
+                return null;
+            }
+
             for (RouteCache route : existingRoutes) {
-                if (isExactMultiSegmentMatch(route, segments)) {
+                if (isValidMultiSegmentRoute(route) && isExactMultiSegmentMatch(route, segments)) {
+                    log.debug("Found exact multi-segment route match: {} ({})", route.getRouteCode(), route.getId());
                     return route;
                 }
             }
+
+            log.debug("No multi-segment route found for {} segments", segments.size());
+            return null;
+
         } catch (Exception e) {
             log.warn("Error searching existing multi-segment routes: {}", e.getMessage());
+            return null;
         }
-        return null;
     }
 
-    /**
-     * Direct route exact match kontrolü
-     */
     private boolean isExactDirectMatch(RouteCache route, Long originId, Long destId) {
-        return route.getOriginAirportId() != null &&
-                route.getDestinationAirportId() != null &&
+        return isValidAndActiveRoute(route) &&
                 route.getOriginAirportId().equals(originId) &&
                 route.getDestinationAirportId().equals(destId) &&
-                route.isActive() &&
                 !route.isMultiSegmentRoute(); // Tek segment olmalı
     }
 
@@ -132,15 +157,48 @@ public class AutoRouteService {
             return false;
         }
 
-        // TODO: Segment detaylarını karşılaştır
-        // Bu için Reference Manager'dan route segments'leri almak gerekir
-        // Şimdilik false döndürüyoruz - implementation'ı daha sonra tamamlarız
-        return false;
+        try {
+            // Reference Manager'dan route segments'leri al ve karşılaştır
+            Object[] routeSegments = getRouteSegmentsFromReferenceManager(route.getId());
+
+            if (routeSegments.length != segments.size()) {
+                return false;
+            }
+
+            // Her segment'i sırasıyla karşılaştır
+            for (int i = 0; i < segments.size(); i++) {
+                AirportSegmentRequest requestSegment = segments.get(i);
+                Object routeSegment = routeSegments[i];
+
+                // Origin ve destination airport ID'lerini karşılaştır
+                Long routeOriginId = getSegmentOriginId(routeSegment);
+                Long routeDestinationId = getSegmentDestinationId(routeSegment);
+
+                if (routeOriginId == null || routeDestinationId == null) {
+                    log.warn("Invalid route segment data for route {} segment {}", route.getId(), i + 1);
+                    return false;
+                }
+
+                if (!requestSegment.getOriginAirportId().equals(routeOriginId) ||
+                        !requestSegment.getDestinationAirportId().equals(routeDestinationId)) {
+                    return false;
+                }
+
+                // Segment order kontrolü
+                Integer segmentOrder = getSegmentOrder(routeSegment);
+                if (segmentOrder == null || !segmentOrder.equals(requestSegment.getSegmentOrder())) {
+                    return false;
+                }
+            }
+
+            return true;
+
+        } catch (Exception e) {
+            log.warn("Error comparing route segments for route {}: {}", route.getId(), e.getMessage());
+            return false;
+        }
     }
 
-    /**
-     * Yeni direct route oluşturma
-     */
     private Long createNewDirectRoute(Long originAirportId, Long destinationAirportId) {
         try {
             AirportCache originAirport = referenceDataService.getAirport(originAirportId);
@@ -150,8 +208,12 @@ public class AutoRouteService {
                 throw new RuntimeException("Invalid airport IDs provided");
             }
 
+            if (!originAirport.getActive() || !destinationAirport.getActive()) {
+                throw new RuntimeException("One or both airports are inactive");
+            }
+
             Map<String, Object> routeData = buildDirectRouteData(originAirport, destinationAirport);
-            return createRouteInReferenceManager(routeData);
+            return createRouteWithErrorHandling(routeData, "direct");
 
         } catch (Exception e) {
             log.error("Error creating new direct route: {}", e.getMessage(), e);
@@ -159,13 +221,26 @@ public class AutoRouteService {
         }
     }
 
-    /**
-     * Yeni multi-segment route oluşturma
-     */
     private Long createNewMultiSegmentRoute(List<AirportSegmentRequest> airportSegments, String mainFlightNumber) {
         try {
+            // Validate all airports exist and are active
+            for (int i = 0; i < airportSegments.size(); i++) {
+                AirportSegmentRequest segment = airportSegments.get(i);
+
+                AirportCache origin = referenceDataService.getAirport(segment.getOriginAirportId());
+                AirportCache destination = referenceDataService.getAirport(segment.getDestinationAirportId());
+
+                if (origin == null || destination == null) {
+                    throw new RuntimeException("Invalid airport IDs in segment " + (i + 1));
+                }
+
+                if (!origin.getActive() || !destination.getActive()) {
+                    throw new RuntimeException("Inactive airport in segment " + (i + 1));
+                }
+            }
+
             Map<String, Object> routeData = buildMultiSegmentRouteData(airportSegments, mainFlightNumber);
-            return createRouteInReferenceManager(routeData);
+            return createRouteWithErrorHandling(routeData, "multi-segment");
 
         } catch (Exception e) {
             log.error("Error creating new multi-segment route: {}", e.getMessage(), e);
@@ -173,131 +248,79 @@ public class AutoRouteService {
         }
     }
 
-    /**
-     * Direct route data builder
-     */
     private Map<String, Object> buildDirectRouteData(AirportCache originAirport, AirportCache destinationAirport) {
         Map<String, Object> routeData = new HashMap<>();
-
-        String routeCode = generateDirectRouteCode(originAirport.getIataCode(), destinationAirport.getIataCode());
-        String routeName = String.format("%s to %s Route", originAirport.getName(), destinationAirport.getName());
-        String routeType = determineRouteType(originAirport.getCountry(), destinationAirport.getCountry());
-        Integer distance = calculateEstimatedDistance(originAirport, destinationAirport);
-        Integer flightTime = calculateEstimatedFlightTime(distance);
-
-        routeData.put("routeCode", routeCode);
-        routeData.put("routeName", routeName);
-        routeData.put("routeType", routeType);
-        routeData.put("visibility", "PUBLIC");
-        routeData.put("active", true);
-        routeData.put("distance", distance);
-        routeData.put("estimatedFlightTime", flightTime);
+        routeData.put("originAirportId", originAirport.getId());
+        routeData.put("destinationAirportId", destinationAirport.getId());
+        routeData.put("routeName", originAirport.getName() + " to " + destinationAirport.getName());
+        routeData.put("routeCode", generateDirectRouteCode(originAirport.getIataCode(), destinationAirport.getIataCode()));
+        routeData.put("routeType", determineRouteType(originAirport.getCountry(), destinationAirport.getCountry()));
         routeData.put("isMultiSegment", false);
+        routeData.put("active", true);
 
-        // Single segment
-        Map<String, Object> segment = new HashMap<>();
-        segment.put("segmentOrder", 1);
-        segment.put("originAirportId", originAirport.getId());
-        segment.put("destinationAirportId", destinationAirport.getId());
-        segment.put("distance", distance);
-        segment.put("estimatedFlightTime", flightTime);
-        segment.put("active", true);
-
-        routeData.put("segments", java.util.List.of(segment));
+        // Calculate distance and flight time
+        Integer distance = calculateEstimatedDistance(originAirport, destinationAirport);
+        routeData.put("distance", distance);
+        routeData.put("estimatedFlightTime", calculateEstimatedFlightTime(distance));
 
         return routeData;
     }
 
-    /**
-     * Multi-segment route data builder
-     */
     private Map<String, Object> buildMultiSegmentRouteData(List<AirportSegmentRequest> airportSegments, String mainFlightNumber) {
         Map<String, Object> routeData = new HashMap<>();
 
-        // İlk ve son airport'ları al
-        AirportSegmentRequest firstSegment = airportSegments.get(0);
-        AirportSegmentRequest lastSegment = airportSegments.get(airportSegments.size() - 1);
+        AirportCache firstSegmentOrigin = referenceDataService.getAirport(airportSegments.get(0).getOriginAirportId());
+        AirportCache lastSegmentDestination = referenceDataService.getAirport(airportSegments.get(airportSegments.size() - 1).getDestinationAirportId());
 
-        AirportCache firstOrigin = referenceDataService.getAirport(firstSegment.getOriginAirportId());
-        AirportCache lastDestination = referenceDataService.getAirport(lastSegment.getDestinationAirportId());
-
-        if (firstOrigin == null || lastDestination == null) {
-            throw new RuntimeException("Invalid airport IDs in segments");
-        }
-
-        String routeCode = generateMultiSegmentRouteCode(firstOrigin.getIataCode(), lastDestination.getIataCode(), airportSegments.size());
-        String routeName = String.format("%s to %s Multi-Segment Route (%d stops)",
-                firstOrigin.getName(), lastDestination.getName(), airportSegments.size() - 1);
-
-        // Route type'ı tüm segment'lere göre belirle
-        String routeType = determineMultiSegmentRouteType(airportSegments);
-
-        // Total distance ve time hesapla
-        Integer totalDistance = calculateTotalDistance(airportSegments);
-        Integer totalFlightTime = calculateTotalFlightTime(airportSegments);
-
-        routeData.put("routeCode", routeCode);
-        routeData.put("routeName", routeName);
-        routeData.put("routeType", routeType);
-        routeData.put("visibility", "PUBLIC");
-        routeData.put("active", true);
-        routeData.put("distance", totalDistance);
-        routeData.put("estimatedFlightTime", totalFlightTime);
+        routeData.put("originAirportId", firstSegmentOrigin.getId());
+        routeData.put("destinationAirportId", lastSegmentDestination.getId());
+        routeData.put("routeName", mainFlightNumber + " Multi-Segment Route");
+        routeData.put("routeCode", generateMultiSegmentRouteCode(firstSegmentOrigin.getIataCode(),
+                lastSegmentDestination.getIataCode(), airportSegments.size()));
+        routeData.put("routeType", determineMultiSegmentRouteType(airportSegments));
         routeData.put("isMultiSegment", true);
+        routeData.put("segmentCount", airportSegments.size());
+        routeData.put("active", true);
 
-        // Segments oluştur
-        List<Map<String, Object>> segments = new ArrayList<>();
-        for (int i = 0; i < airportSegments.size(); i++) {
-            AirportSegmentRequest airportSegment = airportSegments.get(i);
+        // Total distance and flight time calculation
+        routeData.put("distance", calculateTotalDistance(airportSegments));
+        routeData.put("estimatedFlightTime", calculateTotalFlightTime(airportSegments));
 
-            AirportCache origin = referenceDataService.getAirport(airportSegment.getOriginAirportId());
-            AirportCache destination = referenceDataService.getAirport(airportSegment.getDestinationAirportId());
-
-            if (origin == null || destination == null) {
-                throw new RuntimeException("Invalid airport ID in segment " + (i + 1));
-            }
-
-            Integer segmentDistance = calculateEstimatedDistance(origin, destination);
-            Integer segmentFlightTime = calculateEstimatedFlightTime(segmentDistance);
-
-            Map<String, Object> segment = new HashMap<>();
-            segment.put("segmentOrder", i + 1);
-            segment.put("originAirportId", airportSegment.getOriginAirportId());
-            segment.put("destinationAirportId", airportSegment.getDestinationAirportId());
-            segment.put("distance", segmentDistance);
-            segment.put("estimatedFlightTime", segmentFlightTime);
-            segment.put("active", true);
-
-            segments.add(segment);
+        // Segments data
+        List<Map<String, Object>> segmentsData = new ArrayList<>();
+        for (AirportSegmentRequest segment : airportSegments) {
+            Map<String, Object> segmentData = new HashMap<>();
+            segmentData.put("originAirportId", segment.getOriginAirportId());
+            segmentData.put("destinationAirportId", segment.getDestinationAirportId());
+            segmentData.put("segmentOrder", segment.getSegmentOrder());
+            segmentData.put("connectionTimeMinutes", segment.getConnectionTimeMinutes());
+            segmentsData.add(segmentData);
         }
-
-        routeData.put("segments", segments);
+        routeData.put("segments", segmentsData);
 
         return routeData;
     }
 
-    /**
-     * Reference Manager'a route creation request
-     */
     private Long createRouteInReferenceManager(Map<String, Object> routeData) {
         String url = referenceServiceUrl + "/api/v1/routes";
         HttpHeaders headers = createAuthHeaders();
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(routeData, headers);
 
-        ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.POST, request, Map.class);
-
-        if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-            Object idObj = response.getBody().get("id");
-            Long routeId = ((Number) idObj).longValue();
-
-            log.info("Created new route with ID: {}", routeId);
-            return routeId;
-        } else {
-            throw new RuntimeException("Failed to create route in Reference Manager");
+        try {
+            ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.POST, request, Map.class);
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                Object id = response.getBody().get("id");
+                if (id != null) {
+                    return ((Number) id).longValue();
+                }
+            }
+            throw new RuntimeException("Failed to get ID from reference manager response");
+        } catch (Exception e) {
+            log.error("Error creating route in reference manager: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to create route in reference manager", e);
         }
     }
 
-    // Helper methods
     private String generateDirectRouteCode(String originCode, String destCode) {
         long timestamp = System.currentTimeMillis() % 10000;
         return String.format("%s-%s-D%d", originCode, destCode, timestamp);
@@ -317,191 +340,224 @@ public class AutoRouteService {
     }
 
     private String determineMultiSegmentRouteType(List<AirportSegmentRequest> segments) {
-        try {
-            Set<String> countries = new HashSet<>();
-
-            for (AirportSegmentRequest segment : segments) {
-                AirportCache origin = referenceDataService.getAirport(segment.getOriginAirportId());
-                AirportCache destination = referenceDataService.getAirport(segment.getDestinationAirportId());
-
-                if (origin != null && origin.getCountry() != null) {
-                    countries.add(origin.getCountry());
-                }
-                if (destination != null && destination.getCountry() != null) {
-                    countries.add(destination.getCountry());
-                }
-            }
-
-            return countries.size() > 1 ? "INTERNATIONAL" : "DOMESTIC";
-        } catch (Exception e) {
-            log.warn("Error determining multi-segment route type: {}", e.getMessage());
-            return "INTERNATIONAL"; // Default to international for safety
+        if (segments.isEmpty()) {
+            return "UNKNOWN";
         }
+        String firstCountry = referenceDataService.getAirport(segments.get(0).getOriginAirportId()).getCountry();
+        String lastCountry = referenceDataService.getAirport(segments.get(segments.size() - 1).getDestinationAirportId()).getCountry();
+
+        for (AirportSegmentRequest segment : segments) {
+            String originCountry = referenceDataService.getAirport(segment.getOriginAirportId()).getCountry();
+            String destCountry = referenceDataService.getAirport(segment.getDestinationAirportId()).getCountry();
+            if (!originCountry.equals(destCountry)) {
+                return "INTERNATIONAL";
+            }
+        }
+        return firstCountry.equals(lastCountry) ? "DOMESTIC" : "INTERNATIONAL";
     }
 
     private Integer calculateTotalDistance(List<AirportSegmentRequest> segments) {
         int totalDistance = 0;
-
         for (AirportSegmentRequest segment : segments) {
-            try {
-                AirportCache origin = referenceDataService.getAirport(segment.getOriginAirportId());
-                AirportCache destination = referenceDataService.getAirport(segment.getDestinationAirportId());
-
-                if (origin != null && destination != null) {
-                    totalDistance += calculateEstimatedDistance(origin, destination);
-                }
-            } catch (Exception e) {
-                log.warn("Error calculating distance for segment: {}", e.getMessage());
-                totalDistance += 500; // Default segment distance
+            AirportCache origin = referenceDataService.getAirport(segment.getOriginAirportId());
+            AirportCache dest = referenceDataService.getAirport(segment.getDestinationAirportId());
+            if (origin != null && dest != null) {
+                totalDistance += calculateEstimatedDistance(origin, dest);
             }
         }
-
         return totalDistance;
     }
 
     private Integer calculateTotalFlightTime(List<AirportSegmentRequest> segments) {
-        int totalFlightTime = 0;
-
+        int totalTime = 0;
         for (AirportSegmentRequest segment : segments) {
-            try {
-                AirportCache origin = referenceDataService.getAirport(segment.getOriginAirportId());
-                AirportCache destination = referenceDataService.getAirport(segment.getDestinationAirportId());
-
-                if (origin != null && destination != null) {
-                    Integer distance = calculateEstimatedDistance(origin, destination);
-                    totalFlightTime += calculateEstimatedFlightTime(distance);
-                }
-
-                // Connection time ekle (son segment hariç)
-                if (segment.getConnectionTimeMinutes() != null) {
-                    totalFlightTime += segment.getConnectionTimeMinutes();
-                }
-            } catch (Exception e) {
-                log.warn("Error calculating flight time for segment: {}", e.getMessage());
-                totalFlightTime += 90; // Default segment time
+            AirportCache origin = referenceDataService.getAirport(segment.getOriginAirportId());
+            AirportCache dest = referenceDataService.getAirport(segment.getDestinationAirportId());
+            if (origin != null && dest != null) {
+                totalTime += calculateEstimatedFlightTime(calculateEstimatedDistance(origin, dest));
+            }
+            if (segment.getConnectionTimeMinutes() != null) {
+                totalTime += segment.getConnectionTimeMinutes();
             }
         }
-
-        return totalFlightTime;
+        return totalTime;
     }
 
-    // Existing helper methods...
     private Integer calculateEstimatedDistance(AirportCache origin, AirportCache destination) {
         if (origin.getLatitude() != null && origin.getLongitude() != null &&
                 destination.getLatitude() != null && destination.getLongitude() != null) {
-
-            return calculateHaversineDistance(
-                    origin.getLatitude(), origin.getLongitude(),
-                    destination.getLatitude(), destination.getLongitude()
-            );
+            return calculateHaversineDistance(origin.getLatitude(), origin.getLongitude(),
+                    destination.getLatitude(), destination.getLongitude());
         }
-
-        if (origin.getCountry() != null && destination.getCountry() != null) {
-            if (origin.getCountry().equals(destination.getCountry())) {
-                return 400; // Domestic flight average
-            } else {
-                return 1200; // International flight average
-            }
-        }
-
-        return 600; // Default estimate
+        return 500; // Fallback
     }
 
     private Integer calculateHaversineDistance(double lat1, double lon1, double lat2, double lon2) {
-        final int R = 6371; // Earth's radius in kilometers
+        final int R = 6371; // Radius of the earth
 
         double latDistance = Math.toRadians(lat2 - lat1);
         double lonDistance = Math.toRadians(lon2 - lon1);
-
         double a = Math.sin(latDistance / 2) * Math.sin(latDistance / 2)
                 + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
                 * Math.sin(lonDistance / 2) * Math.sin(lonDistance / 2);
-
         double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        double distance = R * c;
 
-        return (int) (R * c); // Distance in km
+        return (int) distance;
     }
 
     private Integer calculateEstimatedFlightTime(Integer distance) {
-        if (distance != null) {
-            double hours = distance / 800.0; // 800 km/h average speed
-            return (int) Math.ceil(hours * 60); // Convert to minutes
-        }
-        return 90; // Default 1.5 hours
+        if (distance == null) return 0;
+        return (int) Math.ceil(distance / 800.0 * 60); // 800 km/h avg speed
     }
 
     private HttpHeaders createAuthHeaders() {
         HttpHeaders headers = new HttpHeaders();
-        String token = serviceTokenManager.getServiceToken();
-        if (token != null) {
-            headers.setBearerAuth(token);
-        }
+        headers.set("Authorization", "Bearer " + serviceTokenManager.getServiceToken());
         headers.set("Content-Type", "application/json");
         return headers;
     }
 
-    /**
-     * Multi-segment route preview
-     */
     public Map<String, Object> previewMultiSegmentRoute(List<AirportSegmentRequest> segments) {
+        Map<String, Object> preview = new HashMap<>();
         try {
-            Map<String, Object> preview = new HashMap<>();
-
-            // Segment details
             List<Map<String, Object>> segmentPreviews = new ArrayList<>();
             int totalDistance = 0;
-            int totalFlightTime = 0;
+            int totalTime = 0;
 
-            for (int i = 0; i < segments.size(); i++) {
-                AirportSegmentRequest segment = segments.get(i);
+            for (AirportSegmentRequest segment : segments) {
                 AirportCache origin = referenceDataService.getAirport(segment.getOriginAirportId());
-                AirportCache destination = referenceDataService.getAirport(segment.getDestinationAirportId());
-
-                if (origin == null || destination == null) {
-                    throw new RuntimeException("Invalid airport ID in segment " + (i + 1));
+                AirportCache dest = referenceDataService.getAirport(segment.getDestinationAirportId());
+                if (origin != null && dest != null) {
+                    Map<String, Object> segmentPreview = new HashMap<>();
+                    segmentPreview.put("origin", origin);
+                    segmentPreview.put("destination", dest);
+                    int distance = calculateEstimatedDistance(origin, dest);
+                    int time = calculateEstimatedFlightTime(distance);
+                    segmentPreview.put("distance", distance);
+                    segmentPreview.put("estimatedTime", time);
+                    segmentPreviews.add(segmentPreview);
+                    totalDistance += distance;
+                    totalTime += time + (segment.getConnectionTimeMinutes() != null ? segment.getConnectionTimeMinutes() : 0);
                 }
-
-                Integer segmentDistance = calculateEstimatedDistance(origin, destination);
-                Integer segmentFlightTime = calculateEstimatedFlightTime(segmentDistance);
-
-                totalDistance += segmentDistance;
-                totalFlightTime += segmentFlightTime;
-
-                if (segment.getConnectionTimeMinutes() != null) {
-                    totalFlightTime += segment.getConnectionTimeMinutes();
-                }
-
-                Map<String, Object> segmentPreview = new HashMap<>();
-                segmentPreview.put("segmentOrder", i + 1);
-                segmentPreview.put("originAirport", origin);
-                segmentPreview.put("destinationAirport", destination);
-                segmentPreview.put("distance", segmentDistance);
-                segmentPreview.put("flightTime", segmentFlightTime);
-                segmentPreview.put("connectionTime", segment.getConnectionTimeMinutes());
-                segmentPreview.put("route", origin.getIataCode() + " → " + destination.getIataCode());
-
-                segmentPreviews.add(segmentPreview);
             }
-
-            // Overall preview
-            AirportSegmentRequest firstSegment = segments.get(0);
-            AirportSegmentRequest lastSegment = segments.get(segments.size() - 1);
-
-            AirportCache firstOrigin = referenceDataService.getAirport(firstSegment.getOriginAirportId());
-            AirportCache lastDestination = referenceDataService.getAirport(lastSegment.getDestinationAirportId());
-
             preview.put("segments", segmentPreviews);
-            preview.put("totalSegments", segments.size());
             preview.put("totalDistance", totalDistance);
-            preview.put("totalFlightTime", totalFlightTime);
+            preview.put("totalEstimatedTime", totalTime);
             preview.put("routeType", determineMultiSegmentRouteType(segments));
-            preview.put("overallRoute", firstOrigin.getIataCode() + " → " + lastDestination.getIataCode());
-            preview.put("stopCount", segments.size() - 1);
-
-            return preview;
         } catch (Exception e) {
             log.error("Error creating multi-segment route preview: {}", e.getMessage());
-            throw new RuntimeException("Failed to create route preview", e);
+            preview.put("error", "Failed to create preview: " + e.getMessage());
+        }
+        return preview;
+    }
+
+    /**
+     * Reference Manager'dan route segments'leri alır
+     */
+    private Object[] getRouteSegmentsFromReferenceManager(Long routeId) {
+        try {
+            String url = referenceServiceUrl + "/api/v1/routes/" + routeId + "/segments";
+            HttpHeaders headers = createAuthHeaders();
+            HttpEntity<String> request = new HttpEntity<>(headers);
+
+            ResponseEntity<Object[]> response = restTemplate.exchange(url, HttpMethod.GET, request, Object[].class);
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                log.debug("Retrieved {} segments for route {}", response.getBody().length, routeId);
+                return response.getBody();
+            }
+
+            log.warn("No segments found for route {}", routeId);
+            return new Object[0];
+
+        } catch (Exception e) {
+            log.warn("Error fetching route segments for route {}: {}", routeId, e.getMessage());
+            return new Object[0];
+        }
+    }
+
+    /**
+     * Route segment'ten origin airport ID'yi alır
+     */
+    private Long getSegmentOriginId(Object segment) {
+        try {
+            if (segment instanceof Map) {
+                Map<String, Object> segmentMap = (Map<String, Object>) segment;
+                Object originId = segmentMap.get("originAirportId");
+                return originId != null ? ((Number) originId).longValue() : null;
+            }
+        } catch (Exception e) {
+            log.warn("Error extracting origin airport ID from segment: {}", e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Route segment'ten destination airport ID'yi alır
+     */
+    private Long getSegmentDestinationId(Object segment) {
+        try {
+            if (segment instanceof Map) {
+                Map<String, Object> segmentMap = (Map<String, Object>) segment;
+                Object destinationId = segmentMap.get("destinationAirportId");
+                return destinationId != null ? ((Number) destinationId).longValue() : null;
+            }
+        } catch (Exception e) {
+            log.warn("Error extracting destination airport ID from segment: {}", e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Route segment'ten segment order'ı alır
+     */
+    private Integer getSegmentOrder(Object segment) {
+        try {
+            if (segment instanceof Map) {
+                Map<String, Object> segmentMap = (Map<String, Object>) segment;
+                Object segmentOrder = segmentMap.get("segmentOrder");
+                return segmentOrder != null ? ((Number) segmentOrder).intValue() : null;
+            }
+        } catch (Exception e) {
+            log.warn("Error extracting segment order from segment: {}", e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Route'un aktif ve geçerli olduğunu kontrol eder
+     */
+    private boolean isValidAndActiveRoute(RouteCache route) {
+        return route != null &&
+                route.isActive() &&
+                route.isValid() &&
+                route.getOriginAirportId() != null &&
+                route.getDestinationAirportId() != null;
+    }
+
+    /**
+     * Multi-segment route validation
+     */
+    private boolean isValidMultiSegmentRoute(RouteCache route) {
+        return isValidAndActiveRoute(route) &&
+                route.isMultiSegmentRoute() &&
+                route.getSegmentCount() != null &&
+                route.getSegmentCount() >= 2;
+    }
+
+    /**
+     * Route creation error handling wrapper
+     */
+    private Long createRouteWithErrorHandling(Map<String, Object> routeData, String routeType) {
+        try {
+            Long routeId = createRouteInReferenceManager(routeData);
+            log.info("Successfully created {} route with ID: {}", routeType, routeId);
+            return routeId;
+
+        } catch (Exception e) {
+            log.error("Failed to create {} route: {}", routeType, e.getMessage());
+            throw new RuntimeException("Failed to create " + routeType + " route: " + e.getMessage(), e);
         }
     }
 }

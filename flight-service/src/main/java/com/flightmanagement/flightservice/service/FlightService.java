@@ -1,6 +1,8 @@
 package com.flightmanagement.flightservice.service;
 
+import com.flightmanagement.flightservice.dto.cache.AirportCache;
 import com.flightmanagement.flightservice.dto.cache.RouteCache;
+import com.flightmanagement.flightservice.dto.request.*;
 import com.flightmanagement.flightservice.dto.request.AirportSegmentRequest;
 import com.flightmanagement.flightservice.dto.request.ArchiveSearchRequest;
 import com.flightmanagement.flightservice.dto.request.ConnectingFlightRequest;
@@ -14,6 +16,7 @@ import com.flightmanagement.flightservice.entity.enums.FlightStatus;
 import com.flightmanagement.flightservice.entity.enums.FlightType;
 import com.flightmanagement.flightservice.exception.BusinessException;
 import com.flightmanagement.flightservice.exception.DuplicateResourceException;
+import com.flightmanagement.flightservice.exception.InvalidRequestException;
 import com.flightmanagement.flightservice.exception.ResourceNotFoundException;
 import com.flightmanagement.flightservice.mapper.FlightMapper;
 import com.flightmanagement.flightservice.repository.FlightRepository;
@@ -177,27 +180,166 @@ public class FlightService {
     // FLIGHT CRUD OPERATIONS
     // ===============================
 
+    @Transactional
     public FlightResponse createFlight(FlightRequest request) {
-        log.debug("Creating flight: {} (Mode: {})", request.getFlightNumber(),
-                request.getCreationMode() != null ? request.getCreationMode() : "AUTO");
+        log.info("Creating flight: {} with creation mode: {}", request.getFlightNumber(), request.getCreationMode());
 
-        // Route ID resolution strategy
-        resolveRouteId(request);
+        try {
+            // Validation
+            flightValidator.validateFlightRequest(request);
 
-        // Validation
-        flightValidator.validateFlightRequest(request);
+            // Route ID belirleme - YENİ LOGİC
+            Long routeId = determineRouteForFlight(request);
 
-        // Multi-segment airport-based flight ise connecting flight oluştur
-        if (request.isMultiSegmentAirportCreation()) {
-            return createMultiSegmentAirportFlight(request);
+            // Flight entity oluştur
+            Flight flight = flightMapper.toEntity(request);
+            flight.setRouteId(routeId); // Bulunan/oluşturulan route ID'yi ata
+
+            // Save flight
+            flight = flightRepository.save(flight);
+
+            // Reference data'ları cache'den al
+            FlightResponse response = buildFlightResponse(flight);
+
+            // Events
+            kafkaProducerService.sendFlightEvent("FLIGHT_CREATED", flight);
+            webSocketMessageService.sendFlightUpdate("CREATE", response, flight.getId(), flight.getFlightNumber());
+
+            log.info("Flight created successfully with ID: {} and route ID: {}", flight.getId(), routeId);
+            return response;
+
+        } catch (Exception e) {
+            log.error("Error creating flight {}: {}", request.getFlightNumber(), e.getMessage(), e);
+            throw e;
         }
-
-        // Single flight creation
-        return createSingleFlight(request);
     }
 
-    public Map<String, Object> previewRouteForAirports(Long originAirportId, Long destinationAirportId) {
-        return autoRouteService.previewRoute(originAirportId, destinationAirportId);
+    /**
+     * Direct route preview
+     */
+    public Map<String, Object> previewDirectRoute(Long originAirportId, Long destinationAirportId) {
+        log.debug("Creating direct route preview for {} -> {}", originAirportId, destinationAirportId);
+
+        try {
+            Map<String, Object> preview = new HashMap<>();
+
+            // Airport bilgilerini al
+            var originAirport = referenceDataService.getAirport(originAirportId);
+            var destinationAirport = referenceDataService.getAirport(destinationAirportId);
+
+            if (originAirport == null || destinationAirport == null) {
+                throw new BusinessException("Invalid airport IDs provided");
+            }
+
+            // Same airport check
+            if (originAirportId.equals(destinationAirportId)) {
+                throw new BusinessException("Origin and destination airports cannot be the same");
+            }
+
+            // Mevcut route'u kontrol et
+            RouteCache existingRoute = autoRouteService.findExistingDirectRoute(originAirportId, destinationAirportId);
+
+            preview.put("originAirport", originAirport);
+            preview.put("destinationAirport", destinationAirport);
+            preview.put("route", originAirport.getIataCode() + " → " + destinationAirport.getIataCode());
+
+            if (existingRoute != null) {
+                preview.put("existingRoute", existingRoute);
+                preview.put("routeExists", true);
+                preview.put("willCreateNewRoute", false);
+                preview.put("distance", existingRoute.getDistance());
+                preview.put("estimatedFlightTime", existingRoute.getEstimatedFlightTime());
+                preview.put("routeType", existingRoute.getRouteType());
+                preview.put("routeCode", existingRoute.getRouteCode());
+                preview.put("routeName", existingRoute.getRouteName());
+            } else {
+                preview.put("routeExists", false);
+                preview.put("willCreateNewRoute", true);
+
+                // Tahminler
+                String routeType = determineRouteType(originAirport.getCountry(), destinationAirport.getCountry());
+                Integer estimatedDistance = calculateEstimatedDistance(originAirport, destinationAirport);
+                Integer estimatedTime = calculateEstimatedFlightTime(estimatedDistance);
+
+                preview.put("estimatedDistance", estimatedDistance);
+                preview.put("estimatedFlightTime", estimatedTime);
+                preview.put("estimatedRouteType", routeType);
+                preview.put("estimatedRouteCode", generateRouteCode(originAirport.getIataCode(), destinationAirport.getIataCode()));
+                preview.put("estimatedRouteName", generateRouteName(originAirport.getName(), destinationAirport.getName()));
+            }
+
+            // Additional info
+            preview.put("isDomestic", determineRouteType(originAirport.getCountry(), destinationAirport.getCountry()).equals("DOMESTIC"));
+            preview.put("isInternational", determineRouteType(originAirport.getCountry(), destinationAirport.getCountry()).equals("INTERNATIONAL"));
+
+            return preview;
+
+        } catch (Exception e) {
+            log.error("Error creating direct route preview: {}", e.getMessage());
+            throw new BusinessException("Failed to create route preview: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Multi-segment route preview
+     */
+    public Map<String, Object> previewMultiSegmentRoute(List<AirportSegmentRequest> segments) {
+        log.debug("Creating multi-segment route preview for {} segments", segments.size());
+
+        try {
+            // Validation
+            if (segments == null || segments.size() < 2) {
+                throw new BusinessException("Multi-segment preview requires at least 2 segments");
+            }
+
+            if (segments.size() > 10) {
+                throw new BusinessException("Multi-segment preview cannot have more than 10 segments");
+            }
+
+            // AutoRouteService'e delegate et
+            Map<String, Object> preview = autoRouteService.previewMultiSegmentRoute(segments);
+
+            // Mevcut route kontrolü ekle
+            RouteCache existingRoute = autoRouteService.findExistingMultiSegmentRoute(segments);
+
+            if (existingRoute != null) {
+                preview.put("existingRoute", existingRoute);
+                preview.put("routeExists", true);
+                preview.put("willCreateNewRoute", false);
+                preview.put("routeCode", existingRoute.getRouteCode());
+                preview.put("routeName", existingRoute.getRouteName());
+            } else {
+                preview.put("routeExists", false);
+                preview.put("willCreateNewRoute", true);
+
+                // Generate estimated route info
+                AirportSegmentRequest firstSegment = segments.get(0);
+                AirportSegmentRequest lastSegment = segments.get(segments.size() - 1);
+
+                try {
+                    var firstOrigin = referenceDataService.getAirport(firstSegment.getOriginAirportId());
+                    var lastDestination = referenceDataService.getAirport(lastSegment.getDestinationAirportId());
+
+                    if (firstOrigin != null && lastDestination != null) {
+                        String estimatedCode = generateMultiSegmentRouteCode(
+                                firstOrigin.getIataCode(), lastDestination.getIataCode(), segments.size());
+                        String estimatedName = generateMultiSegmentRouteName(
+                                firstOrigin.getName(), lastDestination.getName(), segments.size());
+
+                        preview.put("estimatedRouteCode", estimatedCode);
+                        preview.put("estimatedRouteName", estimatedName);
+                    }
+                } catch (Exception e) {
+                    log.warn("Error generating estimated route info: {}", e.getMessage());
+                }
+            }
+
+            return preview;
+
+        } catch (Exception e) {
+            log.error("Error creating multi-segment route preview: {}", e.getMessage());
+            throw new BusinessException("Failed to create route preview: " + e.getMessage());
+        }
     }
 
     public FlightResponse updateFlight(Long id, FlightRequest request) {
@@ -694,191 +836,126 @@ public class FlightService {
     }
 
     /**
-     * Route ID çözümleme stratejisi
+     * Flight için route ID'yi belirler - bulur veya oluşturur
      */
-    private void resolveRouteId(FlightRequest request) {
-        // 1. Route ID zaten varsa, doğrula ve devam et
-        if (request.isRouteBasedCreation()) {
-            log.debug("Using provided route ID: {}", request.getRouteId());
-            return;
+    private Long determineRouteForFlight(FlightRequest request) {
+        // 1. Route-based creation
+        if ("ROUTE".equals(request.getCreationMode()) && request.getRouteId() != null) {
+            log.debug("Using existing route ID: {}", request.getRouteId());
+
+            // Route'un varlığını ve aktifliğini kontrol et
+            try {
+                RouteCache route = referenceDataService.getRoute(request.getRouteId());
+                if (route == null || !route.isActive()) {
+                    throw new InvalidRequestException("Selected route is invalid or inactive: " + request.getRouteId());
+                }
+                return request.getRouteId();
+            } catch (Exception e) {
+                throw new InvalidRequestException("Failed to validate route: " + e.getMessage());
+            }
         }
 
-        // 2. Single airport-based creation
-        if (request.isAirportBasedCreation()) {
-            log.debug("Auto-finding/creating direct route for airports {} -> {}",
+        // 2. Direct airport-based creation
+        if ("AIRPORTS".equals(request.getCreationMode()) &&
+                request.getOriginAirportId() != null && request.getDestinationAirportId() != null) {
+
+            log.debug("Finding/creating direct route for {} -> {}",
                     request.getOriginAirportId(), request.getDestinationAirportId());
 
-            Long routeId = autoRouteService.findOrCreateDirectRoute(
-                    request.getOriginAirportId(), request.getDestinationAirportId());
-            request.setRouteId(routeId);
-
-            log.info("Resolved route ID: {} for flight {}", routeId, request.getFlightNumber());
-            return;
+            return autoRouteService.findOrCreateDirectRoute(
+                    request.getOriginAirportId(),
+                    request.getDestinationAirportId()
+            );
         }
 
         // 3. Multi-segment airport-based creation
-        if (request.isMultiSegmentAirportCreation()) {
-            log.debug("Auto-finding/creating multi-segment route for {} segments",
+        if ("MULTI_AIRPORTS".equals(request.getCreationMode()) &&
+                request.getAirportSegments() != null && request.getAirportSegments().size() >= 2) {
+
+            log.debug("Finding/creating multi-segment route for {} segments",
                     request.getAirportSegments().size());
 
-            Long routeId = autoRouteService.findOrCreateMultiSegmentRoute(
-                    request.getAirportSegments(), request.getFlightNumber());
-            request.setRouteId(routeId);
-
-            log.info("Resolved multi-segment route ID: {} for flight {}", routeId, request.getFlightNumber());
-            return;
+            return autoRouteService.findOrCreateMultiSegmentRoute(
+                    request.getAirportSegments(),
+                    request.getFlightNumber()
+            );
         }
 
-        throw new BusinessException("No valid route resolution strategy found");
-    }
-
-    /**
-     * Single flight creation
-     */
-    private FlightResponse createSingleFlight(FlightRequest request) {
-        // Duplicate check
-        if (flightRepository.existsByFlightNumberAndFlightDate(request.getFlightNumber(), request.getFlightDate())) {
-            throw new DuplicateResourceException("Flight already exists: " + request.getFlightNumber() + " on " + request.getFlightDate());
+        // 4. Legacy/fallback - route ID zorunlu
+        if (request.getRouteId() != null) {
+            return request.getRouteId();
         }
 
-        // Aircraft conflict check
-        if (flightRepository.hasAircraftConflict(request.getAircraftId(), request.getFlightDate(),
-                request.getScheduledDeparture(), request.getScheduledArrival())) {
-            throw new BusinessException("Aircraft has conflicting flight schedule");
+        throw new InvalidRequestException(
+                "Invalid flight creation mode or missing required data. " +
+                        "Please provide either routeId, airport pair, or airport segments."
+        );
+    }
+    private String determineRouteType(String originCountry, String destCountry) {
+        if (originCountry != null && destCountry != null && originCountry.equals(destCountry)) {
+            return "DOMESTIC";
+        } else {
+            return "INTERNATIONAL";
+        }
+    }
+
+    private Integer calculateEstimatedDistance(AirportCache originAirport, AirportCache destinationAirport) {
+        if (originAirport.getLatitude() != null && originAirport.getLongitude() != null &&
+                destinationAirport.getLatitude() != null && destinationAirport.getLongitude() != null) {
+
+            return calculateHaversineDistance(
+                    originAirport.getLatitude(), originAirport.getLongitude(),
+                    destinationAirport.getLatitude(), destinationAirport.getLongitude()
+            );
         }
 
-        // Aircraft-Route compatibility check
-        flightValidator.validateAircraftRouteCompatibility(request.getAircraftId(), request.getRouteId());
-
-        Flight flight = flightMapper.toEntity(request);
-        flight = flightRepository.save(flight);
-
-        kafkaProducerService.sendFlightEvent("FLIGHT_CREATED", flight);
-
-        FlightResponse response = buildFlightResponse(flight);
-        webSocketMessageService.sendFlightUpdate("CREATE", response, flight.getId(), flight.getFlightNumber());
-
-        return response;
-    }
-
-    /**
-     * Multi-segment airport-based flight creation
-     */
-    private FlightResponse createMultiSegmentAirportFlight(FlightRequest request) {
-        log.debug("Creating multi-segment airport-based flight: {}", request.getFlightNumber());
-
-        // Convert airport segments to connecting flight request
-        ConnectingFlightRequest connectingRequest = convertToConnectingFlightRequest(request);
-
-        // Use existing connecting flight service
-        return connectingFlightService.createConnectingFlight(connectingRequest);
-    }
-
-    /**
-     * Airport-based request'i connecting flight request'e çevir
-     */
-    private ConnectingFlightRequest convertToConnectingFlightRequest(FlightRequest request) {
-        ConnectingFlightRequest connectingRequest = new ConnectingFlightRequest();
-
-        // Ana uçuş bilgileri
-        connectingRequest.setMainFlightNumber(request.getFlightNumber());
-        connectingRequest.setAirlineId(request.getAirlineId());
-        connectingRequest.setAircraftId(request.getAircraftId());
-        connectingRequest.setType(request.getType());
-        connectingRequest.setPassengerCount(request.getPassengerCount());
-        connectingRequest.setCargoWeight(request.getCargoWeight());
-        connectingRequest.setNotes(request.getNotes());
-        connectingRequest.setActive(request.getActive());
-
-        // Airport segments'leri flight segments'lere çevir
-        List<FlightSegmentRequest> flightSegments = convertAirportSegmentsToFlightSegments(
-                request.getAirportSegments(), request);
-
-        connectingRequest.setSegments(flightSegments);
-
-        return connectingRequest;
-    }
-
-    /**
-     * Airport segments'leri flight segments'lere çevir
-     */
-    private List<FlightSegmentRequest> convertAirportSegmentsToFlightSegments(
-            List<AirportSegmentRequest> airportSegments, FlightRequest request) {
-
-        List<FlightSegmentRequest> flightSegments = new ArrayList<>();
-
-        // Base timing - ilk segment'in zamanı request'ten gelir
-        LocalDateTime currentDeparture = request.getScheduledDeparture();
-
-        for (int i = 0; i < airportSegments.size(); i++) {
-            AirportSegmentRequest airportSegment = airportSegments.get(i);
-
-            FlightSegmentRequest flightSegment = new FlightSegmentRequest();
-            flightSegment.setSegmentNumber(airportSegment.getSegmentOrder());
-            flightSegment.setOriginAirportId(airportSegment.getOriginAirportId());
-            flightSegment.setDestinationAirportId(airportSegment.getDestinationAirportId());
-            flightSegment.setConnectionTimeMinutes(airportSegment.getConnectionTimeMinutes());
-
-            // Timing calculation
-            flightSegment.setScheduledDeparture(currentDeparture);
-
-            // Flight duration hesapla (airport'lar arası mesafeye göre)
-            Integer estimatedDuration = calculateSegmentDuration(
-                    airportSegment.getOriginAirportId(),
-                    airportSegment.getDestinationAirportId());
-
-            LocalDateTime segmentArrival = currentDeparture.plusMinutes(estimatedDuration);
-            flightSegment.setScheduledArrival(segmentArrival);
-
-            flightSegments.add(flightSegment);
-
-            // Next segment'in departure'ını hesapla (connection time dahil)
-            if (i < airportSegments.size() - 1) {
-                Integer connectionTime = airportSegment.getConnectionTimeMinutes();
-                if (connectionTime == null) {
-                    connectionTime = 60; // Default 1 hour connection
-                }
-                currentDeparture = segmentArrival.plusMinutes(connectionTime);
-            }
+        // Fallback estimates
+        if (determineRouteType(originAirport.getCountry(), destinationAirport.getCountry()).equals("DOMESTIC")) {
+            return 400; // Domestic average
+        } else {
+            return 1200; // International average
         }
-
-        return flightSegments;
     }
 
-    /**
-     * Segment duration hesaplama
-     */
-    private Integer calculateSegmentDuration(Long originAirportId, Long destinationAirportId) {
-        try {
-            var originAirport = referenceDataService.getAirport(originAirportId);
-            var destinationAirport = referenceDataService.getAirport(destinationAirportId);
+    private Integer calculateHaversineDistance(double lat1, double lon1, double lat2, double lon2) {
+        final int R = 6371; // Earth's radius in kilometers
 
-            if (originAirport != null && destinationAirport != null) {
-                // Distance-based calculation
-                Integer distance = calculateDistanceBetweenAirports(originAirport, destinationAirport);
-                return (int) Math.ceil(distance / 800.0 * 60); // 800 km/h average speed
-            }
-        } catch (Exception e) {
-            log.warn("Error calculating segment duration: {}", e.getMessage());
+        double latDistance = Math.toRadians(lat2 - lat1);
+        double lonDistance = Math.toRadians(lon2 - lon1);
+
+        double a = Math.sin(latDistance / 2) * Math.sin(latDistance / 2)
+                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+                * Math.sin(lonDistance / 2) * Math.sin(lonDistance / 2);
+
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+        return (int) (R * c);
+    }
+
+    private Integer calculateEstimatedFlightTime(Integer distance) {
+        if (distance != null) {
+            double hours = distance / 800.0; // 800 km/h average speed
+            return (int) Math.ceil(hours * 60); // Convert to minutes
         }
-
         return 90; // Default 1.5 hours
     }
 
-    /**
-     * Airport'lar arası mesafe hesaplama
-     */
-    private Integer calculateDistanceBetweenAirports(Object originAirport, Object destinationAirport) {
-        // AutoRouteService'teki logic'i kullan
-        return 500; // Placeholder - gerçek implementation AutoRouteService'te
+    private String generateRouteCode(String originCode, String destCode) {
+        long timestamp = System.currentTimeMillis() % 10000;
+        return String.format("%s-%s-D%d", originCode, destCode, timestamp);
     }
 
-    // Yeni helper method'lar
-    public Map<String, Object> previewMultiSegmentRoute(@Valid List<AirportSegmentRequest> segments) {
-        return autoRouteService.previewMultiSegmentRoute(segments);
+    private String generateRouteName(String originName, String destName) {
+        return String.format("%s to %s Route", originName, destName);
     }
 
-    public Map<String, Object> previewDirectRoute(Long originAirportId, Long destinationAirportId) {
-        return autoRouteService.previewRoute(originAirportId, destinationAirportId);
+    private String generateMultiSegmentRouteCode(String originCode, String destCode, int segmentCount) {
+        long timestamp = System.currentTimeMillis() % 10000;
+        return String.format("%s-%s-M%d-%d", originCode, destCode, segmentCount, timestamp);
+    }
+
+    private String generateMultiSegmentRouteName(String originName, String destName, int segmentCount) {
+        return String.format("%s to %s Multi-Segment Route (%d stops)",
+                originName, destName, segmentCount - 1);
     }
 }
