@@ -8,6 +8,10 @@ import com.flightmanagement.flightservice.event.ReferenceEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.support.Acknowledgment;
+import org.springframework.kafka.support.KafkaHeaders;
+import org.springframework.messaging.handler.annotation.Header;
+import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
@@ -21,10 +25,32 @@ public class KafkaConsumerService {
     private final ObjectMapper objectMapper;
 
     @KafkaListener(topics = "reference.events", groupId = "flight-service-group")
-    public void handleReferenceEvent(ReferenceEvent event) {
-        log.info("Received reference event: {} for entity: {}", event.getEventType(), event.getEntityType());
+    public void handleReferenceEvent(
+            @Payload Object payload,
+            @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
+            @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,
+            @Header(KafkaHeaders.OFFSET) long offset,
+            Acknowledgment acknowledgment) {
+
+        log.info("Received message from topic: {}, partition: {}, offset: {}", topic, partition, offset);
 
         try {
+            // Payload'ı ReferenceEvent'e dönüştür
+            ReferenceEvent event;
+
+            if (payload instanceof ReferenceEvent) {
+                event = (ReferenceEvent) payload;
+            } else if (payload instanceof Map) {
+                // Map olarak gelmişse ObjectMapper ile dönüştür
+                event = objectMapper.convertValue(payload, ReferenceEvent.class);
+            } else {
+                log.warn("Unknown payload type: {}, skipping message", payload.getClass());
+                acknowledgment.acknowledge();
+                return;
+            }
+
+            log.info("Processing reference event: {} for entity: {}", event.getEventType(), event.getEntityType());
+
             switch (event.getEntityType()) {
                 case "AIRLINE":
                     handleAirlineEvent(event);
@@ -38,8 +64,13 @@ public class KafkaConsumerService {
                 default:
                     log.debug("Ignoring event for entity type: {}", event.getEntityType());
             }
+
+            // Message'ı acknowledge et
+            acknowledgment.acknowledge();
+
         } catch (Exception e) {
-            log.error("Error processing reference event: {}", event.getEventId(), e);
+            log.error("Error processing reference event at offset {}: {}", offset, e.getMessage(), e);
+            // Acknowledge etme, retry edilsin
         }
     }
 
