@@ -6,21 +6,28 @@ import { formatDate, formatDateTime } from './formatters'
 // ========================
 
 /**
- * Local storage'a veri kaydetme
+ * Local storage'a veri kaydetme - Token desteği ile güncellendi
  * @param {string} key - Anahtar
  * @param {any} value - Değer
  */
 export const setStorageItem = (key, value) => {
   try {
-    const serializedValue = JSON.stringify(value)
-    localStorage.setItem(key, serializedValue)
+    // Token key'ler için özel handling
+    if (key === STORAGE_KEYS.TOKEN || key.includes('token') || key.includes('Token')) {
+      // Token'ları string olarak sakla, JSON stringify etme
+      localStorage.setItem(key, value)
+    } else {
+      // Diğer veriler için JSON stringify et
+      const serializedValue = JSON.stringify(value)
+      localStorage.setItem(key, serializedValue)
+    }
   } catch (error) {
     console.error('localStorage setItem error:', error)
   }
 }
 
 /**
- * Local storage'dan veri okuma
+ * Local storage'dan veri okuma - Token desteği ile güncellendi
  * @param {string} key - Anahtar
  * @param {any} defaultValue - Varsayılan değer
  * @returns {any} Okunan değer
@@ -28,9 +35,37 @@ export const setStorageItem = (key, value) => {
 export const getStorageItem = (key, defaultValue = null) => {
   try {
     const item = localStorage.getItem(key)
-    return item ? JSON.parse(item) : defaultValue
+
+    // Item yoksa default value döndür
+    if (!item) {
+      return defaultValue
+    }
+
+    // Token key'ler için özel handling (JSON parse etme)
+    if (key === STORAGE_KEYS.TOKEN || key.includes('token') || key.includes('Token')) {
+      // Token string olarak saklanıyor, JSON parse etmeye gerek yok
+      return item
+    }
+
+    // Diğer veriler için JSON parse et
+    try {
+      return JSON.parse(item)
+    } catch (parseError) {
+      console.warn(`JSON parse failed for key "${key}", returning raw value:`, parseError.message)
+      // JSON parse başarısız olursa raw değeri döndür
+      return item
+    }
+
   } catch (error) {
     console.error('localStorage getItem error:', error)
+
+    // Hata durumunda item'ı temizle ve default value döndür
+    try {
+      localStorage.removeItem(key)
+    } catch (removeError) {
+      console.error('localStorage removeItem error:', removeError)
+    }
+
     return defaultValue
   }
 }
@@ -677,4 +712,107 @@ export const daysDifference = (date1, date2) => {
   const d2 = new Date(date2)
   const diffTime = Math.abs(d2 - d1)
   return Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+}
+
+/**
+ * Token'ın geçerli olup olmadığını kontrol et
+ * @param {string} token - JWT token
+ * @returns {boolean} Token geçerli mi?
+ */
+export const isValidJWTToken = (token) => {
+  try {
+    if (!token || typeof token !== 'string') {
+      return false
+    }
+
+    // JWT format kontrolü: header.payload.signature
+    const parts = token.split('.')
+    if (parts.length !== 3) {
+      return false
+    }
+
+    // Base64 decode kontrolü
+    const payload = parts[1]
+    if (!payload) {
+      return false
+    }
+
+    // Payload'ı decode et
+    const base64 = payload.replace(/-/g, '+').replace(/_/g, '/')
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    )
+
+    const decodedPayload = JSON.parse(jsonPayload)
+
+    // Expiration kontrolü
+    if (decodedPayload.exp) {
+      const currentTime = Date.now() / 1000
+      return decodedPayload.exp > currentTime
+    }
+
+    return true
+  } catch (error) {
+    console.error('JWT token validation error:', error)
+    return false
+  }
+}
+
+/**
+ * Bozuk token'ları temizle
+ */
+export const clearInvalidTokens = () => {
+  try {
+    const token = localStorage.getItem(STORAGE_KEYS.TOKEN)
+
+    if (token && !isValidJWTToken(token)) {
+      console.log('Clearing invalid token from localStorage')
+      localStorage.removeItem(STORAGE_KEYS.TOKEN)
+      localStorage.removeItem(STORAGE_KEYS.USER)
+
+      // Sayfayı yenile veya login sayfasına yönlendir
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login'
+      }
+    }
+  } catch (error) {
+    console.error('Error clearing invalid tokens:', error)
+    // Tüm auth verilerini temizle
+    localStorage.removeItem(STORAGE_KEYS.TOKEN)
+    localStorage.removeItem(STORAGE_KEYS.USER)
+  }
+}
+
+/**
+ * Application başlatıldığında localStorage'ı temizle
+ */
+export const initializeStorage = () => {
+  try {
+    // Bozuk token'ları temizle
+    clearInvalidTokens()
+
+    // Cache temizliği (eski cache verilerini temizle)
+    const cacheKeys = Object.keys(localStorage).filter(key => key.startsWith('cache_'))
+    cacheKeys.forEach(key => {
+      try {
+        const cacheItem = JSON.parse(localStorage.getItem(key))
+        const now = Date.now()
+
+        // 24 saatten eski cache'leri temizle
+        if (cacheItem && cacheItem.timestamp && (now - cacheItem.timestamp) > 24 * 60 * 60 * 1000) {
+          localStorage.removeItem(key)
+        }
+      } catch (error) {
+        // Bozuk cache item'ı temizle
+        localStorage.removeItem(key)
+      }
+    })
+
+    console.log('Storage initialized and cleaned up')
+  } catch (error) {
+    console.error('Storage initialization error:', error)
+  }
 }

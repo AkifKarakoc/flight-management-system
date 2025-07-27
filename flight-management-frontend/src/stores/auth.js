@@ -9,6 +9,7 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
   const token = ref(null)
   const loading = ref(false)
+  const initialized = ref(false)
 
   // Getters
   const isAdmin = computed(() => {
@@ -23,7 +24,9 @@ export const useAuthStore = defineStore('auth', () => {
   })
 
   const isUser = computed(() => {
-    return user.value?.roles?.includes(USER_ROLES.USER) || false
+    return user.value?.roles?.includes(USER_ROLES.USER) ||
+      user.value?.roles?.includes('ROLE_USER') ||
+      false
   })
 
   const userRoles = computed(() => {
@@ -39,15 +42,27 @@ export const useAuthStore = defineStore('auth', () => {
     loading.value = true
 
     try {
+      console.log('Attempting login with:', credentials.username) // Debug log
+
       const response = await authService.login(credentials)
+
+      console.log('Login successful, response:', response) // Debug log
 
       // Store state'i güncelle
       token.value = response.token
       user.value = response.user
       isAuthenticated.value = true
+      initialized.value = true
+
+      console.log('Auth store updated:', {
+        isAuthenticated: isAuthenticated.value,
+        user: user.value,
+        hasToken: !!token.value
+      }) // Debug log
 
       return response
     } catch (error) {
+      console.error('Login failed:', error) // Debug log
       // Error handling API service'de yapılıyor
       throw error
     } finally {
@@ -65,6 +80,7 @@ export const useAuthStore = defineStore('auth', () => {
       token.value = null
       user.value = null
       isAuthenticated.value = false
+      initialized.value = true
     } catch (error) {
       console.error('Logout error:', error)
     } finally {
@@ -73,24 +89,46 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   const checkAuth = () => {
-    // Önce geçersiz token'ları temizle
-    authService.clearInvalidTokens()
-    
-    // Sayfa yenilendiğinde veya uygulama başlarken çalışır
-    const isAuth = authService.isAuthenticated()
+    try {
+      console.log('Checking authentication...') // Debug log
 
-    if (isAuth) {
-      token.value = authService.getToken()
-      user.value = authService.getCurrentUser()
-      isAuthenticated.value = true
-    } else {
-      // Token geçersizse temizle
+      // Önce geçersiz token'ları temizle
+      authService.clearInvalidTokens()
+
+      // Sayfa yenilendiğinde veya uygulama başlarken çalışır
+      const isAuth = authService.isAuthenticated()
+
+      console.log('Auth check result:', isAuth) // Debug log
+
+      if (isAuth) {
+        token.value = authService.getToken()
+        user.value = authService.getCurrentUser()
+        isAuthenticated.value = true
+
+        console.log('Auth restored from localStorage:', {
+          hasToken: !!token.value,
+          user: user.value
+        }) // Debug log
+      } else {
+        // Token geçersizse temizle
+        token.value = null
+        user.value = null
+        isAuthenticated.value = false
+
+        console.log('No valid auth found, clearing state') // Debug log
+      }
+
+      initialized.value = true
+      return isAuth
+    } catch (error) {
+      console.error('Auth check error:', error)
+      // Hata durumunda state'i temizle
       token.value = null
       user.value = null
       isAuthenticated.value = false
+      initialized.value = true
+      return false
     }
-
-    return isAuth
   }
 
   const hasRole = (role) => {
@@ -144,12 +182,20 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  // Initialize auth state when store is created
+  const initialize = () => {
+    if (!initialized.value) {
+      checkAuth()
+    }
+  }
+
   return {
     // State
     isAuthenticated,
     user,
     token,
     loading,
+    initialized,
 
     // Getters
     isAdmin,
@@ -163,6 +209,7 @@ export const useAuthStore = defineStore('auth', () => {
     checkAuth,
     hasRole,
     hasPermission,
-    validateToken
+    validateToken,
+    initialize
   }
 })

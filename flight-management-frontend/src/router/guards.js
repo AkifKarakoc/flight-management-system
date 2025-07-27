@@ -240,19 +240,29 @@ export const developmentGuard = (to, from, next) => {
 }
 
 /**
- * Tüm guard'ları router'a uygulama
+ * Tüm guard'ları router'a uygulama - GÜNCELLENMIŞ VERSİYON
  * @param {object} router - Vue Router instance
  */
 export const setupRouterGuards = (router) => {
   // Before each navigation
   router.beforeEach(async (to, from, next) => {
     try {
-      // Basit auth kontrolü
+      console.log(`[Router] Navigating from ${from.path} to ${to.path}`) // Debug log
+
       const authStore = useAuthStore()
-      
+
+      // Auth store initialization'ı bekle
+      if (!authStore.initialized) {
+        console.log('[Router] Initializing auth store...') // Debug log
+        authStore.initialize()
+      }
+
+      console.log(`[Router] Auth state - isAuthenticated: ${authStore.isAuthenticated}, route requiresAuth: ${to.meta.requiresAuth}`) // Debug log
+
       // Route auth gerektirmiyor ve kullanıcı giriş yapmış - dashboard'a yönlendir
       if (!to.meta.requiresAuth && authStore.isAuthenticated) {
         if (to.name === 'Login') {
+          console.log('[Router] User authenticated, redirecting to Dashboard') // Debug log
           next({ name: 'Dashboard' })
           return
         }
@@ -260,6 +270,8 @@ export const setupRouterGuards = (router) => {
 
       // Route auth gerektiriyor ancak kullanıcı giriş yapmamış
       if (to.meta.requiresAuth && !authStore.isAuthenticated) {
+        console.log('[Router] Route requires auth but user not authenticated, redirecting to Login') // Debug log
+
         // Son ziyaret edilen sayfayı kaydet
         if (to.path !== '/login') {
           setStorageItem(STORAGE_KEYS.LAST_ROUTE, to.fullPath)
@@ -277,8 +289,10 @@ export const setupRouterGuards = (router) => {
         document.title = baseTitle
       }
 
+      console.log('[Router] Navigation allowed, proceeding...') // Debug log
       next()
     } catch (error) {
+      console.error('[Router] Navigation error:', error)
       logError('router.beforeEach', error, { to: to.path, from: from.path })
       next({ name: 'ServerError' })
     }
@@ -288,6 +302,7 @@ export const setupRouterGuards = (router) => {
   router.afterEach((to, from, failure) => {
     try {
       if (failure) {
+        console.error('[Router] Navigation failure:', failure)
         logError('router.afterEach', failure, { to: to.path, from: from.path })
         return
       }
@@ -303,6 +318,7 @@ export const setupRouterGuards = (router) => {
 
   // Router error handler
   router.onError((error) => {
+    console.error('[Router] Router error:', error)
     logError('router.onError', error)
 
     // Kritik hatalarda ana sayfaya yönlendir

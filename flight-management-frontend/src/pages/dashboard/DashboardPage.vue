@@ -106,34 +106,6 @@
           </BaseButton>
         </div>
       </BaseCard>
-
-      <!-- Notifications panel -->
-      <BaseCard
-        title="Sistem Bildirimleri"
-        class="notifications-card"
-        :actions="[
-          { key: 'mark-all-read', label: 'Tümünü Okundu İşaretle', handler: markAllNotificationsRead, props: { link: true, size: 'small' } }
-        ]"
-      >
-        <NotificationsList
-          :notifications="systemNotifications"
-          :loading="notificationsLoading"
-          @notification-click="handleNotificationClick"
-        />
-      </BaseCard>
-
-      <!-- Performance metrics -->
-      <BaseCard
-        title="Performans Metrikleri"
-        class="performance-card"
-      >
-        <PerformanceMetrics
-          :metrics="performanceMetrics"
-          :loading="metricsLoading"
-          :time-period="timePeriod"
-          @period-change="handleTimePeriodChange"
-        />
-      </BaseCard>
     </div>
 
     <!-- Modals -->
@@ -150,6 +122,8 @@
   </div>
 </template>
 
+// DashboardPage.vue script kısmı - computed properties ve methods güncellemesi:
+
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
@@ -161,10 +135,8 @@ import KpiCard from '@/components/charts/KpiCard.vue'
 import RecentFlightsTable from '@/components/tables/RecentFlightsTable.vue'
 import FlightStatusChart from '@/components/charts/FlightStatusChart.vue'
 import DailyOperationsChart from '@/components/charts/DailyOperationsChart.vue'
-import NotificationsList from '@/components/common/NotificationsList.vue'
-import PerformanceMetrics from '@/components/charts/PerformanceMetrics.vue'
 import ExportReportForm from '@/components/forms/ExportReportForm.vue'
-import { useWebSocket } from '@/composables/useWebSocket'; // YENİ
+import { useWebSocket } from '@/composables/useWebSocket'
 
 import { useAuthStore } from '@/stores/auth'
 import { useDashboardStore } from '@/stores/dashboard'
@@ -178,8 +150,7 @@ const router = useRouter()
 const authStore = useAuthStore()
 const dashboardStore = useDashboardStore()
 const flightStore = useFlightStore()
-const { showSuccess, showError, showInfo } = useNotification();
-
+const { showSuccess, showError, showInfo } = useNotification()
 
 // Reactive state
 const refreshing = ref(false)
@@ -189,25 +160,18 @@ const dateRange = ref([
   new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // 7 days ago
   new Date()
 ])
-const timePeriod = ref('week')
-
-// Loading states - separate for better UX
-const statsLoading = ref(true)
-const flightsLoading = ref(true)
-const chartsLoading = ref(true)
-const notificationsLoading = ref(true)
-const metricsLoading = ref(true)
 
 // Auto-refresh timer
 let refreshTimer = null
 
-// Computed properties
+// Computed properties (Backend entegrasyonuna göre güncellendi)
 const user = computed(() => authStore.user)
 
 const lastUpdateText = computed(() => {
   return formatRelativeTime(lastUpdate.value)
 })
 
+// Backend'den gelen gerçek veriler ile quickStats
 const quickStats = computed(() => [
   {
     key: 'total-flights',
@@ -218,11 +182,19 @@ const quickStats = computed(() => [
     color: 'primary'
   },
   {
-    key: 'active-flights',
-    title: 'Aktif Uçuş',
-    value: formatNumber(dashboardStore.stats.activeFlights),
-    change: dashboardStore.stats.activeChange,
-    icon: 'Timer',
+    key: 'scheduled-flights',
+    title: 'Planlanmış Uçuş',
+    value: formatNumber(dashboardStore.stats.scheduledFlights),
+    change: dashboardStore.stats.scheduledChange,
+    icon: 'Calendar',
+    color: 'info'
+  },
+  {
+    key: 'departed-flights',
+    title: 'Kalkmış Uçuş',
+    value: formatNumber(dashboardStore.stats.departedFlights),
+    change: dashboardStore.stats.departedChange,
+    icon: 'TakeOff',
     color: 'success'
   },
   {
@@ -243,11 +215,15 @@ const quickStats = computed(() => [
   }
 ])
 
+// Backend'den gelen veriler
 const recentFlights = computed(() => dashboardStore.recentFlights)
 const flightStatusData = computed(() => dashboardStore.flightStatusData)
 const dailyOperationsData = computed(() => dashboardStore.dailyOperationsData)
-const systemNotifications = computed(() => dashboardStore.notifications)
-const performanceMetrics = computed(() => dashboardStore.performanceMetrics)
+
+// Loading states - dashboardStore'dan alınıyor
+const statsLoading = computed(() => dashboardStore.loading.stats)
+const flightsLoading = computed(() => dashboardStore.loading.recentFlights)
+const chartsLoading = computed(() => dashboardStore.loading.statusData || dashboardStore.loading.dailyOps)
 
 const quickActions = computed(() => [
   {
@@ -269,7 +245,7 @@ const quickActions = computed(() => [
     label: 'Raporlar',
     icon: 'Document',
     type: 'info',
-    handler: () => navigateTo('FlightReports')
+    handler: () => console.log('Raporlar sayfası henüz hazır değil')
   },
   {
     key: 'manage-airlines',
@@ -285,28 +261,30 @@ const debouncedRefresh = debounce(async () => {
   await loadDashboardData()
 }, 1000)
 
+// WebSocket bağlantısı
 useWebSocket({
   '/topic/updates': (message) => {
-    // Genel bildirimleri işleyebiliriz
-    console.log('General update received:', message);
-    showInfo(`Sistem Bildirimi: ${message.content || 'Yeni bir güncelleme var.'}`);
+    console.log('General update received:', message)
+    showInfo(`Sistem Bildirimi: ${message.content || 'Yeni bir güncelleme var.'}`)
     // Dashboard verilerini yenileme tetiklenebilir
-    refreshDashboard();
+    refreshDashboard()
   },
   '/topic/flights': (flightEvent) => {
-    // Uçuşla ilgili anlık güncellemeleri işleyelim
-    console.log('Flight event received:', flightEvent);
-    flightStore.handleWebSocketFlightUpdate(flightEvent);
+    console.log('Flight event received:', flightEvent)
+    flightStore.handleWebSocketFlightUpdate(flightEvent)
 
     // Kullanıcıya küçük bir bildirim gösterebiliriz
-    const flightNumber = flightEvent.data?.flightNumber || '';
+    const flightNumber = flightEvent.data?.flightNumber || ''
     if (flightEvent.type === 'CREATE') {
-      showSuccess(`${flightNumber} numaralı yeni uçuş eklendi.`);
+      showSuccess(`${flightNumber} numaralı yeni uçuş eklendi.`)
     } else if (flightEvent.type === 'STATUS_CHANGE') {
-      showInfo(`${flightNumber} numaralı uçuşun durumu güncellendi: ${flightEvent.data.status}`);
+      showInfo(`${flightNumber} numaralı uçuşun durumu güncellendi: ${flightEvent.data.status}`)
     }
+
+    // Dashboard istatistiklerini yenile
+    debouncedRefresh()
   }
-});
+})
 
 // Methods
 const refreshDashboard = async () => {
@@ -327,50 +305,21 @@ const refreshDashboard = async () => {
 
 const loadDashboardData = async () => {
   try {
-    // Load data in parallel for better performance
-    const promises = []
+    // Backend entegrasyonu ile paralel veri yükleme
+    await dashboardStore.loadAllDashboardData()
 
-    // Load stats
-    promises.push(
-      dashboardStore.loadStats().finally(() => {
-        statsLoading.value = false
-      })
-    )
+    // Hata kontrolü - eğer kritik veriler yüklenemezse kullanıcıyı bilgilendir
+    if (dashboardStore.error.stats) {
+      ElMessage.warning('İstatistik verileri yüklenemedi: ' + dashboardStore.error.stats)
+    }
 
-    // Load recent flights
-    promises.push(
-      dashboardStore.loadRecentFlights().finally(() => {
-        flightsLoading.value = false
-      })
-    )
+    if (dashboardStore.error.recentFlights) {
+      ElMessage.warning('Son uçuş verileri yüklenemedi: ' + dashboardStore.error.recentFlights)
+    }
 
-    // Load charts data
-    promises.push(
-      Promise.all([
-        dashboardStore.loadFlightStatusData(),
-        dashboardStore.loadDailyOperationsData()
-      ]).finally(() => {
-        chartsLoading.value = false
-      })
-    )
-
-    // Load notifications
-    promises.push(
-      dashboardStore.loadNotifications().finally(() => {
-        notificationsLoading.value = false
-      })
-    )
-
-    // Load performance metrics
-    promises.push(
-      dashboardStore.loadPerformanceMetrics(timePeriod.value).finally(() => {
-        metricsLoading.value = false
-      })
-    )
-
-    await Promise.allSettled(promises)
   } catch (error) {
     console.error('Error loading dashboard data:', error)
+    ElMessage.error('Dashboard verileri yüklenirken beklenmedik bir hata oluştu')
     throw error
   }
 }
@@ -380,12 +329,16 @@ const navigateTo = (routeName, params = {}) => {
 }
 
 const handleStatClick = (stat) => {
+  // Backend'deki yeni stat key'lerine göre güncellendi
   switch (stat.key) {
     case 'total-flights':
       navigateTo('FlightManagement')
       break
-    case 'active-flights':
-      navigateTo('FlightManagement', { status: 'ACTIVE' })
+    case 'scheduled-flights':
+      navigateTo('FlightManagement', { status: 'SCHEDULED' })
+      break
+    case 'departed-flights':
+      navigateTo('FlightManagement', { status: 'DEPARTED' })
       break
     case 'delayed-flights':
       navigateTo('FlightManagement', { status: 'DELAYED' })
@@ -410,44 +363,55 @@ const handleStatusClick = (status) => {
 
 const handleDateRangeChange = (newRange) => {
   dateRange.value = newRange
-  debouncedRefresh()
+  // Tarih aralığı değiştiğinde daily operations chart'ı yenile
+  const startDate = newRange[0].toISOString().split('T')[0]
+  const endDate = newRange[1].toISOString().split('T')[0]
+  dashboardStore.loadDailyOperationsData(startDate, endDate)
 }
 
-const handleTimePeriodChange = (period) => {
-  timePeriod.value = period
-  metricsLoading.value = true
-  dashboardStore.loadPerformanceMetrics(period).finally(() => {
-    metricsLoading.value = false
-  })
-}
-
-const handleNotificationClick = (notification) => {
-  dashboardStore.markNotificationAsRead(notification.id)
-
-  // Navigate based on notification type
-  if (notification.actionUrl) {
-    router.push(notification.actionUrl)
-  }
-}
-
-const markAllNotificationsRead = () => {
-  dashboardStore.markAllNotificationsAsRead()
-  ElMessage.success('Tüm bildirimler okundu olarak işaretlendi')
-}
-
+// Export fonksiyonu basitleştirildi (backend'de endpoint yok)
 const exportReport = () => {
   showExportModal.value = true
 }
 
 const handleExport = async (exportConfig) => {
   try {
-    await dashboardStore.exportDashboardReport(exportConfig)
+    // Backend'de export endpoint'i olmadığı için basit bir CSV export yapalım
+    const csvData = generateCSVReport(exportConfig)
+    downloadCSV(csvData, `dashboard-report-${new Date().toISOString().split('T')[0]}.csv`)
+
     showExportModal.value = false
     ElMessage.success('Rapor başarıyla dışa aktarıldı')
   } catch (error) {
     ElMessage.error('Rapor dışa aktarılırken hata oluştu')
     console.error('Export error:', error)
   }
+}
+
+// CSV export helper functions
+const generateCSVReport = (config) => {
+  const headers = ['Metrik', 'Değer', 'Değişim']
+  const rows = [
+    ['Toplam Uçuş', dashboardStore.stats.totalFlights, `${dashboardStore.stats.flightsChange}%`],
+    ['Planlanmış Uçuş', dashboardStore.stats.scheduledFlights, `${dashboardStore.stats.scheduledChange}%`],
+    ['Kalkmış Uçuş', dashboardStore.stats.departedFlights, `${dashboardStore.stats.departedChange}%`],
+    ['Gecikmeli Uçuş', dashboardStore.stats.delayedFlights, `${dashboardStore.stats.delayedChange}%`],
+    ['İptal Edilen', dashboardStore.stats.cancelledFlights, `${dashboardStore.stats.cancelledChange}%`]
+  ]
+
+  return [headers, ...rows].map(row => row.join(',')).join('\n')
+}
+
+const downloadCSV = (csvContent, filename) => {
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+  const link = document.createElement('a')
+  const url = URL.createObjectURL(blob)
+  link.setAttribute('href', url)
+  link.setAttribute('download', filename)
+  link.style.visibility = 'hidden'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
 }
 
 // Auto-refresh functionality
@@ -507,7 +471,6 @@ onUnmounted(() => {
   cleanupAutoRefresh()
   document.removeEventListener('visibilitychange', handleVisibilityChange)
 })
-
 </script>
 
 <style scoped>
@@ -565,7 +528,7 @@ onUnmounted(() => {
   margin-bottom: 32px;
 }
 
-/* Main content grid */
+/* Main content grid - Backend entegrasyonu sonrası düzenlendi */
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(12, 1fr);
@@ -573,7 +536,7 @@ onUnmounted(() => {
   grid-auto-rows: min-content;
 }
 
-/* Grid item positioning */
+/* Grid item positioning - Backend'de olmayan component'ler kaldırıldı */
 .recent-flights-card {
   grid-column: span 8;
 }
@@ -588,14 +551,6 @@ onUnmounted(() => {
 
 .quick-actions-card {
   grid-column: span 4;
-}
-
-.notifications-card {
-  grid-column: span 6;
-}
-
-.performance-card {
-  grid-column: span 6;
 }
 
 /* Quick actions */
@@ -627,7 +582,7 @@ onUnmounted(() => {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 
-/* Responsive design */
+/* Responsive design - Backend entegrasyonu sonrası güncellendi */
 @media (max-width: 1200px) {
   .dashboard-stats {
     grid-template-columns: repeat(2, 1fr);
@@ -639,9 +594,7 @@ onUnmounted(() => {
   }
 
   .flight-status-card,
-  .quick-actions-card,
-  .notifications-card,
-  .performance-card {
+  .quick-actions-card {
     grid-column: span 6;
   }
 }

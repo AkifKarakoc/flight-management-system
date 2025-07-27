@@ -1,8 +1,9 @@
-// API Base URLs
+// API Base URLs - Vite Proxy ile uyumlu
 export const API_BASE_URL = {
-  REFERENCE_MANAGER: import.meta.env.VITE_REFERENCE_API_BASE_URL || 'http://localhost:8081',
-  FLIGHT_SERVICE: import.meta.env.VITE_FLIGHT_API_BASE_URL || 'http://localhost:8082',
-  ARCHIVE_SERVICE: import.meta.env.VITE_ARCHIVE_API_BASE_URL || 'http://localhost:8083'
+  // Vite proxy aktifken boş string kullan, production'da full URL
+  REFERENCE_MANAGER: import.meta.env.VITE_REFERENCE_API_BASE_URL || '',
+  FLIGHT_SERVICE: import.meta.env.VITE_FLIGHT_API_BASE_URL || '',
+  ARCHIVE_SERVICE: import.meta.env.VITE_ARCHIVE_API_BASE_URL || ''
 }
 
 // API Endpoints - Reference Manager Service (Port 8081)
@@ -299,13 +300,14 @@ export const DATE_FORMATS = {
   DISPLAY_DATETIME: 'DD/MM/YYYY HH:mm'
 }
 
-// Storage Keys
+// Storage Keys - GÜNCELLENMIŞ VERSİYON
 export const STORAGE_KEYS = {
-  AUTH_TOKEN: 'auth_token',
-  REFRESH_TOKEN: 'refresh_token',
-  USER_PROFILE: 'user_profile',
-  THEME: 'theme',
-  LANGUAGE: 'language',
+  TOKEN: 'auth_token',              // JWT token
+  USER: 'user_profile',             // User bilgileri
+  REFRESH_TOKEN: 'refresh_token',   // Refresh token (gelecekte kullanım için)
+  LAST_ROUTE: 'last_route',         // Son ziyaret edilen route
+  THEME: 'theme',                   // UI teması
+  LANGUAGE: 'language',             // Dil seçimi
   SIDEBAR_COLLAPSED: 'sidebar_collapsed',
   TABLE_SETTINGS: 'table_settings',
   DASHBOARD_SETTINGS: 'dashboard_settings'

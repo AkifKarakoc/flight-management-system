@@ -170,14 +170,121 @@ class FlightService {
   // ========================
 
   async getFlightCounts(date = null) {
-    const params = date ? { date } : {}
-    const response = await flightAPI.get('/api/v1/flights/count', { params })
-    return response.data
+    try {
+      const params = date ? { date } : {}
+      const response = await flightAPI.get('/api/v1/flights/count', { params })
+      return response.data
+    } catch (error) {
+      console.error('Error getting flight counts:', error)
+      throw error
+    }
   }
 
   async getFlightStats() {
     const response = await flightAPI.get('/api/v1/flights/stats')
     return response.data
+  }
+
+  // Backend: GET /api/v1/flights/stats/dashboard/{date}
+  async getDashboardStats(date = null) {
+    try {
+      const targetDate = date || new Date().toISOString().split('T')[0]
+      const response = await flightAPI.get(`/api/v1/flights/stats/dashboard/${targetDate}`)
+      return response.data
+    } catch (error) {
+      console.error('Error getting dashboard stats:', error)
+      // Fallback olarak count endpoint'ini kullan
+      return this.getFlightCounts(targetDate)
+    }
+  }
+
+  // Backend: GET /api/v1/flights/stats/daily-chart?startDate={}&endDate={}
+  async getChartData(startDate = null, endDate = null) {
+    try {
+      const params = {}
+      if (startDate) params.startDate = startDate
+      if (endDate) params.endDate = endDate
+
+      const response = await flightAPI.get('/api/v1/flights/stats/daily-chart', { params })
+      return response.data
+    } catch (error) {
+      console.error('Error getting chart data:', error)
+      // Backend'de bu endpoint yoksa boş array döndür
+      return []
+    }
+  }
+
+  // Backend: GET /api/v1/flights/stats/type-distribution
+  async getFlightTypeDistribution() {
+    try {
+      const response = await flightAPI.get('/api/v1/flights/stats/type-distribution')
+      return response.data
+    } catch (error) {
+      console.error('Error getting flight type distribution:', error)
+      // Fallback olarak count verilerinden type distribution oluştur
+      return this.generateTypeDistributionFromCounts()
+    }
+  }
+
+  // Fallback method - Count verilerinden type distribution oluştur
+  async generateTypeDistributionFromCounts() {
+    try {
+      const today = new Date().toISOString().split('T')[0]
+      const counts = await this.getFlightCounts(today)
+
+      // Count verilerinden chart için uygun format oluştur
+      const distribution = []
+
+      if (counts.scheduled > 0) {
+        distribution.push({
+          name: 'Planlandı',
+          value: counts.scheduled,
+          status: 'SCHEDULED',
+          color: '#5470C6'
+        })
+      }
+
+      if (counts.departed > 0) {
+        distribution.push({
+          name: 'Kalktı',
+          value: counts.departed,
+          status: 'DEPARTED',
+          color: '#67C23A'
+        })
+      }
+
+      if (counts.arrived > 0) {
+        distribution.push({
+          name: 'Vardı',
+          value: counts.arrived,
+          status: 'ARRIVED',
+          color: '#3BA272'
+        })
+      }
+
+      if (counts.delayed > 0) {
+        distribution.push({
+          name: 'Gecikti',
+          value: counts.delayed,
+          status: 'DELAYED',
+          color: '#FAC858'
+        })
+      }
+
+      if (counts.cancelled > 0) {
+        distribution.push({
+          name: 'İptal',
+          value: counts.cancelled,
+          status: 'CANCELLED',
+          color: '#F56C6C'
+        })
+      }
+
+      return distribution
+    } catch (error) {
+      console.error('Error generating type distribution from counts:', error)
+      return []
+    }
   }
 
   async getSystemInfo() {
@@ -262,42 +369,14 @@ class FlightService {
     return flights.filter(f => f.flightDate === date).length
   }
 
-  async getDashboardStats(date) {
-    const [counts, delayedFlights] = await Promise.all([
-      this.getFlightCounts(date),
-      this.getDelayedFlights(15)
-    ])
-
-    return {
-      totalFlights: counts.totalFlights || 0,
-      scheduledFlights: counts.scheduledFlights || 0,
-      departedFlights: counts.departedFlights || 0,
-      arrivedFlights: counts.arrivedFlights || 0,
-      cancelledFlights: counts.cancelledFlights || 0,
-      delayedFlights: delayedFlights.length,
-      onTimePercentage: counts.onTimePercentage || 0
-    }
-  }
-
-  async getChartData(startDate, endDate) {
-    // This would need to be implemented based on backend analytics endpoints
-    const response = await flightAPI.get('/api/v1/flights/stats/chart', {
-      params: { startDate, endDate }
-    })
-    return response.data
-  }
-
-  async getFlightTypeDistribution() {
-    const response = await flightAPI.get('/api/v1/flights/stats/type-distribution')
-    return response.data
-  }
-
+  // Helper method - Bugünün uçuşlarını getir
   async getTodayFlights() {
     const today = new Date().toISOString().split('T')[0]
     return this.getFlightsByDate(today)
   }
 
-  async getTodayFlightStats() {
+  // Helper method - Bugünün istatistiklerini getir
+  async getTodayStats() {
     const today = new Date().toISOString().split('T')[0]
     return this.getDashboardStats(today)
   }

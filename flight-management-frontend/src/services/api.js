@@ -7,7 +7,7 @@ import {
   REFERENCE_API_ENDPOINTS,
   FLIGHT_API_ENDPOINTS
 } from '@/utils/constants'
-import { getStorageItem, setStorageItem, removeStorageItem, parseApiError, logError } from '@/utils/helpers'
+import { getStorageItem, setStorageItem, removeStorageItem, parseApiError, logError, isValidJWTToken } from '@/utils/helpers'
 
 // ========================
 // REQUEST/RESPONSE INTERCEPTOR UTILITIES
@@ -110,150 +110,189 @@ function createApiClient(baseURL, options = {}) {
     ...options
   })
 
-  // Request interceptor
+  // Request interceptor - Token handling fix
   client.interceptors.request.use(
     (config) => {
-      // Add authentication token
-      const token = getStorageItem(STORAGE_KEYS.AUTH_TOKEN)
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`
-      }
-
-      // Add request timestamp for monitoring
-      config.metadata = {
-        startTime: Date.now(),
-        retryCount: config.retryCount || 0
-      }
-
-      // Request deduplication
-      if (config.deduplicate !== false && ['GET'].includes(config.method?.toUpperCase())) {
-        const existingRequest = requestQueue.add(config)
-        if (existingRequest !== undefined) {
-          return Promise.reject({
-            __CANCEL__: true,
-            message: 'Duplicate request',
-            config
-          })
+      // Queue management for duplicate requests
+      if (options.enableRequestQueue !== false) {
+        const queuePromise = requestQueue.add(config)
+        if (queuePromise !== config) {
+          return queuePromise
         }
       }
 
-      // Log request in development
-      if (import.meta.env.MODE === 'development') {
-        console.log(`🚀 ${config.method?.toUpperCase()} ${config.url}`, {
-          params: config.params,
-          data: config.data
-        })
+      // JWT Token ekleme - GÜNCELLEME
+      try {
+        // Token'ı raw string olarak al (JSON parse etmeden)
+        const token = localStorage.getItem(STORAGE_KEYS.TOKEN)
+
+        if (token) {
+          // Token'ın geçerli olup olmadığını kontrol et
+          if (isValidJWTToken(token)) {
+            config.headers.Authorization = `Bearer ${token}`
+          } else {
+            // Geçersiz token'ı temizle
+            console.warn('Invalid token detected, clearing localStorage')
+            localStorage.removeItem(STORAGE_KEYS.TOKEN)
+            localStorage.removeItem(STORAGE_KEYS.USER)
+
+            // Login sayfasına yönlendir (eğer zaten login sayfasında değilse)
+            if (window.location.pathname !== '/login') {
+              window.location.href = '/login'
+              return Promise.reject(new Error('Invalid token, redirecting to login'))
+            }
+          }
+        }
+      } catch (tokenError) {
+        console.error('Token handling error:', tokenError)
+        // Token error durumunda auth verilerini temizle
+        localStorage.removeItem(STORAGE_KEYS.TOKEN)
+        localStorage.removeItem(STORAGE_KEYS.USER)
+      }
+
+      // Request logging (development)
+      if (options.enableLogging !== false && import.meta.env.DEV) {
+        console.group(`🚀 ${config.method?.toUpperCase()} ${config.url}`)
+        console.log('Config:', config)
+        console.log('Headers:', config.headers)
+        if (config.data) console.log('Data:', config.data)
+        if (config.params) console.log('Params:', config.params)
+        console.groupEnd()
       }
 
       return config
     },
     (error) => {
-      logError('API Request Interceptor', error)
+      // Request queue error handling
+      if (error.config) {
+        requestQueue.reject(error.config, error)
+      }
+
+      logError('Request Interceptor', error, { url: error.config?.url })
       return Promise.reject(error)
     }
   )
 
   // Response interceptor
+  // Response interceptor - Token expiry handling
   client.interceptors.response.use(
     (response) => {
-      const { config } = response
-
-      // Calculate request duration
-      if (config.metadata) {
-        const duration = Date.now() - config.metadata.startTime
-        response.metadata = {
-          ...config.metadata,
-          duration
-        }
-
-        // Log slow requests
-        if (duration > 3000) {
-          console.warn(`🐌 Slow request: ${config.method?.toUpperCase()} ${config.url} (${duration}ms)`)
-        }
+      // Queue management
+      if (response.config) {
+        requestQueue.resolve(response.config, response)
       }
 
-      // Resolve queued requests
-      requestQueue.resolve(config, response)
-
-      // Log response in development
-      if (import.meta.env.MODE === 'development') {
-        console.log(`✅ ${config.method?.toUpperCase()} ${config.url}`, {
-          status: response.status,
-          duration: response.metadata?.duration,
-          data: response.data
-        })
+      // Response logging (development)
+      if (options.enableLogging !== false && import.meta.env.DEV) {
+        console.group(`✅ ${response.config.method?.toUpperCase()} ${response.config.url}`)
+        console.log('Status:', response.status)
+        console.log('Data:', response.data)
+        console.groupEnd()
       }
 
       return response
     },
     async (error) => {
-      const { config, response } = error
+      const originalRequest = error.config
 
-      // Handle cancelled requests
-      if (error.__CANCEL__) {
-        return requestQueue.queue.get(requestQueue.generateKey(config))
+      // Queue management
+      if (originalRequest) {
+        requestQueue.reject(originalRequest, error)
       }
 
-      // Reject queued requests
-      if (config) {
-        requestQueue.reject(config, error)
+      // Response logging (development)
+      if (import.meta.env.DEV) {
+        console.group(`❌ ${originalRequest?.method?.toUpperCase()} ${originalRequest?.url}`)
+        console.log('Error:', error)
+        console.log('Status:', error.response?.status)
+        console.log('Data:', error.response?.data)
+        console.groupEnd()
       }
 
-      // Calculate request duration for failed requests
-      if (config?.metadata) {
-        const duration = Date.now() - config.metadata.startTime
-        error.metadata = {
-          ...config.metadata,
-          duration
+      // Token expiry handling - GÜNCELLEME
+      if (error.response?.status === HTTP_STATUS.UNAUTHORIZED && originalRequest && !originalRequest._retry) {
+        originalRequest._retry = true
+
+        try {
+          // Token'ı temizle
+          localStorage.removeItem(STORAGE_KEYS.TOKEN)
+          localStorage.removeItem(STORAGE_KEYS.USER)
+
+          // User notification
+          ElMessage.error('Oturum süreniz doldu. Lütfen tekrar giriş yapın.')
+
+          // Login sayfasına yönlendir
+          setTimeout(() => {
+            if (window.location.pathname !== '/login') {
+              window.location.href = '/login'
+            }
+          }, 1500)
+
+          return Promise.reject(error)
+        } catch (refreshError) {
+          console.error('Token refresh error:', refreshError)
+
+          // Refresh başarısız olursa login sayfasına yönlendir
+          localStorage.removeItem(STORAGE_KEYS.TOKEN)
+          localStorage.removeItem(STORAGE_KEYS.USER)
+
+          if (window.location.pathname !== '/login') {
+            window.location.href = '/login'
+          }
+
+          return Promise.reject(refreshError)
         }
       }
 
-      // Log error in development
-      if (import.meta.env.MODE === 'development') {
-        console.error(`❌ ${config?.method?.toUpperCase()} ${config?.url}`, {
-          status: response?.status,
-          duration: error.metadata?.duration,
-          error: error.message
-        })
-      }
+      // API error handling with user notifications
+      if (error.response) {
+        const { status, data } = error.response
+        const errorMessage = data?.message || data?.error || 'Bir hata oluştu'
 
-      // Handle specific error cases
-      if (response) {
-        const { status } = response
-
+        // Handle different error types
         switch (status) {
-          case HTTP_STATUS.UNAUTHORIZED:
-            await handleUnauthorized()
+          case HTTP_STATUS.BAD_REQUEST:
+            if (options.showErrors !== false) {
+              ElMessage.error(`Geçersiz istek: ${errorMessage}`)
+            }
             break
-
           case HTTP_STATUS.FORBIDDEN:
-            handleForbidden()
+            if (options.showErrors !== false) {
+              ElMessage.error('Bu işlemi gerçekleştirme yetkiniz yok')
+            }
             break
-
           case HTTP_STATUS.NOT_FOUND:
-            handleNotFound(config)
+            if (options.showErrors !== false) {
+              ElMessage.error('Kaynak bulunamadı')
+            }
             break
-
+          case HTTP_STATUS.CONFLICT:
+            if (options.showErrors !== false) {
+              ElMessage.error(`Çakışma: ${errorMessage}`)
+            }
+            break
           case HTTP_STATUS.INTERNAL_SERVER_ERROR:
-            handleServerError(error)
+            if (options.showErrors !== false) {
+              ElMessage.error('Sunucu hatası')
+            }
             break
-
           default:
-            // Retry logic for specific status codes
-            if (shouldRetry(error)) {
-              return retryRequest(client, config)
+            if (options.showErrors !== false && status >= 400) {
+              ElMessage.error(errorMessage)
             }
         }
-      } else {
+      } else if (error.request) {
         // Network error
-        handleNetworkError(error)
+        if (options.showErrors !== false) {
+          ElMessage.error('Bağlantı hatası: Sunucuya ulaşılamıyor')
+        }
       }
 
-      // Log error for monitoring
-      logError('API Response Error', error, {
-        url: config?.url,
-        method: config?.method,
-        status: response?.status
+      // Log error for debugging
+      logError('API Response', error, {
+        url: originalRequest?.url,
+        method: originalRequest?.method,
+        status: error.response?.status
       })
 
       return Promise.reject(error)

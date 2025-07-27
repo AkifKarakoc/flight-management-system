@@ -1,126 +1,59 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
-
-// Element Plus
 import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
 import 'element-plus/theme-chalk/dark/css-vars.css'
-import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 
-// Router
+import App from './App.vue'
 import router from './router'
 
-// Styles
+// Utilities
+import { initializeStorage } from '@/utils/helpers'
+
+// Global styles
 import './assets/styles/main.scss'
 
-// App
-import App from './App.vue'
+// Font Awesome Icons (if used)
+import { library } from '@fortawesome/fontawesome-svg-core'
+import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
+import { fas } from '@fortawesome/free-solid-svg-icons'
 
-// ECharts
-import ECharts from 'vue-echarts'
-import 'echarts'
+// Add icons to library
+library.add(fas)
 
-// Day.js
-import dayjs from 'dayjs'
-import 'dayjs/locale/tr'
-import relativeTime from 'dayjs/plugin/relativeTime'
-import utc from 'dayjs/plugin/utc'
-import timezone from 'dayjs/plugin/timezone'
-
-// Day.js configuration
-dayjs.locale('tr')
-dayjs.extend(relativeTime)
-dayjs.extend(utc)
-dayjs.extend(timezone)
-
-// Debug utility (development only)
-import '@/utils/debug.js'
-
+// Create Vue app
 const app = createApp(App)
 
-// Pinia store
-const pinia = createPinia()
-app.use(pinia)
+// Initialize storage and clear invalid tokens BEFORE app mount
+console.log('Initializing application...')
+initializeStorage()
 
-// Router
+// Use plugins
+app.use(createPinia())
 app.use(router)
+app.use(ElementPlus)
 
-// Element Plus
-app.use(ElementPlus, {
-  locale: {
-    name: 'tr',
-    // Element Plus Türkçe locale buraya eklenecek
-  }
-})
+// Global components
+app.component('font-awesome-icon', FontAwesomeIcon)
 
-// Element Plus Icons
-for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
-  app.component(key, component)
-}
+// Global error handler
+app.config.errorHandler = (error, instance, info) => {
+  console.error('Global error handler:', error, info)
 
-// ECharts global component
-app.component('VChart', ECharts)
+  // Token ile ilgili hatalar için özel handling
+  if (error.message && error.message.includes('token')) {
+    console.log('Token related error detected, clearing storage')
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
 
-// Global properties
-app.config.globalProperties.$dayjs = dayjs
-
-// Enhanced global error handler
-app.config.errorHandler = (err, vm, info) => {
-  console.error('🚨 Global error:', {
-    error: err,
-    component: vm?.$options?.name || vm?.$options?.__file || 'Unknown',
-    info,
-    stack: err.stack,
-    timestamp: new Date().toISOString()
-  })
-
-  // Prevent infinite error loops
-  if (err.message && err.message.includes('Maximum call stack size exceeded')) {
-    console.error('🔄 Infinite loop detected, preventing further errors')
-    return
-  }
-
-  // Handle specific error types
-  if (err.name === 'ChunkLoadError') {
-    console.error('📦 Chunk loading failed, reloading page...')
-    window.location.reload()
-    return
-  }
-
-  if (err.message && err.message.includes('Failed to fetch dynamically imported module')) {
-    console.error('📥 Dynamic import failed, this might be a temporary network issue')
-    return
-  }
-
-  // Log to external service in production
-  if (import.meta.env.PROD) {
-    // TODO: Add error tracking service (Sentry, etc.)
-    console.error('📊 Error should be logged to external service in production')
+    // Login sayfasına yönlendir
+    if (window.location.pathname !== '/login') {
+      window.location.href = '/login'
+    }
   }
 }
 
-// Unhandled promise rejection handler
-window.addEventListener('unhandledrejection', (event) => {
-  console.error('🚨 Unhandled promise rejection:', {
-    reason: event.reason,
-    promise: event.promise,
-    timestamp: new Date().toISOString()
-  })
-  
-  // Prevent default browser behavior
-  event.preventDefault()
-})
-
-// Global error event handler
-window.addEventListener('error', (event) => {
-  console.error('🚨 Global error event:', {
-    message: event.message,
-    filename: event.filename,
-    lineno: event.lineno,
-    colno: event.colno,
-    error: event.error,
-    timestamp: new Date().toISOString()
-  })
-})
-
+// Mount app
 app.mount('#app')
+
+console.log('Application mounted successfully')
