@@ -39,7 +39,7 @@ public class JwtTokenProvider {
                 .claim("roles", roles)
                 .setIssuedAt(new Date())
                 .setExpiration(expiryDate)
-                .signWith(getSigningKey())
+                .signWith(getSigningKey(), SignatureAlgorithm.HS256)  // ← EKLE: Algorithm belirt
                 .compact();
     }
 

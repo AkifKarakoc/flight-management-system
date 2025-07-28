@@ -22,17 +22,18 @@
       @current-change="changePage"
       @size-change="changeSize"
     >
-      <el-table-column prop="registration" label="Kayıt No" width="120" />
+      <el-table-column prop="registrationNumber" label="Kayıt No" width="120" />
       <el-table-column prop="aircraftType" label="Uçak Tipi" width="120" />
       <el-table-column prop="manufacturer" label="Üretici" width="120" />
       <el-table-column prop="model" label="Model" width="120" />
       <el-table-column prop="airline.name" label="Havayolu" />
-      <el-table-column prop="capacity" label="Kapasite" width="100" />
-      <el-table-column prop="yearOfManufacture" label="Üretim Yılı" width="100" />
-      <el-table-column prop="active" label="Durum" width="100">
+      <el-table-column prop="seatCapacity" label="Koltuk" width="80" />
+      <el-table-column prop="cargoCapacity" label="Kargo" width="80" />
+      <el-table-column prop="maxRange" label="Menzil (km)" width="100" />
+      <el-table-column prop="status" label="Durum" width="100">
         <template #default="{ row }">
-          <el-tag :type="row.active ? 'success' : 'danger'">
-            {{ row.active ? 'Aktif' : 'Pasif' }}
+          <el-tag :type="row.status === 'ACTIVE' ? 'success' : 'danger'">
+            {{ row.status === 'ACTIVE' ? 'Aktif' : 'Pasif' }}
           </el-tag>
         </template>
       </el-table-column>
@@ -69,17 +70,13 @@
     >
       <el-row :gutter="20">
         <el-col :span="12">
-          <el-form-item label="Kayıt No" prop="registration">
-            <el-input v-model="form.registration" />
+          <el-form-item label="Kayıt No" prop="registrationNumber">
+            <el-input v-model="form.registrationNumber" />
           </el-form-item>
         </el-col>
         <el-col :span="12">
           <el-form-item label="Uçak Tipi" prop="aircraftType">
-            <el-select v-model="form.aircraftType" style="width: 100%">
-              <el-option label="Passenger" value="PASSENGER" />
-              <el-option label="Cargo" value="CARGO" />
-              <el-option label="Mixed" value="MIXED" />
-            </el-select>
+            <el-input v-model="form.aircraftType" placeholder="B777, A320, etc." />
           </el-form-item>
         </el-col>
       </el-row>
@@ -88,17 +85,17 @@
         <el-col :span="12">
           <el-form-item label="Üretici" prop="manufacturer">
             <el-select v-model="form.manufacturer" style="width: 100%" filterable>
-              <el-option label="Boeing" value="BOEING" />
-              <el-option label="Airbus" value="AIRBUS" />
-              <el-option label="Embraer" value="EMBRAER" />
-              <el-option label="Bombardier" value="BOMBARDIER" />
+              <el-option label="Boeing" value="Boeing" />
+              <el-option label="Airbus" value="Airbus" />
+              <el-option label="Embraer" value="Embraer" />
+              <el-option label="Bombardier" value="Bombardier" />
               <el-option label="ATR" value="ATR" />
             </el-select>
           </el-form-item>
         </el-col>
         <el-col :span="12">
           <el-form-item label="Model" prop="model">
-            <el-input v-model="form.model" />
+            <el-input v-model="form.model" placeholder="777-300ER, A320-200, etc." />
           </el-form-item>
         </el-col>
       </el-row>
@@ -122,26 +119,56 @@
           </el-form-item>
         </el-col>
         <el-col :span="12">
-          <el-form-item label="Kapasite" prop="capacity">
-            <el-input-number v-model="form.capacity" :min="1" :max="1000" style="width: 100%" />
+          <el-form-item label="Koltuk Kapasitesi" prop="seatCapacity">
+            <el-input-number v-model="form.seatCapacity" :min="0" :max="1000" style="width: 100%" />
           </el-form-item>
         </el-col>
       </el-row>
 
       <el-row :gutter="20">
         <el-col :span="12">
-          <el-form-item label="Üretim Yılı" prop="yearOfManufacture">
-            <el-input-number
-              v-model="form.yearOfManufacture"
-              :min="1950"
-              :max="new Date().getFullYear()"
+          <el-form-item label="Kargo Kapasitesi (kg)" prop="cargoCapacity">
+            <el-input-number v-model="form.cargoCapacity" :min="0" :max="200000" style="width: 100%" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item label="Maksimum Menzil (km)" prop="maxRange">
+            <el-input-number v-model="form.maxRange" :min="0" :max="20000" style="width: 100%" />
+          </el-form-item>
+        </el-col>
+      </el-row>
+
+      <el-row :gutter="20">
+        <el-col :span="12">
+          <el-form-item label="Üretim Tarihi" prop="manufactureDate">
+            <el-input
+              v-model="form.manufactureDate"
+              type="date"
               style="width: 100%"
+              placeholder="YYYY-MM-DD"
             />
           </el-form-item>
         </el-col>
         <el-col :span="12">
-          <el-form-item label="Durum">
-            <el-switch v-model="form.active" />
+          <el-form-item label="Son Bakım Tarihi" prop="lastMaintenance">
+            <el-input
+              v-model="form.lastMaintenance"
+              type="date"
+              style="width: 100%"
+              placeholder="YYYY-MM-DD"
+            />
+          </el-form-item>
+        </el-col>
+      </el-row>
+
+      <el-row :gutter="20">
+        <el-col :span="12">
+          <el-form-item label="Durum" prop="status">
+            <el-select v-model="form.status" style="width: 100%">
+              <el-option label="Aktif" value="ACTIVE" />
+              <el-option label="Bakımda" value="MAINTENANCE" />
+              <el-option label="Pasif" value="INACTIVE" />
+            </el-select>
           </el-form-item>
         </el-col>
       </el-row>
@@ -179,24 +206,26 @@ const airlinesLoading = ref(false)
 
 const form = reactive({
   id: null,
-  registration: '',
-  aircraftType: 'PASSENGER',
+  registrationNumber: '',
+  aircraftType: '',
   manufacturer: '',
   model: '',
   airlineId: null,
-  capacity: 150,
-  yearOfManufacture: new Date().getFullYear(),
-  active: true
+  seatCapacity: 0,
+  cargoCapacity: 0,
+  maxRange: 0,
+  manufactureDate: null,
+  lastMaintenance: null,
+  status: 'ACTIVE'
 })
 
 const formRules = {
-  registration: [rules.required],
+  registrationNumber: [rules.required],
   aircraftType: [rules.required],
   manufacturer: [rules.required],
   model: [rules.required],
   airlineId: [rules.required],
-  capacity: [rules.required],
-  yearOfManufacture: [rules.required]
+  status: [rules.required]
 }
 
 const changeSize = (size) => {
@@ -226,14 +255,17 @@ const openModal = async (aircraftItem = null) => {
   } else {
     Object.assign(form, {
       id: null,
-      registration: '',
-      aircraftType: 'PASSENGER',
+      registrationNumber: '',
+      aircraftType: '',
       manufacturer: '',
       model: '',
       airlineId: null,
-      capacity: 150,
-      yearOfManufacture: new Date().getFullYear(),
-      active: true
+      seatCapacity: 0,
+      cargoCapacity: 0,
+      maxRange: 0,
+      manufactureDate: null,
+      lastMaintenance: null,
+      status: 'ACTIVE'
     })
   }
 

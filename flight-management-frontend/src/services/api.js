@@ -52,11 +52,11 @@ export const referenceAPI = {
   updateAirport: (id, data) => api.put(`/airports/${id}`, data),
   deleteAirport: id => api.delete(`/airports/${id}`),
 
-  // Aircraft
-  getAircraft: params => api.get('/aircraft', { params }),
-  createAircraft: data => api.post('/aircraft', data),
-  updateAircraft: (id, data) => api.put(`/aircraft/${id}`, data),
-  deleteAircraft: id => api.delete(`/aircraft/${id}`),
+  // Aircraft - DÜZELTME: /aircraft -> /aircrafts
+  getAircraft: params => api.get('/aircrafts', { params }),
+  createAircraft: data => api.post('/aircrafts', data),
+  updateAircraft: (id, data) => api.put(`/aircrafts/${id}`, data),
+  deleteAircraft: id => api.delete(`/aircrafts/${id}`),
 
   // Routes
   getRoutes: params => api.get('/routes', { params }),

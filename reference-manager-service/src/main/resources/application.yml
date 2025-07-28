@@ -12,6 +12,14 @@ spring:
   application:
     name: reference-manager-service
 
+    # Jackson JSON serialization ayarları
+    jackson:
+      serialization:
+        write-dates-as-timestamps: false
+      deserialization:
+        fail-on-unknown-properties: false
+      time-zone: UTC
+
   datasource:
     url: jdbc:mysql://localhost:3308/reference_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
     username: admin
