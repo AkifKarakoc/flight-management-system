@@ -18,6 +18,8 @@ import com.flightmanagement.referencemanagerservice.repository.RouteSegmentRepos
 import com.flightmanagement.referencemanagerservice.validator.RouteDeletionValidator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,7 +38,43 @@ public class RouteService {
     private final KafkaProducerService kafkaProducerService;
     private final RouteDeletionValidator deletionValidator;
 
-    // Admin için tüm route'ları getir
+    // YENİ: Paginated metodlar
+    public Page<RouteResponse> getAllRoutes(Pageable pageable) {
+        log.debug("Admin fetching all routes with pagination: page={}, size={}",
+                pageable.getPageNumber(), pageable.getPageSize());
+        Page<Route> routePage = routeRepository.findAllForAdmin(pageable);
+        return routePage.map(routeMapper::toResponse);
+    }
+
+    public Page<RouteResponse> getRoutesForUser(Long userId, boolean isAdmin, Pageable pageable) {
+        log.debug("Fetching routes for user: {}, isAdmin: {}, page={}, size={}",
+                userId, isAdmin, pageable.getPageNumber(), pageable.getPageSize());
+
+        Page<Route> routePage;
+        if (isAdmin) {
+            routePage = routeRepository.findAllForAdmin(pageable);
+        } else {
+            routePage = routeRepository.findVisibleRoutesForUser(userId, pageable);
+        }
+
+        return routePage.map(routeMapper::toResponse);
+    }
+
+    public Page<RouteResponse> getUserRoutes(Long userId, Pageable pageable) {
+        log.debug("Fetching user's own routes for user: {}, page={}, size={}",
+                userId, pageable.getPageNumber(), pageable.getPageSize());
+        Page<Route> routePage = routeRepository.findByCreatedByUserId(userId, pageable);
+        return routePage.map(routeMapper::toResponse);
+    }
+
+    public Page<RouteResponse> getSharedRoutesForAirline(Long airlineId, Pageable pageable) {
+        log.debug("Fetching shared routes for airline: {}, page={}, size={}",
+                airlineId, pageable.getPageNumber(), pageable.getPageSize());
+        Page<Route> routePage = routeRepository.findSharedRoutesForAirline(airlineId, pageable);
+        return routePage.map(routeMapper::toResponse);
+    }
+
+    // ESKİ: Non-paginated metodlar (backward compatibility için)
     public List<RouteResponse> getAllRoutes() {
         log.debug("Admin fetching all routes");
         return routeRepository.findAllForAdmin().stream()
@@ -44,7 +82,6 @@ public class RouteService {
                 .collect(Collectors.toList());
     }
 
-    // Kullanıcı için görünür route'ları getir
     public List<RouteResponse> getRoutesForUser(Long userId, boolean isAdmin) {
         log.debug("Fetching routes for user: {}, isAdmin: {}", userId, isAdmin);
 
@@ -60,7 +97,6 @@ public class RouteService {
                 .collect(Collectors.toList());
     }
 
-    // Kullanıcının kendi oluşturduğu route'ları getir
     public List<RouteResponse> getUserRoutes(Long userId) {
         log.debug("Fetching user's own routes for user: {}", userId);
         return routeRepository.findByCreatedByUserId(userId).stream()
@@ -68,7 +104,6 @@ public class RouteService {
                 .collect(Collectors.toList());
     }
 
-    // Havayolu için paylaşılan route'ları getir
     public List<RouteResponse> getSharedRoutesForAirline(Long airlineId) {
         log.debug("Fetching shared routes for airline: {}", airlineId);
         return routeRepository.findSharedRoutesForAirline(airlineId).stream()

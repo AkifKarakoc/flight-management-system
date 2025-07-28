@@ -6,6 +6,8 @@ import com.flightmanagement.referencemanagerservice.dto.response.RouteResponse;
 import com.flightmanagement.referencemanagerservice.service.RouteService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -23,43 +25,40 @@ public class RouteController {
     private final RouteService routeService;
 
     /**
-     * Admin için tüm route'ları getir
+     * Admin için tüm route'lar - paginated
      */
     @GetMapping("/admin/all")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<List<RouteResponse>> getAllRoutesForAdmin() {
-        return ResponseEntity.ok(routeService.getAllRoutes());
+    public ResponseEntity<Page<RouteResponse>> getAllRoutesForAdmin(Pageable pageable) {
+        return ResponseEntity.ok(routeService.getAllRoutes(pageable));
     }
 
     /**
-     * Kullanıcı için görünür route'ları getir (kendi route'ları + public route'lar)
+     * Ana route listesi - paginated (kullanıcı için görünür route'lar)
      */
     @GetMapping
-    public ResponseEntity<List<RouteResponse>> getRoutesForUser() {
+    public ResponseEntity<Page<RouteResponse>> getRoutes(Pageable pageable) {
         Long currentUserId = getCurrentUserId();
         boolean isAdmin = isCurrentUserAdmin();
-
-        List<RouteResponse> routes = routeService.getRoutesForUser(currentUserId, isAdmin);
-        return ResponseEntity.ok(routes);
+        return ResponseEntity.ok(routeService.getRoutesForUser(currentUserId, isAdmin, pageable));
     }
 
     /**
-     * Kullanıcının kendi oluşturduğu route'ları getir
+     * Kullanıcının kendi route'ları - paginated
      */
     @GetMapping("/my-routes")
-    public ResponseEntity<List<RouteResponse>> getMyRoutes() {
+    public ResponseEntity<Page<RouteResponse>> getMyRoutes(Pageable pageable) {
         Long currentUserId = getCurrentUserId();
-        List<RouteResponse> routes = routeService.getUserRoutes(currentUserId);
-        return ResponseEntity.ok(routes);
+        return ResponseEntity.ok(routeService.getUserRoutes(currentUserId, pageable));
     }
 
     /**
-     * Havayolu için paylaşılan route'ları getir
+     * Havayolu paylaşılan route'ları - paginated
      */
     @GetMapping("/airline/{airlineId}/shared")
-    public ResponseEntity<List<RouteResponse>> getSharedRoutesForAirline(@PathVariable Long airlineId) {
-        List<RouteResponse> routes = routeService.getSharedRoutesForAirline(airlineId);
-        return ResponseEntity.ok(routes);
+    public ResponseEntity<Page<RouteResponse>> getSharedRoutesForAirline(
+            @PathVariable Long airlineId, Pageable pageable) {
+        return ResponseEntity.ok(routeService.getSharedRoutesForAirline(airlineId, pageable));
     }
 
     /**
