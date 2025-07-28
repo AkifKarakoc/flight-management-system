@@ -2,3 +2,8 @@
 2025-07-28 00:05:00.010 [MessageBroker-6] INFO  [,] c.f.f.config.MetricsScheduler - Metrics Summary - Active Flights: 0.0, Delayed Flights: 0.0, Today's Flights: 1.0, Memory Usage: 3%
 2025-07-28 00:10:00.007 [MessageBroker-10] INFO  [,] c.f.f.config.MetricsScheduler - Metrics Summary - Active Flights: 0.0, Delayed Flights: 0.0, Today's Flights: 1.0, Memory Usage: 1%
 2025-07-28 00:15:00.001 [MessageBroker-9] INFO  [,] c.f.f.config.MetricsScheduler - Metrics Summary - Active Flights: 0.0, Delayed Flights: 0.0, Today's Flights: 1.0, Memory Usage: 2%
+2025-07-28 00:20:00.008 [MessageBroker-3] INFO  [,] c.f.f.config.MetricsScheduler - Metrics Summary - Active Flights: 0.0, Delayed Flights: 0.0, Today's Flights: 1.0, Memory Usage: 3%
+2025-07-28 00:25:00.003 [MessageBroker-3] INFO  [,] c.f.f.config.MetricsScheduler - Metrics Summary - Active Flights: 0.0, Delayed Flights: 0.0, Today's Flights: 1.0, Memory Usage: 2%
+2025-07-28 00:30:00.001 [MessageBroker-3] INFO  [,] c.f.f.config.MetricsScheduler - Metrics Summary - Active Flights: 0.0, Delayed Flights: 0.0, Today's Flights: 1.0, Memory Usage: 3%
+2025-07-28 00:33:11.231 [SpringApplicationShutdownHook] INFO  [,] o.s.b.w.e.tomcat.GracefulShutdown - Commencing graceful shutdown. Waiting for active requests to complete
+2025-07-28 00:33:11.239 [tomcat-shutdown] INFO  [,] o.s.b.w.e.tomcat.GracefulShutdown - Graceful shutdown complete

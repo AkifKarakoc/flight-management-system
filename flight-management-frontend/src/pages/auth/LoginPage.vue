@@ -77,6 +77,15 @@
           >
             Kullanıcı Girişi
           </el-button>
+          <el-button
+            size="small"
+            type="warning"
+            plain
+            :disabled="loading"
+            @click="testApiConnection"
+          >
+            API Bağlantı Testi
+          </el-button>
         </div>
       </div>
     </div>
@@ -89,7 +98,7 @@
 </template>
 
 <script setup>
-import { reactive, ref } from 'vue'
+import { reactive, ref, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, Lock, Ship } from '@element-plus/icons-vue'
@@ -141,13 +150,21 @@ const handleLogin = async () => {
 
     ElMessage.success('Giriş başarılı!')
 
-    // Redirect to intended page or dashboard
-    const redirectPath = route.query.redirect || { name: 'Dashboard' }
-    router.replace(redirectPath)
+    // Auth store state'inin güncellenmesini bekle
+    await nextTick()
+
+    // Auth durumunu tekrar kontrol et
+    console.log('Login completed, auth state:', authStore.isAuthenticated)
+
+    // Manual navigation yerine $nextTick ile bekle ve window.location kullan
+    const redirectPath = route.query.redirect || '/'
+
+    // Router yerine direkt navigation - router guard conflict'ini önler
+    window.location.href = redirectPath
 
   } catch (error) {
     console.error('Login error:', error)
-    // Error message is handled by API service
+    ElMessage.error(error.message || 'Giriş işlemi başarısız')
   } finally {
     loading.value = false
   }
@@ -157,6 +174,47 @@ const handleLogin = async () => {
 const fillCredentials = (username, password) => {
   loginForm.username = username
   loginForm.password = password
+}
+
+// Test API connection
+const testApiConnection = async () => {
+  try {
+    console.log('🔍 Testing API connection...')
+    
+    // Test 1: Health check
+    const healthResponse = await fetch('/api/v1/auth/login', {
+      method: 'OPTIONS',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    })
+    console.log('Health check response:', healthResponse.status)
+    
+    // Test 2: Direct fetch
+    const response = await fetch('/api/v1/auth/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        username: 'admin',
+        password: 'admin123'
+      })
+    })
+    
+    console.log('Direct fetch response:', response.status)
+    const data = await response.text()
+    console.log('Response data:', data)
+    
+    if (response.ok) {
+      ElMessage.success('API bağlantısı başarılı!')
+    } else {
+      ElMessage.error(`API hatası: ${response.status}`)
+    }
+  } catch (error) {
+    console.error('API test error:', error)
+    ElMessage.error(`Bağlantı hatası: ${error.message}`)
+  }
 }
 </script>
 

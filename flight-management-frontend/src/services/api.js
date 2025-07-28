@@ -113,13 +113,13 @@ function createApiClient(baseURL, options = {}) {
   // Request interceptor - Token handling fix
   client.interceptors.request.use(
     (config) => {
-      // Queue management for duplicate requests
-      if (options.enableRequestQueue !== false) {
-        const queuePromise = requestQueue.add(config)
-        if (queuePromise !== config) {
-          return queuePromise
-        }
-      }
+      // Queue management for duplicate requests - DISABLED for debugging
+      // if (options.enableRequestQueue !== false) {
+      //   const queuePromise = requestQueue.add(config)
+      //   if (queuePromise !== config) {
+      //     return queuePromise
+      //   }
+      // }
 
       // JWT Token ekleme - GÜNCELLEME
       try {
@@ -177,10 +177,10 @@ function createApiClient(baseURL, options = {}) {
   // Response interceptor - Token expiry handling
   client.interceptors.response.use(
     (response) => {
-      // Queue management
-      if (response.config) {
-        requestQueue.resolve(response.config, response)
-      }
+      // Queue management - DISABLED for debugging
+      // if (response.config) {
+      //   requestQueue.resolve(response.config, response)
+      // }
 
       // Response logging (development)
       if (options.enableLogging !== false && import.meta.env.DEV) {
@@ -195,10 +195,10 @@ function createApiClient(baseURL, options = {}) {
     async (error) => {
       const originalRequest = error.config
 
-      // Queue management
-      if (originalRequest) {
-        requestQueue.reject(originalRequest, error)
-      }
+      // Queue management - DISABLED for debugging
+      // if (originalRequest) {
+      //   requestQueue.reject(originalRequest, error)
+      // }
 
       // Response logging (development)
       if (import.meta.env.DEV) {
@@ -428,7 +428,7 @@ async function logoutUser() {
  * Reference Manager API Client (Port 8081)
  */
 export const referenceAPI = createApiClient(API_BASE_URL.REFERENCE_MANAGER, {
-  timeout: 15000,
+  timeout: 30000, // 30 saniye timeout
   headers: {
     'X-Service': 'reference-manager'
   }

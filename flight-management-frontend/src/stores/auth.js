@@ -70,6 +70,27 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  const initialize = () => {
+    try {
+      console.log('Initializing auth store...') // Debug log
+
+      // checkAuth metodunu çağır
+      checkAuth()
+
+      // Initialized flag'i true yap
+      initialized.value = true
+
+      console.log('Auth store initialized:', {
+        isAuthenticated: isAuthenticated.value,
+        user: user.value,
+        hasToken: !!token.value
+      }) // Debug log
+    } catch (error) {
+      console.error('Auth store initialization error:', error)
+      initialized.value = true // Hata olsa bile initialized olarak işaretle
+    }
+  }
+
   const logout = async () => {
     loading.value = true
 
@@ -179,13 +200,6 @@ export const useAuthStore = defineStore('auth', () => {
       user.value = null
       isAuthenticated.value = false
       return false
-    }
-  }
-
-  // Initialize auth state when store is created
-  const initialize = () => {
-    if (!initialized.value) {
-      checkAuth()
     }
   }
 

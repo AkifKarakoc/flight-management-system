@@ -14,20 +14,45 @@ class AuthService {
       console.log('📡 API Endpoint:', REFERENCE_API_ENDPOINTS.AUTH.LOGIN)
       console.log('📊 Credentials:', { username: credentials.username, password: '***' })
       console.log('🌐 Base URL:', referenceAPI.defaults.baseURL)
+      console.log('⏱️ Timeout:', referenceAPI.defaults.timeout)
+      console.log('🔧 Full config:', referenceAPI.defaults)
 
-      const response = await referenceAPI.post(
-        REFERENCE_API_ENDPOINTS.AUTH.LOGIN,
-        credentials
-      )
+      // Timeout süresini artır
+      console.log('🚀 Making API call with fetch...')
+      
+      // Axios yerine fetch kullan
+      const response = await fetch('/api/v1/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(credentials)
+      })
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
+      const responseData = await response.json()
+      console.log('✅ Fetch response successful:', responseData)
+      
+      // Axios response format'ına uygun hale getir
+      const axiosResponse = {
+        data: responseData,
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers
+      }
 
       console.log('✅ Login API call successful!')
-      console.log('📥 Full response:', response)
-      console.log('📊 Response status:', response.status)
-      console.log('📦 Response data:', response.data)
+      console.log('📥 Full response:', axiosResponse)
+      console.log('📊 Response status:', axiosResponse.status)
+      console.log('📦 Response data:', axiosResponse.data)
 
       // Backend response format: { token, tokenType, expiresIn }
       // NOT: accessToken değil, direkt token
-      const { token, tokenType, expiresIn } = response.data
+      const { token, tokenType, expiresIn } = axiosResponse.data
 
       console.log('🔑 Extracted token:', token ? 'Present' : 'Missing')
       console.log('🏷️ Token type:', tokenType)
@@ -53,6 +78,18 @@ class AuthService {
       console.error('📥 Response data:', error.response?.data)
       console.error('📊 Response status:', error.response?.status)
       console.error('🌐 Response headers:', error.response?.headers)
+      console.error('🔗 Error code:', error.code)
+      console.error('📝 Error message:', error.message)
+      console.error('⏰ Error timestamp:', new Date().toISOString())
+      
+      // Network error details
+      if (error.code === 'ECONNABORTED') {
+        console.error('⏱️ Request timeout - server not responding')
+      } else if (error.code === 'ERR_NETWORK') {
+        console.error('🌐 Network error - check server status')
+      } else if (error.code === 'ERR_BAD_REQUEST') {
+        console.error('📡 Bad request - check request format')
+      }
 
       // API error mesajını frontend'e geçir
       if (error.response?.data?.message) {
