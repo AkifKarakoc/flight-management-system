@@ -166,35 +166,60 @@ public class RouteService {
         return routeMapper.toResponse(route);
     }
 
+    @Transactional
     public RouteResponse updateRoute(Long id, RouteRequest request, Long currentUserId, boolean isAdmin) {
         log.debug("Updating route with id: {} by user: {}", id, currentUserId);
+
         Route route = routeRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Route not found with id: " + id));
+
+        // Authorization kontrolü
         if (!isAdmin && !route.getCreatedByUserId().equals(currentUserId)) {
-            throw new BusinessException("You can only update your own routes");
+            throw new BusinessException("You can only update routes you created");
         }
-        // Temel bilgileri güncelle
+
+        // Route code unique kontrolü (değişmişse)
+        if (!route.getRouteCode().equals(request.getRouteCode()) &&
+                routeRepository.existsByRouteCode(request.getRouteCode())) {
+            throw new DuplicateResourceException("Route with code '" + request.getRouteCode() + "' already exists");
+        }
+
+        // 1. Route temel bilgilerini güncelle (ID korunur!)
         route.setRouteCode(request.getRouteCode());
         route.setRouteName(request.getRouteName());
         route.setRouteType(request.getRouteType());
         route.setActive(request.getActive());
         route.setVisibility(request.getVisibility());
         route.setAirlineId(request.getAirlineId());
-        // Segmentleri güncelle
-        routeSegmentRepository.deleteByRouteId(route.getId());
+
+        // 2. MANUEL SEGMENT TEMİZLEME (Constraint violation'u önler)
+        log.debug("Manually deleting segments for route ID: {}", id);
+
+        // 2a. Entity koleksiyonunu temizle
         route.getSegments().clear();
-        createRouteSegments(route, request.getSegments());
-        // Toplam mesafe ve süreyi hesapla
-        int totalDistance = 0;
-        int totalTime = 0;
-        for (RouteSegment segment : route.getSegments()) {
-            if (segment.getDistance() != null) totalDistance += segment.getDistance();
-            if (segment.getEstimatedFlightTime() != null) totalTime += segment.getEstimatedFlightTime();
+
+        // 2b. Veritabanından manuel sil
+        routeSegmentRepository.deleteByRouteId(id);
+
+        // 2c. Flush işlemini zorla - veritabanından silinmesini garanti et
+        routeRepository.flush();
+
+        // 3. Yeni segment'leri ekle
+        if (request.getSegments() != null && !request.getSegments().isEmpty()) {
+            log.debug("Adding {} new segments for route {}", request.getSegments().size(), id);
+            createRouteSegments(route, request.getSegments());
         }
-        route.setDistance(totalDistance);
-        route.setEstimatedFlightTime(totalTime);
+
+        // 4. Toplam mesafe ve süreyi yeniden hesapla
+        recalculateRouteMetrics(route);
+
+        // 5. Route'u kaydet (aynı ID ile)
         route = routeRepository.save(route);
+
+        // 6. Event gönder
         kafkaProducerService.sendRouteEvent("ROUTE_UPDATED", route);
+
+        log.debug("Successfully updated route with ID: {} (ID preserved)", route.getId());
         return routeMapper.toResponse(route);
     }
 
@@ -253,6 +278,7 @@ public class RouteService {
                     .orElseThrow(() -> new ResourceNotFoundException("Origin airport not found for segment"));
             Airport destinationAirport = airportRepository.findById(segmentRequest.getDestinationAirportId())
                     .orElseThrow(() -> new ResourceNotFoundException("Destination airport not found for segment"));
+
             RouteSegment segment = new RouteSegment();
             segment.setRoute(route);
             segment.setSegmentOrder(order++);
@@ -260,9 +286,27 @@ public class RouteService {
             segment.setDestinationAirport(destinationAirport);
             segment.setDistance(segmentRequest.getDistance());
             segment.setEstimatedFlightTime(segmentRequest.getEstimatedFlightTime());
-            segment.setActive(segmentRequest.getActive());
+            segment.setActive(segmentRequest.getActive() != null ? segmentRequest.getActive() : true);
+
             route.addSegment(segment);
         }
+    }
+
+    private void recalculateRouteMetrics(Route route) {
+        int totalDistance = 0;
+        int totalTime = 0;
+
+        if (route.getSegments() != null) {
+            for (RouteSegment segment : route.getSegments()) {
+                if (segment.getDistance() != null) totalDistance += segment.getDistance();
+                if (segment.getEstimatedFlightTime() != null) totalTime += segment.getEstimatedFlightTime();
+            }
+        }
+
+        route.setDistance(totalDistance);
+        route.setEstimatedFlightTime(totalTime);
+
+        log.debug("Recalculated metrics - Distance: {}, Time: {}", totalDistance, totalTime);
     }
 
     // Eski createRoute signature için wrapper
