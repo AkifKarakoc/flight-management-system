@@ -138,9 +138,10 @@
               placeholder="Kalkış"
               filterable
               :loading="airportsLoading"
+              @change="onOriginAirportChange(index)"
             >
               <el-option
-                v-for="airport in airports"
+                v-for="airport in getAvailableOriginAirports(index)"
                 :key="airport.id"
                 :label="`${airport.iataCode} - ${airport.name}`"
                 :value="airport.id"
@@ -153,9 +154,10 @@
               placeholder="Varış"
               filterable
               :loading="airportsLoading"
+              @change="onDestinationAirportChange(index)"
             >
               <el-option
-                v-for="airport in airports"
+                v-for="airport in getAvailableDestinationAirports(index)"
                 :key="airport.id"
                 :label="`${airport.iataCode} - ${airport.name}`"
                 :value="airport.id"
@@ -223,14 +225,38 @@ import { usePagination, useLoading, rules } from '@/utils'
 const auth = useAuthStore()
 const { loading, withLoading } = useLoading()
 
-const {
-  data: routes,
-  total,
-  currentPage,
-  pageSize,
-  fetch: fetchRoutes,
-  changePage
-} = usePagination(referenceAPI.getRoutes)
+const routes = ref([])
+const total = ref(0)
+const currentPage = ref(1)
+const pageSize = ref(10)
+
+const fetchRoutes = async () => {
+  try {
+    const response = await referenceAPI.getRoutes({
+      page: currentPage.value - 1,
+      size: pageSize.value
+    })
+
+    // Backend direkt array dönüyor, pagination wrapper yok
+    if (Array.isArray(response)) {
+      routes.value = response
+      total.value = response.length
+    } else {
+      // Eğer pagination wrapper varsa
+      routes.value = response.content || []
+      total.value = response.totalElements || 0
+    }
+  } catch (error) {
+    console.error('Routes yüklenirken hata:', error)
+    routes.value = []
+    total.value = 0
+  }
+}
+
+const changePage = (page) => {
+  currentPage.value = page
+  fetchRoutes()
+}
 
 const modalVisible = ref(false)
 const saving = ref(false)
@@ -294,14 +320,58 @@ const loadAirports = async () => {
 }
 
 const addSegment = () => {
+  const lastSegment = form.segments[form.segments.length - 1]
   form.segments.push({
     segmentOrder: form.segments.length + 1,
-    originAirportId: null,
+    originAirportId: lastSegment?.destinationAirportId || null, // Son segment'in varışı yeni segment'in kalkışı
     destinationAirportId: null,
     distance: null,
     estimatedFlightTime: null,
     active: true
   })
+}
+
+// Kullanılan havaalanlarını filtrele
+const getAvailableOriginAirports = (segmentIndex) => {
+  if (segmentIndex === 0) return airports.value // İlk segment için tüm havaalanları
+
+  // Diğer segmentler için önceki segment'in varışı otomatik seçili olmalı
+  const prevSegment = form.segments[segmentIndex - 1]
+  return airports.value.filter(airport => airport.id === prevSegment?.destinationAirportId)
+}
+
+const getAvailableDestinationAirports = (segmentIndex) => {
+  const usedAirportIds = new Set()
+
+  // Bu segment'e kadar kullanılan tüm havaalanlarını topla
+  for (let i = 0; i <= segmentIndex; i++) {
+    const segment = form.segments[i]
+    if (segment.originAirportId) usedAirportIds.add(segment.originAirportId)
+    if (i < segmentIndex && segment.destinationAirportId) {
+      usedAirportIds.add(segment.destinationAirportId) // Önceki segment'lerin varışları
+    }
+  }
+
+  // Kullanılmamış havaalanlarını döndür
+  return airports.value.filter(airport => !usedAirportIds.has(airport.id))
+}
+
+// Segment origin değiştiğinde diğer segmentleri güncelle
+const onOriginAirportChange = (segmentIndex) => {
+  // Bu segment'ten sonraki segmentlerin kalkış noktalarını güncelle
+  for (let i = segmentIndex + 1; i < form.segments.length; i++) {
+    const prevSegment = form.segments[i - 1]
+    form.segments[i].originAirportId = prevSegment.destinationAirportId
+  }
+}
+
+// Segment destination değiştiğinde sonraki segmentleri güncelle
+const onDestinationAirportChange = (segmentIndex) => {
+  // Bu segment'ten sonraki segmentlerin kalkış noktalarını güncelle
+  for (let i = segmentIndex + 1; i < form.segments.length; i++) {
+    const prevSegment = form.segments[i - 1]
+    form.segments[i].originAirportId = prevSegment.destinationAirportId
+  }
 }
 
 const removeSegment = (index) => {
@@ -317,7 +387,14 @@ const openModal = async (route = null) => {
   if (route) {
     Object.assign(form, {
       ...route,
-      segments: route.segments || [
+      segments: route.segments?.map(segment => ({
+        segmentOrder: segment.segmentOrder,
+        originAirportId: segment.originAirport?.id,
+        destinationAirportId: segment.destinationAirport?.id,
+        distance: segment.distance,
+        estimatedFlightTime: segment.estimatedFlightTime,
+        active: segment.active
+      })) || [
         {
           segmentOrder: 1,
           originAirportId: null,
