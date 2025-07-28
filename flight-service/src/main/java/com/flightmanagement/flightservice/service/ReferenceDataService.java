@@ -65,6 +65,36 @@ public class ReferenceDataService {
         }
     }
 
+    /**
+     * IATA koduna göre airport bulur
+     */
+    public AirportCache getAirportByIataCode(String iataCode) {
+        log.debug("Getting airport by IATA code: {}", iataCode);
+
+        if (iataCode == null || iataCode.trim().isEmpty()) {
+            return null;
+        }
+
+        try {
+            String url = referenceServiceUrl + "/api/v1/airports/iata/" + iataCode.trim().toUpperCase();
+            HttpHeaders headers = createAuthHeaders();
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+
+            ResponseEntity<AirportCache> response = restTemplate.exchange(
+                    url, HttpMethod.GET, entity, AirportCache.class);
+
+            AirportCache airport = response.getBody();
+            log.debug("Found airport: {} for IATA code: {}",
+                    airport != null ? airport.getName() : "null", iataCode);
+
+            return airport;
+
+        } catch (Exception e) {
+            log.warn("Failed to get airport by IATA code {}: {}", iataCode, e.getMessage());
+            return null;
+        }
+    }
+
     @Cacheable("aircraft")
     public AircraftCache getAircraft(Long aircraftId) {
         log.debug("Fetching aircraft data for ID: {}", aircraftId);

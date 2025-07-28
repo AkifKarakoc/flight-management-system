@@ -70,13 +70,15 @@ export const flightAPI = {
   createFlight: data => api.post('/flights', data),
   updateFlight: (id, data) => api.put(`/flights/${id}`, data),
   deleteFlight: id => api.delete(`/flights/${id}`),
-  uploadCSV: file => {
-    const formData = new FormData()
-    formData.append('file', file)
-    return api.post('/flights/upload-csv', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    })
-  }
+  previewCSV: (formData) => api.post('/flights/upload/preview', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
+
+  confirmCSVUpload: (validRows) => api.post('/flights/upload/confirm', validRows),
+
+  downloadCSVTemplate: () => api.get('/flights/csv-template', {
+    responseType: 'blob'
+  })
 }
 
 export default api

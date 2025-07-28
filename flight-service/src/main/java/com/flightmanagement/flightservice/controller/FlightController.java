@@ -1,5 +1,6 @@
 package com.flightmanagement.flightservice.controller;
 
+import com.flightmanagement.flightservice.dto.response.CsvPreviewResponse;
 import com.flightmanagement.flightservice.entity.enums.FlightType;
 import com.flightmanagement.flightservice.exception.ResourceNotFoundException;
 import org.springframework.data.domain.Page;
@@ -432,50 +433,90 @@ public class FlightController {
     // CSV UPLOAD ENDPOİNTLERİ
     // ===============================
 
-    @PostMapping("/upload-csv")
+    @PostMapping("/upload/preview")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<CsvUploadResult> uploadFlights(@RequestParam("file") MultipartFile file) {
-        log.info("Processing CSV upload: {}", file.getOriginalFilename());
+    public ResponseEntity<CsvPreviewResponse> previewCsv(@RequestParam("file") MultipartFile file) {
+        log.info("Processing CSV preview: {}", file.getOriginalFilename());
 
-        CsvUploadResult result = csvProcessingService.processCsvFile(file);
+        try {
+            CsvPreviewResponse preview = csvProcessingService.previewCsvFile(file);
+            return ResponseEntity.ok(preview);
 
-        if (result.isCompleteFailure()) {
-            return ResponseEntity.badRequest().body(result);
-        } else if (result.isPartialSuccess()) {
-            return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT).body(result);
-        } else {
-            return ResponseEntity.ok(result);
+        } catch (BusinessException e) {
+            log.error("CSV preview validation failed: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(createErrorPreview(e.getMessage()));
+
+        } catch (Exception e) {
+            log.error("Unexpected error during CSV preview: {}", e.getMessage(), e);
+            return ResponseEntity.internalServerError().body(createErrorPreview("Internal server error"));
         }
     }
 
-    @PostMapping("/validate-csv")
+    @PostMapping("/upload/confirm")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<Map<String, Object>> validateCsv(@RequestParam("file") MultipartFile file) {
-        log.info("Validating CSV file: {}", file.getOriginalFilename());
+    public ResponseEntity<CsvUploadResult> confirmCsvUpload(
+            @RequestBody List<CsvPreviewResponse.PreviewRow> validRows) {
 
-        List<String> errors = csvProcessingService.validateCsvContent(file);
+        log.info("Processing confirmed CSV upload for {} rows", validRows.size());
 
-        Map<String, Object> response = new HashMap<>();
-        response.put("valid", errors.isEmpty());
-        response.put("errors", errors);
-        response.put("errorCount", errors.size());
+        try {
+            // Filter only valid rows for safety
+            List<CsvPreviewResponse.PreviewRow> confirmedValidRows = validRows.stream()
+                    .filter(CsvPreviewResponse.PreviewRow::isValid)
+                    .toList();
 
-        if (errors.isEmpty()) {
-            response.put("message", "CSV file is valid and ready for import");
-        } else {
-            response.put("message", "CSV file has validation errors");
+            if (confirmedValidRows.isEmpty()) {
+                CsvUploadResult emptyResult = new CsvUploadResult();
+                emptyResult.setTotalRows(0);
+                emptyResult.setSuccessCount(0);
+                emptyResult.setFailureCount(0);
+                emptyResult.setErrors(List.of("No valid rows to import"));
+                return ResponseEntity.badRequest().body(emptyResult);
+            }
+
+            CsvUploadResult result = csvProcessingService.confirmCsvUpload(confirmedValidRows);
+
+            if (result.isCompleteFailure()) {
+                return ResponseEntity.badRequest().body(result);
+            } else if (result.isPartialSuccess()) {
+                return ResponseEntity.status(HttpStatus.PARTIAL_CONTENT).body(result);
+            } else {
+                return ResponseEntity.ok(result);
+            }
+
+        } catch (Exception e) {
+            log.error("Error during CSV upload confirmation: {}", e.getMessage(), e);
+            CsvUploadResult errorResult = new CsvUploadResult();
+            errorResult.setTotalRows(validRows.size());
+            errorResult.setSuccessCount(0);
+            errorResult.setFailureCount(validRows.size());
+            errorResult.setErrors(List.of("Internal server error: " + e.getMessage()));
+            return ResponseEntity.internalServerError().body(errorResult);
         }
-
-        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/csv-template")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<String> getCsvTemplate() {
+        log.info("Generating CSV template");
+
         String template = csvProcessingService.generateCsvTemplate();
         return ResponseEntity.ok()
                 .header("Content-Type", "text/csv")
-                .header("Content-Disposition", "attachment; filename=flight_template.csv")
+                .header("Content-Disposition", "attachment; filename=flight_upload_template.csv")
                 .body(template);
+    }
+
+    // Helper method for error responses
+    private CsvPreviewResponse createErrorPreview(String errorMessage) {
+        CsvPreviewResponse errorResponse = new CsvPreviewResponse();
+        errorResponse.setTotalRows(0);
+        errorResponse.setValidRows(0);
+        errorResponse.setInvalidRows(0);
+        errorResponse.setPreviewData(new ArrayList<>());
+        errorResponse.setGlobalErrors(List.of(errorMessage));
+        errorResponse.setReadyForImport(false);
+        return errorResponse;
     }
 
     // ===============================
