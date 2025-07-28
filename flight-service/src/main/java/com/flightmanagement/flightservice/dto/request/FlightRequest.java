@@ -3,6 +3,8 @@ package com.flightmanagement.flightservice.dto.request;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.flightmanagement.flightservice.config.FlightTimeDeserializer;
 import com.flightmanagement.flightservice.entity.enums.FlightStatus;
 import com.flightmanagement.flightservice.entity.enums.FlightType;
 import com.flightmanagement.flightservice.validator.ValidFlightCreation;
@@ -75,20 +77,20 @@ public class FlightRequest {
     private LocalDate flightDate;
 
     @NotNull(message = "Scheduled departure is required")
-    @JsonFormat(pattern = "yyyy-MM-dd HH:mm")
+    @JsonDeserialize(using = FlightTimeDeserializer.class)
     @JsonProperty("scheduledDeparture")
     private LocalDateTime scheduledDeparture;
 
     @NotNull(message = "Scheduled arrival is required")
-    @JsonFormat(pattern = "yyyy-MM-dd HH:mm")
+    @JsonDeserialize(using = FlightTimeDeserializer.class)
     @JsonProperty("scheduledArrival")
     private LocalDateTime scheduledArrival;
 
-    @JsonFormat(pattern = "yyyy-MM-dd HH:mm")
+    @JsonDeserialize(using = FlightTimeDeserializer.class)
     @JsonProperty("actualDeparture")
     private LocalDateTime actualDeparture;
 
-    @JsonFormat(pattern = "yyyy-MM-dd HH:mm")
+    @JsonDeserialize(using = FlightTimeDeserializer.class)
     @JsonProperty("actualArrival")
     private LocalDateTime actualArrival;
 

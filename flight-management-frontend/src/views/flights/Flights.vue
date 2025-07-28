@@ -69,7 +69,7 @@
       <el-table-column prop="aircraft.registrationNumber" label="Uçak" width="120" />
       <el-table-column label="Güzergah" width="200">
         <template #default="{ row }">
-          {{ row.route?.routePath || 'N/A' }}
+          {{ row.route?.routePath || `${row.originAirport?.iataCode} → ${row.destinationAirport?.iataCode}` || 'N/A' }}
         </template>
       </el-table-column>
       <el-table-column prop="flightDate" label="Tarih" width="120">
@@ -133,6 +133,33 @@
       @close="closeModal"
       width="800px"
     >
+      <!-- Creation Mode Selector - Sadece Create Mode'da göster -->
+      <template v-if="!isEdit">
+        <el-divider>Uçuş Oluşturma Tipi</el-divider>
+        <el-row :gutter="20">
+          <el-col :span="24">
+            <el-form-item label="Oluşturma Tipi" prop="creationMode">
+              <el-radio-group
+                v-model="form.creationMode"
+                @change="onCreationModeChange"
+                class="creation-mode-selector"
+              >
+                <el-radio-button value="ROUTE">
+                  <el-icon style="margin-right: 5px;"><Location /></el-icon>
+                  Mevcut Rota
+                </el-radio-button>
+                <el-radio-button value="AIRPORTS">
+                  <el-icon style="margin-right: 5px;"><Position /></el-icon>
+                  Havaalanları
+                </el-radio-button>
+              </el-radio-group>
+            </el-form-item>
+          </el-col>
+        </el-row>
+      </template>
+
+      <el-divider>Uçuş Bilgileri</el-divider>
+
       <el-row :gutter="20">
         <el-col :span="12">
           <el-form-item label="Uçuş No" prop="flightNumber">
@@ -180,7 +207,8 @@
           </el-form-item>
         </el-col>
         <el-col :span="12">
-          <el-form-item label="Rota" prop="routeId">
+          <!-- Route Selection (Conditional) -->
+          <el-form-item v-if="form.creationMode === 'ROUTE'" label="Rota" prop="routeId">
             <el-select
               v-model="form.routeId"
               style="width: 100%"
@@ -194,6 +222,47 @@
                 :key="route.id"
                 :label="`${route.routeCode} - ${route.routePath}`"
                 :value="route.id"
+              />
+            </el-select>
+          </el-form-item>
+        </el-col>
+      </el-row>
+
+      <!-- Airport Selection (New) -->
+      <el-row :gutter="20" v-if="form.creationMode === 'AIRPORTS'">
+        <el-col :span="12">
+          <el-form-item label="Kalkış Havaalanı" prop="originAirportId">
+            <el-select
+              v-model="form.originAirportId"
+              style="width: 100%"
+              filterable
+              :loading="airportsLoading"
+              placeholder="Kalkış havaalanını seçin"
+            >
+              <el-option
+                v-for="airport in airports"
+                :key="airport.id"
+                :label="`${airport.iataCode} - ${airport.name}`"
+                :value="airport.id"
+              />
+            </el-select>
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item label="Varış Havaalanı" prop="destinationAirportId">
+            <el-select
+              v-model="form.destinationAirportId"
+              style="width: 100%"
+              filterable
+              :loading="airportsLoading"
+              placeholder="Varış havaalanını seçin"
+              :disabled="!form.originAirportId"
+            >
+              <el-option
+                v-for="airport in airports.filter(a => a.id !== form.originAirportId)"
+                :key="airport.id"
+                :label="`${airport.iataCode} - ${airport.name}`"
+                :value="airport.id"
               />
             </el-select>
           </el-form-item>
@@ -289,7 +358,9 @@
 </template>
 
 <script setup>
-import { Plus, Upload } from '@element-plus/icons-vue'
+import { ref, reactive, computed, onMounted } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus, Upload, Location, Position } from '@element-plus/icons-vue'
 import AppLayout from '@/components/common/AppLayout.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import DataTable from '@/components/tables/DataTable.vue'
@@ -321,9 +392,11 @@ const csvFileList = ref([])
 const airlines = ref([])
 const allAircraft = ref([])
 const allRoutes = ref([])
+const airports = ref([])
 const airlinesLoading = ref(false)
 const aircraftLoading = ref(false)
 const routesLoading = ref(false)
+const airportsLoading = ref(false)
 
 // Filtered data based on selected airline
 const aircraft = computed(() => {
@@ -350,26 +423,49 @@ const form = reactive({
   flightNumber: '',
   airlineId: null,
   aircraftId: null,
+  // YENİ: Creation Mode
+  creationMode: 'ROUTE', // Default olarak ROUTE
+  // Route-based fields
   routeId: null,
+  // Airport-based fields
+  originAirportId: null,
+  destinationAirportId: null,
+  // Timing
   flightDate: '',
   scheduledDeparture: '',
   scheduledArrival: '',
+  // Details
   type: 'PASSENGER',
-  passengerCount: 0,
-  status: 'SCHEDULED'
+  status: 'SCHEDULED',
+  passengerCount: null,
+  cargoWeight: null,
+  notes: '',
+  gateNumber: '',
+  active: true
 })
 
-const formRules = {
-  flightNumber: [rules.required, rules.flightNumber],
-  airlineId: [rules.required],
-  aircraftId: [rules.required],
-  routeId: [rules.required],
-  flightDate: [rules.required],
-  scheduledDeparture: [rules.required],
-  scheduledArrival: [rules.required],
-  type: [rules.required],
-  status: [rules.required]
-}
+const formRules = computed(() => {
+  const baseRules = {
+    flightNumber: [rules.required],
+    airlineId: [rules.required],
+    aircraftId: [rules.required],
+    creationMode: [rules.required],
+    flightDate: [rules.required],
+    scheduledDeparture: [rules.required],
+    scheduledArrival: [rules.required],
+    type: [rules.required]
+  }
+
+  // Mode'a göre koşullu validasyon
+  if (form.creationMode === 'ROUTE') {
+    baseRules.routeId = [rules.required]
+  } else if (form.creationMode === 'AIRPORTS') {
+    baseRules.originAirportId = [rules.required]
+    baseRules.destinationAirportId = [rules.required]
+  }
+
+  return baseRules
+})
 
 const changeSize = (size) => {
   pageSize.value = size
@@ -385,6 +481,7 @@ const clearFilters = () => {
   fetchFlights()
 }
 
+// Load functions - DÜZELTİLDİ
 const loadReferenceData = async () => {
   try {
     const [airlinesRes, aircraftRes, routesRes] = await Promise.all([
@@ -401,90 +498,119 @@ const loadReferenceData = async () => {
   }
 }
 
+const loadAirports = async () => {
+  airportsLoading.value = true
+  try {
+    const response = await referenceAPI.getAirports({ page: 0, size: 1000 })
+    airports.value = response.content || []
+  } finally {
+    airportsLoading.value = false
+  }
+}
+
 // Havayolu değiştiğinde uçak ve rotayı sıfırla
-const onAirlineChange = () => {
+const onAirlineChange = async () => {
   form.aircraftId = null
   form.routeId = null
+}
+
+// Creation mode değiştiğinde çağrılacak
+const onCreationModeChange = (mode) => {
+  form.creationMode = mode
+  // Mode değiştiğinde diğer alanları temizle
+  if (mode === 'ROUTE') {
+    form.originAirportId = null
+    form.destinationAirportId = null
+  } else if (mode === 'AIRPORTS') {
+    form.routeId = null
+  }
+}
+
+// DateTime string'den sadece saat kısmını çıkarır (HH:MM)
+const extractTimeFromDateTime = (dateTimeStr) => {
+  if (!dateTimeStr) return ''
+
+  try {
+    // "2025-07-28 08:30" -> "08:30"
+    if (typeof dateTimeStr === 'string' && dateTimeStr.includes(' ')) {
+      return dateTimeStr.split(' ')[1]?.substring(0, 5) || ''
+    }
+
+    // ISO format veya Date object için
+    const date = new Date(dateTimeStr)
+    if (isNaN(date.getTime())) return ''
+
+    const hours = date.getHours().toString().padStart(2, '0')
+    const minutes = date.getMinutes().toString().padStart(2, '0')
+    return `${hours}:${minutes}`
+  } catch (error) {
+    console.warn('Error extracting time:', error)
+    return ''
+  }
+}
+
+// Form'u varsayılan değerlere döndür
+const resetForm = () => {
+  Object.assign(form, {
+    id: null,
+    flightNumber: '',
+    airlineId: null,
+    aircraftId: null,
+    creationMode: 'ROUTE',
+    routeId: null,
+    originAirportId: null,
+    destinationAirportId: null,
+    flightDate: '',
+    scheduledDeparture: '',
+    scheduledArrival: '',
+    type: 'PASSENGER',
+    status: 'SCHEDULED',
+    passengerCount: null,
+    cargoWeight: null,
+    notes: '',
+    gateNumber: '',
+    active: true
+  })
 }
 
 const openModal = async (flight = null) => {
   isEdit.value = !!flight
 
-  // Önce reference data yükle
-  await loadReferenceData()
+  // Load reference data - DÜZELTİLDİ
+  await Promise.all([
+    loadReferenceData(),
+    loadAirports()
+  ])
 
   if (flight) {
-    console.log('Flight data:', flight) // DEBUG: Backend'den gelen veri
-    console.log('scheduledDeparture:', flight.scheduledDeparture) // DEBUG
-    console.log('scheduledArrival:', flight.scheduledArrival) // DEBUG
-
-    // Edit mode - mevcut flight verilerini set et
-    form.id = flight.id
-    form.flightNumber = flight.flightNumber || ''
-    form.airlineId = flight.airline?.id || null
-    form.aircraftId = flight.aircraft?.id || null
-    form.routeId = flight.route?.id || null
-    form.flightDate = flight.flightDate || ''
-    form.type = flight.type || 'PASSENGER'
-    form.passengerCount = flight.passengerCount || 0
-    form.status = flight.status || 'SCHEDULED'
-
-    const depTime = extractTimeFromDateTime(flight.scheduledDeparture)
-    const arrTime = extractTimeFromDateTime(flight.scheduledArrival)
-
-    console.log('Extracted departure time:', depTime) // DEBUG
-    console.log('Extracted arrival time:', arrTime) // DEBUG
-
-    form.scheduledDeparture = depTime
-    form.scheduledArrival = arrTime
-
-    // Form set edildikten sonra değerleri kontrol et
-    nextTick(() => {
-      console.log('Form after set:', form.scheduledDeparture, form.scheduledArrival) // DEBUG
+    // Edit mode - mevcut flight'ı form'a map et
+    Object.assign(form, {
+      id: flight.id,
+      flightNumber: flight.flightNumber,
+      airlineId: flight.airline?.id,
+      aircraftId: flight.aircraft?.id,
+      // Creation mode'u tespit et
+      creationMode: flight.route ? 'ROUTE' : 'AIRPORTS',
+      routeId: flight.route?.id,
+      originAirportId: flight.originAirport?.id,
+      destinationAirportId: flight.destinationAirport?.id,
+      flightDate: flight.flightDate,
+      scheduledDeparture: extractTimeFromDateTime(flight.scheduledDeparture),
+      scheduledArrival: extractTimeFromDateTime(flight.scheduledArrival),
+      type: flight.type,
+      status: flight.status,
+      passengerCount: flight.passengerCount,
+      cargoWeight: flight.cargoWeight,
+      notes: flight.notes,
+      gateNumber: flight.gateNumber,
+      active: flight.active ?? true
     })
   } else {
-    // Create mode - boş form
-    form.id = null
-    form.flightNumber = ''
-    form.airlineId = null
-    form.aircraftId = null
-    form.routeId = null
-    form.flightDate = ''
-    form.scheduledDeparture = ''
-    form.scheduledArrival = ''
-    form.type = 'PASSENGER'
-    form.passengerCount = 0
-    form.status = 'SCHEDULED'
+    // Create mode - form'u temizle
+    resetForm()
   }
 
   modalVisible.value = true
-}
-
-// Helper function to extract time from datetime
-const extractTimeFromDateTime = (datetime) => {
-  if (!datetime) return ''
-
-  try {
-    // Backend format: "2025-09-01 08:00" veya "2025-09-01T08:00:00"
-    let timepart = ''
-
-    if (datetime.includes('T')) {
-      // ISO format: 2025-09-01T08:00:00
-      timepart = datetime.split('T')[1]?.substring(0, 5) || ''
-    } else if (datetime.includes(' ')) {
-      // Space format: 2025-09-01 08:00
-      timepart = datetime.split(' ')[1]?.substring(0, 5) || ''
-    } else if (datetime.includes(':')) {
-      // Pure time format: 08:00:00
-      timepart = datetime.substring(0, 5)
-    }
-
-    console.log('DateTime input:', datetime, 'Extracted time:', timepart) // DEBUG
-    return timepart
-  } catch (error) {
-    console.error('Time parsing error:', error)
-    return ''
-  }
 }
 
 const closeModal = () => {
@@ -494,16 +620,27 @@ const closeModal = () => {
 const saveFlight = async () => {
   saving.value = true
   try {
+    const payload = { ...form }
+
+    // Mode'a göre gereksiz alanları temizle
+    if (form.creationMode === 'ROUTE') {
+      delete payload.originAirportId
+      delete payload.destinationAirportId
+    } else if (form.creationMode === 'AIRPORTS') {
+      delete payload.routeId
+    }
+
     if (isEdit.value) {
-      await flightAPI.updateFlight(form.id, form)
+      await flightAPI.updateFlight(form.id, payload)
       ElMessage.success('Uçuş güncellendi')
     } else {
-      await flightAPI.createFlight(form)
+      await flightAPI.createFlight(payload)
       ElMessage.success('Uçuş oluşturuldu')
     }
     closeModal()
     fetchFlights()
   } catch (error) {
+    console.error('Save error:', error)
     ElMessage.error(isEdit.value ? 'Güncelleme başarısız' : 'Oluşturma başarısız')
   } finally {
     saving.value = false
@@ -594,3 +731,28 @@ onMounted(() => {
   withLoading(fetchFlights)
 })
 </script>
+
+<style scoped>
+.creation-mode-selector {
+  width: 100%;
+}
+
+.creation-mode-selector .el-radio-button {
+  flex: 1;
+}
+
+.creation-mode-selector .el-radio-button__inner {
+  width: 100%;
+  text-align: center;
+  padding: 12px 20px;
+}
+
+.el-divider {
+  margin: 20px 0 15px 0;
+}
+
+.el-divider--horizontal {
+  font-weight: 500;
+  color: #606266;
+}
+</style>
