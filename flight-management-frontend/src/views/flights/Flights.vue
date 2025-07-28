@@ -3,17 +3,17 @@
     <PageHeader title="Uçuşlar" description="Uçuş operasyonları yönetimi">
       <template #actions>
         <el-button
-            v-if="auth.isAdmin"
-            type="primary"
-            @click="openModal()"
+          v-if="auth.isAdmin"
+          type="primary"
+          @click="openModal()"
         >
           <el-icon><Plus /></el-icon>
           Yeni Uçuş
         </el-button>
         <el-button
-            v-if="auth.isAdmin"
-            type="success"
-            @click="showCSVUpload = true"
+          v-if="auth.isAdmin"
+          type="success"
+          @click="showCSVUpload = true"
         >
           <el-icon><Upload /></el-icon>
           CSV Yükle
@@ -42,10 +42,10 @@
         </el-col>
         <el-col :span="6">
           <el-input
-              v-model="filters.flightNumber"
-              placeholder="Uçuş No"
-              clearable
-              @keyup.enter="fetchFlights"
+            v-model="filters.flightNumber"
+            placeholder="Uçuş No"
+            clearable
+            @keyup.enter="fetchFlights"
           />
         </el-col>
         <el-col :span="6">
@@ -56,13 +56,13 @@
     </el-card>
 
     <DataTable
-        :data="flights"
-        :loading="loading"
-        :total="total"
-        :current-page="currentPage"
-        :page-size="pageSize"
-        @current-change="changePage"
-        @size-change="changeSize"
+      :data="flights"
+      :loading="loading"
+      :total="total"
+      :current-page="currentPage"
+      :page-size="pageSize"
+      @current-change="changePage"
+      @size-change="changeSize"
     >
       <el-table-column prop="flightNumber" label="Uçuş No" width="120" />
       <el-table-column prop="airline.name" label="Havayolu" width="150" />
@@ -89,8 +89,8 @@
       </el-table-column>
       <el-table-column prop="type" label="Tür" width="100">
         <template #default="{ row }">
-          <el-tag :type="getFlightTypeColor(row.type)">
-            {{ getFlightTypeLabel(row.type) }}
+          <el-tag :type="getTypeColor(row.type)">
+            {{ getTypeLabel(row.type) }}
           </el-tag>
         </template>
       </el-table-column>
@@ -101,20 +101,20 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="İşlemler" width="120" fixed="right">
+      <el-table-column label="İşlemler" width="180">
         <template #default="{ row }">
           <el-button
-              v-if="auth.isAdmin"
-              size="small"
-              @click="openModal(row)"
+            v-if="auth.isAdmin"
+            size="small"
+            @click="openModal(row)"
           >
             Düzenle
           </el-button>
           <el-button
-              v-if="auth.isAdmin"
-              size="small"
-              type="danger"
-              @click="deleteFlight(row)"
+            v-if="auth.isAdmin"
+            size="small"
+            type="danger"
+            @click="deleteFlight(row)"
           >
             Sil
           </el-button>
@@ -124,180 +124,235 @@
 
     <!-- Flight Form Modal -->
     <FormModal
-        v-model="modalVisible"
-        :title="isEdit ? 'Uçuş Düzenle' : 'Yeni Uçuş'"
-        :form="form"
-        :rules="formRules"
-        :loading="saving"
-        @submit="saveFlight"
-        @close="closeModal"
+      v-model="modalVisible"
+      :title="isEdit ? 'Uçuş Düzenle' : 'Yeni Uçuş'"
+      :form="form"
+      :rules="formRules"
+      :loading="saving"
+      @submit="saveFlight"
+      @close="closeModal"
+      width="800px"
     >
-      <!-- Existing flight form fields here -->
-    </FormModal>
-
-    <!-- CSV Upload Modal - GÜNCELLENMIŞ -->
-    <el-dialog
-        v-model="showCSVUpload"
-        :title="csvStep === 'upload' ? 'CSV Dosyası Yükle' : 'CSV Önizleme'"
-        width="80%"
-        :close-on-click-modal="false"
-    >
-      <!-- Step 1: File Upload -->
-      <div v-if="csvStep === 'upload'">
-        <el-upload
-            drag
-            :auto-upload="false"
-            :on-change="handleCSVSelect"
-            :file-list="csvFileList"
-            accept=".csv"
-            :limit="1"
-        >
-          <el-icon class="el-icon--upload"><Upload /></el-icon>
-          <div class="el-upload__text">
-            CSV dosyasını sürükleyin veya <em>tıklayarak seçin</em>
-          </div>
-          <template #tip>
-            <div class="el-upload__tip">
-              <el-link @click="downloadTemplate" type="primary">CSV Template İndir</el-link> |
-              Route: sayı (örn: 5) veya IATA kodları (örn: IST-ANK)
-            </div>
-          </template>
-        </el-upload>
-
-        <template #footer>
-          <el-button @click="closeCSVModal">İptal</el-button>
-          <el-button
-              type="primary"
-              :loading="csvUploading"
-              :disabled="csvFileList.length === 0"
-              @click="previewCSV"
-          >
-            Önizle
-          </el-button>
-        </template>
-      </div>
-
-      <!-- Step 2: Preview & Confirm -->
-      <div v-if="csvStep === 'preview' && csvPreview && csvPreview.totalRows" style="max-height: 600px; overflow-y: auto;">
-        <!-- Summary Stats -->
-        <el-row :gutter="20" style="margin-bottom: 20px;">
-          <el-col :span="6">
-            <el-statistic title="Toplam Satır" :value="csvPreview.totalRows || 0" />
-          </el-col>
-          <el-col :span="6">
-            <el-statistic title="Geçerli" :value="csvPreview.validRows || 0" value-style="color: #67C23A" />
-          </el-col>
-          <el-col :span="6">
-            <el-statistic title="Hatalı" :value="csvPreview.invalidRows || 0" value-style="color: #F56C6C" />
-          </el-col>
-          <el-col :span="6">
-            <el-alert
-                :title="csvPreview.readyForImport ? 'İçe aktarılabilir' : 'Hatalar mevcut'"
-                :type="csvPreview.readyForImport ? 'success' : 'warning'"
-                show-icon
-                :closable="false"
-            />
+      <!-- Creation Mode Selector - Sadece Create Mode'da göster -->
+      <template v-if="!isEdit">
+        <el-divider>Uçuş Oluşturma Tipi</el-divider>
+        <el-row :gutter="20">
+          <el-col :span="24">
+            <el-form-item label="Oluşturma Tipi" prop="creationMode">
+              <el-radio-group
+                v-model="form.creationMode"
+                @change="onCreationModeChange"
+                class="creation-mode-selector"
+              >
+                <el-radio-button value="ROUTE">
+                  <el-icon style="margin-right: 5px;"><Location /></el-icon>
+                  Mevcut Rota
+                </el-radio-button>
+                <el-radio-button value="AIRPORTS">
+                  <el-icon style="margin-right: 5px;"><Position /></el-icon>
+                  Havaalanları
+                </el-radio-button>
+              </el-radio-group>
+            </el-form-item>
           </el-col>
         </el-row>
+      </template>
 
-        <!-- Preview Table -->
-        <el-table :data="csvPreview.previewData || []" style="width: 100%" size="small">
-          <el-table-column prop="rowNumber" label="Satır" width="60" align="center" />
+      <el-divider>Uçuş Bilgileri</el-divider>
 
-          <el-table-column label="Durum" width="80" align="center">
-            <template #default="{ row }">
-              <el-icon v-if="row.valid" color="#67C23A" size="16"><Check /></el-icon>
-              <el-icon v-else color="#F56C6C" size="16"><Close /></el-icon>
-            </template>
-          </el-table-column>
+      <el-row :gutter="20">
+        <el-col :span="12">
+          <el-form-item label="Uçuş No" prop="flightNumber">
+            <el-input v-model="form.flightNumber" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item label="Havayolu" prop="airlineId">
+            <el-select
+              v-model="form.airlineId"
+              style="width: 100%"
+              filterable
+              :loading="airlinesLoading"
+              @change="onAirlineChange"
+            >
+              <el-option
+                v-for="airline in airlines"
+                :key="airline.id"
+                :label="airline.name"
+                :value="airline.id"
+              />
+            </el-select>
+          </el-form-item>
+        </el-col>
+      </el-row>
 
-          <el-table-column prop="parsedData.flightNumber" label="Uçuş No" width="100" />
+      <el-row :gutter="20">
+        <el-col :span="12">
+          <el-form-item label="Uçak" prop="aircraftId">
+            <el-select
+              v-model="form.aircraftId"
+              style="width: 100%"
+              filterable
+              :loading="aircraftLoading"
+              :disabled="!form.airlineId"
+              placeholder="Önce havayolu seçin"
+            >
+              <el-option
+                v-for="aircraftItem in aircraft"
+                :key="aircraftItem.id"
+                :label="`${aircraftItem.registrationNumber} (${aircraftItem.aircraftType})`"
+                :value="aircraftItem.id"
+              />
+            </el-select>
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <!-- Route Selection (Conditional) -->
+          <el-form-item v-if="form.creationMode === 'ROUTE'" label="Rota" prop="routeId">
+            <el-select
+              v-model="form.routeId"
+              style="width: 100%"
+              filterable
+              :loading="routesLoading"
+              :disabled="!form.airlineId"
+              placeholder="Önce havayolu seçin"
+            >
+              <el-option
+                v-for="route in routes"
+                :key="route.id"
+                :label="`${route.routeCode} - ${route.routePath}`"
+                :value="route.id"
+              />
+            </el-select>
+          </el-form-item>
+        </el-col>
+      </el-row>
 
-          <el-table-column label="Havayolu" width="80">
-            <template #default="{ row }">
-              {{ row.parsedData?.airlineId || '' }}
-            </template>
-          </el-table-column>
+      <!-- Airport Selection (New) -->
+      <el-row :gutter="20" v-if="form.creationMode === 'AIRPORTS'">
+        <el-col :span="12">
+          <el-form-item label="Kalkış Havaalanı" prop="originAirportId">
+            <el-select
+              v-model="form.originAirportId"
+              style="width: 100%"
+              filterable
+              :loading="airportsLoading"
+              placeholder="Kalkış havaalanını seçin"
+            >
+              <el-option
+                v-for="airport in airports"
+                :key="airport.id"
+                :label="`${airport.iataCode} - ${airport.name}`"
+                :value="airport.id"
+              />
+            </el-select>
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item label="Varış Havaalanı" prop="destinationAirportId">
+            <el-select
+              v-model="form.destinationAirportId"
+              style="width: 100%"
+              filterable
+              :loading="airportsLoading"
+              placeholder="Varış havaalanını seçin"
+              :disabled="!form.originAirportId"
+            >
+              <el-option
+                v-for="airport in airports.filter(a => a.id !== form.originAirportId)"
+                :key="airport.id"
+                :label="`${airport.iataCode} - ${airport.name}`"
+                :value="airport.id"
+              />
+            </el-select>
+          </el-form-item>
+        </el-col>
+      </el-row>
 
-          <el-table-column label="Uçak" width="80">
-            <template #default="{ row }">
-              {{ row.parsedData?.aircraftId || '' }}
-            </template>
-          </el-table-column>
+      <el-row :gutter="20">
+        <el-col :span="8">
+          <el-form-item label="Uçuş Tarihi" prop="flightDate">
+            <el-input
+              v-model="form.flightDate"
+              type="date"
+              style="width: 100%"
+            />
+          </el-form-item>
+        </el-col>
+        <el-col :span="8">
+          <el-form-item label="STD" prop="scheduledDeparture">
+            <el-input
+              v-model="form.scheduledDeparture"
+              type="time"
+              style="width: 100%"
+            />
+          </el-form-item>
+        </el-col>
+        <el-col :span="8">
+          <el-form-item label="STA" prop="scheduledArrival">
+            <el-input
+              v-model="form.scheduledArrival"
+              type="time"
+              style="width: 100%"
+            />
+          </el-form-item>
+        </el-col>
+      </el-row>
 
-          <el-table-column label="Güzergah" width="150">
-            <template #default="{ row }">
-              <el-tag
-                  :type="(row.parsedData?.creationMode === 'ROUTE') ? 'primary' : 'success'"
-                  size="small"
-                  v-if="row.parsedData"
-              >
-                {{ row.parsedData?.routeInfo || row.parsedData?.routeInput || '' }}
-              </el-tag>
-            </template>
-          </el-table-column>
+      <el-row :gutter="20">
+        <el-col :span="8">
+          <el-form-item label="Uçuş Türü" prop="type">
+            <el-select v-model="form.type" style="width: 100%">
+              <el-option value="PASSENGER" label="Yolcu" />
+              <el-option value="CARGO" label="Kargo" />
+              <el-option value="MIXED" label="Karma" />
+            </el-select>
+          </el-form-item>
+        </el-col>
+        <el-col :span="8">
+          <el-form-item label="Yolcu Sayısı" prop="passengerCount">
+            <el-input-number v-model="form.passengerCount" :min="0" style="width: 100%" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="8">
+          <el-form-item label="Durum" prop="status">
+            <el-select v-model="form.status" style="width: 100%">
+              <el-option value="SCHEDULED" label="Planlandı" />
+              <el-option value="DEPARTED" label="Kalktı" />
+              <el-option value="ARRIVED" label="Vardı" />
+              <el-option value="CANCELLED" label="İptal" />
+              <el-option value="DELAYED" label="Gecikmeli" />
+            </el-select>
+          </el-form-item>
+        </el-col>
+      </el-row>
+    </FormModal>
 
-          <el-table-column label="Tarih" width="100">
-            <template #default="{ row }">
-              {{ formatArrayDate(row.parsedData?.flightDate) }}
-            </template>
-          </el-table-column>
+    <!-- CSV Upload Modal -->
+    <el-dialog v-model="showCSVUpload" title="CSV Dosyası Yükle" width="500px">
+      <el-upload
+        drag
+        :auto-upload="false"
+        :on-change="handleCSVSelect"
+        :file-list="csvFileList"
+        accept=".csv"
+      >
+        <el-icon class="el-icon--upload"><Upload /></el-icon>
+        <div class="el-upload__text">
+          CSV dosyasını sürükleyin veya <em>tıklayarak seçin</em>
+        </div>
+      </el-upload>
 
-          <el-table-column label="STD" width="80">
-            <template #default="{ row }">
-              {{ formatArrayTime(row.parsedData?.scheduledDeparture) }}
-            </template>
-          </el-table-column>
-
-          <el-table-column label="STA" width="80">
-            <template #default="{ row }">
-              {{ formatArrayTime(row.parsedData?.scheduledArrival) }}
-            </template>
-          </el-table-column>
-
-          <el-table-column prop="parsedData.type" label="Tür" width="100" />
-
-          <el-table-column label="Hatalar" min-width="200">
-            <template #default="{ row }">
-              <div v-if="!row.valid">
-                <el-tag
-                    v-for="(error, field) in row.fieldErrors"
-                    :key="field"
-                    type="danger"
-                    size="small"
-                    style="margin: 2px;"
-                >
-                  {{ field }}: {{ error }}
-                </el-tag>
-              </div>
-              <div v-if="row.warnings && row.warnings.length > 0">
-                <el-tag
-                    v-for="warning in row.warnings"
-                    :key="warning"
-                    type="warning"
-                    size="small"
-                    style="margin: 2px;"
-                >
-                  {{ warning }}
-                </el-tag>
-              </div>
-            </template>
-          </el-table-column>
-        </el-table>
-
-        <template #footer>
-          <el-button @click="csvStep = 'upload'">Geri</el-button>
-          <el-button @click="closeCSVModal">İptal</el-button>
-          <el-button
-              type="primary"
-              :loading="csvConfirming"
-              :disabled="!csvPreview.readyForImport"
-              @click="confirmCSVUpload"
-          >
-            {{ csvPreview.validRows || 0 }} Uçuşu İçe Aktar
-          </el-button>
-        </template>
-      </div>
+      <template #footer>
+        <el-button @click="showCSVUpload = false">İptal</el-button>
+        <el-button
+          type="primary"
+          :loading="csvUploading"
+          @click="uploadCSV"
+        >
+          Yükle
+        </el-button>
+      </template>
     </el-dialog>
   </AppLayout>
 </template>
@@ -305,7 +360,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Upload, Location, Position, Check, Close } from '@element-plus/icons-vue'
+import { Plus, Upload, Location, Position } from '@element-plus/icons-vue'
 import AppLayout from '@/components/common/AppLayout.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import DataTable from '@/components/tables/DataTable.vue'
@@ -333,18 +388,6 @@ const showCSVUpload = ref(false)
 const csvUploading = ref(false)
 const csvFileList = ref([])
 
-// YENİ CSV DEĞİŞKENLERİ
-const csvStep = ref('upload') // 'upload' | 'preview'
-const csvPreview = ref({
-  totalRows: 0,
-  validRows: 0,
-  invalidRows: 0,
-  previewData: [],
-  globalErrors: [],
-  readyForImport: false
-})
-const csvConfirming = ref(false)
-
 // Reference data
 const airlines = ref([])
 const allAircraft = ref([])
@@ -358,12 +401,14 @@ const airportsLoading = ref(false)
 // Filtered data based on selected airline
 const aircraft = computed(() => {
   if (!form.airlineId) return []
-  return allAircraft.value.filter(ac => ac.airlineId === form.airlineId)
+  return allAircraft.value.filter(a => a.airline?.id === form.airlineId)
 })
 
 const routes = computed(() => {
   if (!form.airlineId) return []
-  return allRoutes.value.filter(route => route.airlineId === form.airlineId)
+  return allRoutes.value.filter(r =>
+    r.airlineId === form.airlineId || r.visibility === 'SHARED' || r.visibility === 'PUBLIC'
+  )
 })
 
 // Filters
@@ -373,112 +418,138 @@ const filters = reactive({
   flightNumber: ''
 })
 
-// Form
 const form = reactive({
   id: null,
   flightNumber: '',
   airlineId: null,
   aircraftId: null,
-  creationMode: 'ROUTE',
+  // YENİ: Creation Mode
+  creationMode: 'ROUTE', // Default olarak ROUTE
+  // Route-based fields
   routeId: null,
+  // Airport-based fields
   originAirportId: null,
   destinationAirportId: null,
+  // Timing
   flightDate: '',
   scheduledDeparture: '',
   scheduledArrival: '',
+  // Details
   type: 'PASSENGER',
   status: 'SCHEDULED',
   passengerCount: null,
   cargoWeight: null,
   notes: '',
+  gateNumber: '',
   active: true
 })
 
-// Form validation rules
-const formRules = {
-  flightNumber: [rules.required],
-  airlineId: [rules.required],
-  aircraftId: [rules.required],
-  flightDate: [rules.required],
-  scheduledDeparture: [rules.required],
-  scheduledArrival: [rules.required],
-  type: [rules.required]
+const formRules = computed(() => {
+  const baseRules = {
+    flightNumber: [rules.required],
+    airlineId: [rules.required],
+    aircraftId: [rules.required],
+    creationMode: [rules.required],
+    flightDate: [rules.required],
+    scheduledDeparture: [rules.required],
+    scheduledArrival: [rules.required],
+    type: [rules.required]
+  }
+
+  // Mode'a göre koşullu validasyon
+  if (form.creationMode === 'ROUTE') {
+    baseRules.routeId = [rules.required]
+  } else if (form.creationMode === 'AIRPORTS') {
+    baseRules.originAirportId = [rules.required]
+    baseRules.destinationAirportId = [rules.required]
+  }
+
+  return baseRules
+})
+
+const changeSize = (size) => {
+  pageSize.value = size
+  fetchFlights()
 }
 
-// Load reference data
+const clearFilters = () => {
+  Object.assign(filters, {
+    status: '',
+    type: '',
+    flightNumber: ''
+  })
+  fetchFlights()
+}
+
+// Load functions - DÜZELTİLDİ
 const loadReferenceData = async () => {
   try {
     const [airlinesRes, aircraftRes, routesRes] = await Promise.all([
       referenceAPI.getAirlines({ page: 0, size: 1000 }),
-      referenceAPI.getAircrafts({ page: 0, size: 1000 }),
+      referenceAPI.getAircraft({ page: 0, size: 1000 }),
       referenceAPI.getRoutes({ page: 0, size: 1000 })
     ])
 
-    airlines.value = airlinesRes.data.content || []
-    allAircraft.value = aircraftRes.data.content || []
-    allRoutes.value = routesRes.data.content || []
+    airlines.value = airlinesRes.content || []
+    allAircraft.value = aircraftRes.content || []
+    allRoutes.value = Array.isArray(routesRes) ? routesRes : (routesRes.content || [])
   } catch (error) {
-    console.error('Reference data loading error:', error)
-    ElMessage.error('Referans veriler yüklenemedi')
+    console.error('Reference data yüklenirken hata:', error)
   }
 }
 
 const loadAirports = async () => {
+  airportsLoading.value = true
   try {
     const response = await referenceAPI.getAirports({ page: 0, size: 1000 })
-    airports.value = response.data.content || []
+    airports.value = response.content || []
+  } finally {
+    airportsLoading.value = false
+  }
+}
+
+// Havayolu değiştiğinde uçak ve rotayı sıfırla
+const onAirlineChange = async () => {
+  form.aircraftId = null
+  form.routeId = null
+}
+
+// Creation mode değiştiğinde çağrılacak
+const onCreationModeChange = (mode) => {
+  form.creationMode = mode
+  // Mode değiştiğinde diğer alanları temizle
+  if (mode === 'ROUTE') {
+    form.originAirportId = null
+    form.destinationAirportId = null
+  } else if (mode === 'AIRPORTS') {
+    form.routeId = null
+  }
+}
+
+// DateTime string'den sadece saat kısmını çıkarır (HH:MM)
+const extractTimeFromDateTime = (dateTimeStr) => {
+  if (!dateTimeStr) return ''
+
+  try {
+    // "2025-07-28 08:30" -> "08:30"
+    if (typeof dateTimeStr === 'string' && dateTimeStr.includes(' ')) {
+      return dateTimeStr.split(' ')[1]?.substring(0, 5) || ''
+    }
+
+    // ISO format veya Date object için
+    const date = new Date(dateTimeStr)
+    if (isNaN(date.getTime())) return ''
+
+    const hours = date.getHours().toString().padStart(2, '0')
+    const minutes = date.getMinutes().toString().padStart(2, '0')
+    return `${hours}:${minutes}`
   } catch (error) {
-    console.error('Airports loading error:', error)
-    ElMessage.error('Havaalanları yüklenemedi')
+    console.warn('Error extracting time:', error)
+    return ''
   }
 }
 
-// Utility functions
-const getStatusColor = (status) => {
-  const colors = {
-    'SCHEDULED': '',
-    'DEPARTED': 'success',
-    'ARRIVED': 'info',
-    'CANCELLED': 'danger',
-    'DELAYED': 'warning'
-  }
-  return colors[status] || ''
-}
-
-const getStatusLabel = (status) => {
-  const labels = {
-    'SCHEDULED': 'Planlandı',
-    'DEPARTED': 'Kalktı',
-    'ARRIVED': 'Vardı',
-    'CANCELLED': 'İptal',
-    'DELAYED': 'Gecikmeli'
-  }
-  return labels[status] || status
-}
-
-const getFlightTypeColor = (type) => {
-  const colors = {
-    'PASSENGER': 'success',
-    'CARGO': 'warning',
-    'MIXED': 'info'
-  }
-  return colors[type] || ''
-}
-
-const getFlightTypeLabel = (type) => {
-  const labels = {
-    'PASSENGER': 'Yolcu',
-    'CARGO': 'Kargo',
-    'MIXED': 'Karma'
-  }
-  return labels[type] || type
-}
-
-const extractTimeFromDateTime = (dateTimeString) => {
-  if (!dateTimeString) return ''
-  return dateTimeString.split(' ')[1] || ''
-}
-
+// Form'u varsayılan değerlere döndür
 const resetForm = () => {
   Object.assign(form, {
     id: null,
@@ -497,38 +568,28 @@ const resetForm = () => {
     passengerCount: null,
     cargoWeight: null,
     notes: '',
+    gateNumber: '',
     active: true
   })
-}
-
-const clearFilters = () => {
-  Object.assign(filters, {
-    status: '',
-    type: '',
-    flightNumber: ''
-  })
-  fetchFlights()
-}
-
-const changeSize = (size) => {
-  pageSize.value = size
-  fetchFlights()
 }
 
 const openModal = async (flight = null) => {
   isEdit.value = !!flight
 
+  // Load reference data - DÜZELTİLDİ
   await Promise.all([
     loadReferenceData(),
     loadAirports()
   ])
 
   if (flight) {
+    // Edit mode - mevcut flight'ı form'a map et
     Object.assign(form, {
       id: flight.id,
       flightNumber: flight.flightNumber,
       airlineId: flight.airline?.id,
       aircraftId: flight.aircraft?.id,
+      // Creation mode'u tespit et
       creationMode: flight.route ? 'ROUTE' : 'AIRPORTS',
       routeId: flight.route?.id,
       originAirportId: flight.originAirport?.id,
@@ -541,9 +602,11 @@ const openModal = async (flight = null) => {
       passengerCount: flight.passengerCount,
       cargoWeight: flight.cargoWeight,
       notes: flight.notes,
+      gateNumber: flight.gateNumber,
       active: flight.active ?? true
     })
   } else {
+    // Create mode - form'u temizle
     resetForm()
   }
 
@@ -559,6 +622,7 @@ const saveFlight = async () => {
   try {
     const payload = { ...form }
 
+    // Mode'a göre gereksiz alanları temizle
     if (form.creationMode === 'ROUTE') {
       delete payload.originAirportId
       delete payload.destinationAirportId
@@ -585,7 +649,7 @@ const saveFlight = async () => {
 
 const deleteFlight = async (flight) => {
   try {
-    await ElMessageBox.confirm('Bu uçuşu silmek istediğinizden emin misiniz?', 'Dikkat', {
+    await ElMessageBox.confirm('Bu uçuşu silmek istediğinizden emin misiniz?', 'Uyarı', {
       type: 'warning'
     })
 
@@ -594,103 +658,77 @@ const deleteFlight = async (flight) => {
     fetchFlights()
   } catch (error) {
     if (error !== 'cancel') {
-      console.error('Delete error:', error)
       ElMessage.error('Silme işlemi başarısız')
     }
   }
 }
 
-// YENİ CSV METODLARI
-const handleCSVSelect = (file, fileList) => {
-  csvFileList.value = fileList
+const handleCSVSelect = (file) => {
+  csvFileList.value = [file]
 }
 
-const downloadTemplate = async () => {
-  try {
-    const response = await flightAPI.downloadCSVTemplate()
-    const blob = new Blob([response.data], { type: 'text/csv' })
-    const url = window.URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.setAttribute('download', 'flight_upload_template.csv')
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    window.URL.revokeObjectURL(url)
-  } catch (error) {
-    console.error('Template download error:', error)
-    ElMessage.error('Template indirilemedi')
-  }
-}
-
-const previewCSV = async () => {
+const uploadCSV = async () => {
   if (csvFileList.value.length === 0) {
-    ElMessage.warning('Lütfen bir CSV dosyası seçin')
+    ElMessage.error('Lütfen bir CSV dosyası seçin')
     return
   }
 
   csvUploading.value = true
   try {
-    const formData = new FormData()
-    formData.append('file', csvFileList.value[0].raw)
-
-    const response = await flightAPI.previewCSV(formData)
-    csvPreview.value = response.data
-    csvStep.value = 'preview'
-
-    ElMessage.success(`${response.data.totalRows} satır analiz edildi`)
+    await flightAPI.uploadCSV(csvFileList.value[0].raw)
+    ElMessage.success('CSV dosyası başarıyla yüklendi')
+    showCSVUpload.value = false
+    csvFileList.value = []
+    fetchFlights()
   } catch (error) {
-    console.error('CSV preview error:', error)
-    ElMessage.error('CSV önizleme başarısız: ' + (error.response?.data?.message || error.message))
+    ElMessage.error('CSV yükleme başarısız')
   } finally {
     csvUploading.value = false
   }
 }
 
-const confirmCSVUpload = async () => {
-  csvConfirming.value = true
-  try {
-    const validRows = csvPreview.value.previewData.filter(row => row.valid)
-
-    const response = await flightAPI.confirmCSVUpload(validRows)
-
-    ElMessage.success(`${response.data.successCount} uçuş başarıyla içe aktarıldı`)
-
-    if (response.data.failureCount > 0) {
-      ElMessage.warning(`${response.data.failureCount} uçuş içe aktarılamadı`)
-    }
-
-    closeCSVModal()
-    fetchFlights()
-
-  } catch (error) {
-    console.error('CSV confirm error:', error)
-    ElMessage.error('İçe aktarma başarısız: ' + (error.response?.data?.message || error.message))
-  } finally {
-    csvConfirming.value = false
+const getTypeLabel = (type) => {
+  const labels = {
+    'PASSENGER': 'Yolcu',
+    'CARGO': 'Kargo',
+    'MIXED': 'Karma'
   }
+  return labels[type] || type
 }
 
-const closeCSVModal = () => {
-  showCSVUpload.value = false
-  csvStep.value = 'upload'
-  csvFileList.value = []
-  csvPreview.value = {}
+const getTypeColor = (type) => {
+  const colors = {
+    'PASSENGER': 'success',
+    'CARGO': 'warning',
+    'MIXED': 'info'
+  }
+  return colors[type] || 'info'
 }
 
-const formatArrayDate = (dateArray) => {
-  if (!dateArray || !Array.isArray(dateArray)) return ''
-  return `${dateArray[0]}-${String(dateArray[1]).padStart(2, '0')}-${String(dateArray[2]).padStart(2, '0')}`
+const getStatusLabel = (status) => {
+  const labels = {
+    'SCHEDULED': 'Planlandı',
+    'DEPARTED': 'Kalktı',
+    'ARRIVED': 'Vardı',
+    'CANCELLED': 'İptal',
+    'DELAYED': 'Gecikmeli'
+  }
+  return labels[status] || status
 }
 
-const formatArrayTime = (timeArray) => {
-  if (!timeArray || !Array.isArray(timeArray)) return ''
-  return `${String(timeArray[3]).padStart(2, '0')}:${String(timeArray[4]).padStart(2, '0')}`
+const getStatusColor = (status) => {
+  const colors = {
+    'SCHEDULED': 'info',
+    'DEPARTED': 'success',
+    'ARRIVED': 'success',
+    'CANCELLED': 'danger',
+    'DELAYED': 'warning'
+  }
+  return colors[status] || 'info'
 }
 
-// Initialize
 onMounted(() => {
-  fetchFlights()
+  withLoading(fetchFlights)
 })
 </script>
 
