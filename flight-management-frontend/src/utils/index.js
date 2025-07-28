@@ -11,9 +11,21 @@ export const formatDate = (date, format = 'DD/MM/YYYY') => {
 
 export const formatTime = (time) => {
   if (!time) return ''
-  return new Date(`2000-01-01 ${time}`).toLocaleTimeString('tr-TR', {
-    hour: '2-digit', minute: '2-digit'
-  })
+
+  // Eğer datetime formatında geliyorsa (2025-07-28T10:30:00)
+  if (time.includes('T')) {
+    return new Date(time).toLocaleTimeString('tr-TR', {
+      hour: '2-digit', minute: '2-digit'
+    })
+  }
+
+  // Eğer sadece time formatında geliyorsa (10:30:00)
+  if (time.includes(':')) {
+    const [hours, minutes] = time.split(':')
+    return `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`
+  }
+
+  return time
 }
 
 // Validation rules

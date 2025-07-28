@@ -146,6 +146,7 @@
               style="width: 100%"
               filterable
               :loading="airlinesLoading"
+              @change="onAirlineChange"
             >
               <el-option
                 v-for="airline in airlines"
@@ -166,12 +167,14 @@
               style="width: 100%"
               filterable
               :loading="aircraftLoading"
+              :disabled="!form.airlineId"
+              placeholder="Önce havayolu seçin"
             >
               <el-option
-                v-for="aircraft in aircraft"
-                :key="aircraft.id"
-                :label="`${aircraft.registrationNumber} (${aircraft.aircraftType})`"
-                :value="aircraft.id"
+                v-for="aircraftItem in aircraft"
+                :key="aircraftItem.id"
+                :label="`${aircraftItem.registrationNumber} (${aircraftItem.aircraftType})`"
+                :value="aircraftItem.id"
               />
             </el-select>
           </el-form-item>
@@ -183,6 +186,8 @@
               style="width: 100%"
               filterable
               :loading="routesLoading"
+              :disabled="!form.airlineId"
+              placeholder="Önce havayolu seçin"
             >
               <el-option
                 v-for="route in routes"
@@ -314,11 +319,24 @@ const csvFileList = ref([])
 
 // Reference data
 const airlines = ref([])
-const aircraft = ref([])
-const routes = ref([])
+const allAircraft = ref([])
+const allRoutes = ref([])
 const airlinesLoading = ref(false)
 const aircraftLoading = ref(false)
 const routesLoading = ref(false)
+
+// Filtered data based on selected airline
+const aircraft = computed(() => {
+  if (!form.airlineId) return []
+  return allAircraft.value.filter(a => a.airline?.id === form.airlineId)
+})
+
+const routes = computed(() => {
+  if (!form.airlineId) return []
+  return allRoutes.value.filter(r =>
+    r.airlineId === form.airlineId || r.visibility === 'SHARED' || r.visibility === 'PUBLIC'
+  )
+})
 
 // Filters
 const filters = reactive({
@@ -376,40 +394,76 @@ const loadReferenceData = async () => {
     ])
 
     airlines.value = airlinesRes.content || []
-    aircraft.value = aircraftRes.content || []
-    routes.value = Array.isArray(routesRes) ? routesRes : (routesRes.content || [])
+    allAircraft.value = aircraftRes.content || []
+    allRoutes.value = Array.isArray(routesRes) ? routesRes : (routesRes.content || [])
   } catch (error) {
     console.error('Reference data yüklenirken hata:', error)
   }
 }
 
+// Havayolu değiştiğinde uçak ve rotayı sıfırla
+const onAirlineChange = () => {
+  form.aircraftId = null
+  form.routeId = null
+}
+
 const openModal = async (flight = null) => {
   isEdit.value = !!flight
+
+  // Önce reference data yükle
+  await loadReferenceData()
+
   if (flight) {
-    Object.assign(form, {
-      ...flight,
-      airlineId: flight.airline?.id,
-      aircraftId: flight.aircraft?.id,
-      routeId: flight.route?.id
-    })
+    // Edit mode - mevcut flight verilerini set et
+    form.id = flight.id
+    form.flightNumber = flight.flightNumber || ''
+    form.airlineId = flight.airline?.id || null
+    form.aircraftId = flight.aircraft?.id || null
+    form.routeId = flight.route?.id || null
+    form.flightDate = flight.flightDate || ''
+    form.type = flight.type || 'PASSENGER'
+    form.passengerCount = flight.passengerCount || 0
+    form.status = flight.status || 'SCHEDULED'
+    form.scheduledDeparture = extractTimeFromDateTime(flight.scheduledDeparture)
+    form.scheduledArrival = extractTimeFromDateTime(flight.scheduledArrival)
   } else {
-    Object.assign(form, {
-      id: null,
-      flightNumber: '',
-      airlineId: null,
-      aircraftId: null,
-      routeId: null,
-      flightDate: '',
-      scheduledDeparture: '',
-      scheduledArrival: '',
-      type: 'PASSENGER',
-      passengerCount: 0,
-      status: 'SCHEDULED'
-    })
+    // Create mode - boş form
+    form.id = null
+    form.flightNumber = ''
+    form.airlineId = null
+    form.aircraftId = null
+    form.routeId = null
+    form.flightDate = ''
+    form.scheduledDeparture = ''
+    form.scheduledArrival = ''
+    form.type = 'PASSENGER'
+    form.passengerCount = 0
+    form.status = 'SCHEDULED'
   }
 
-  await loadReferenceData()
   modalVisible.value = true
+}
+
+// Helper function to extract time from datetime
+const extractTimeFromDateTime = (datetime) => {
+  if (!datetime) return ''
+
+  try {
+    // Eğer T içeriyorsa datetime formatında
+    if (datetime.includes('T')) {
+      return datetime.split('T')[1]?.substring(0, 5) || ''
+    }
+
+    // Eğer sadece time formatında ise (HH:mm:ss)
+    if (datetime.includes(':')) {
+      return datetime.substring(0, 5)
+    }
+
+    return datetime
+  } catch (error) {
+    console.error('Time parsing error:', error)
+    return ''
+  }
 }
 
 const closeModal = () => {

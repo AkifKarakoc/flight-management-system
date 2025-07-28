@@ -8,11 +8,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.Cacheable;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
+import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+
+import java.time.Duration;
 
 @Service
 @RequiredArgsConstructor
@@ -31,12 +31,22 @@ public class ReferenceDataService {
         try {
             String url = referenceServiceUrl + "/api/v1/airlines/" + airlineId;
             HttpHeaders headers = createAuthHeaders();
-            HttpEntity<String> entity = new HttpEntity<>(headers);
+            HttpEntity<?> entity = new HttpEntity<>(headers);
 
-            return restTemplate.exchange(url, HttpMethod.GET, entity, AirlineCache.class).getBody();
+            ResponseEntity<AirlineCache> response = restTemplate.exchange(
+                    url, HttpMethod.GET, entity, AirlineCache.class);
+
+            if (response.getBody() != null) {
+                log.debug("Airline {} retrieved successfully", airlineId);
+                return response.getBody();
+            }
+
+            log.warn("Empty response for airline: {}", airlineId);
+            return null;
+
         } catch (Exception e) {
             log.error("Error fetching airline {}: {}", airlineId, e.getMessage());
-            throw new RuntimeException("Failed to fetch airline data", e);
+            throw new RuntimeException("Failed to fetch airline data: " + airlineId, e);
         }
     }
 
@@ -212,11 +222,16 @@ public class ReferenceDataService {
     // Private helper methods
     private HttpHeaders createAuthHeaders() {
         HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
         String token = serviceTokenManager.getServiceToken();
-        if (token != null) {
+        if (token != null && !token.trim().isEmpty()) {
             headers.setBearerAuth(token);
+            log.debug("Added bearer token to request headers");
+        } else {
+            log.warn("No service token available for request");
         }
-        headers.set("Content-Type", "application/json");
+
         return headers;
     }
 
