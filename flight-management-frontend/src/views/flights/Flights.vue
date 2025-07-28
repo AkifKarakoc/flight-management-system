@@ -25,7 +25,7 @@
     <el-card style="margin-bottom: 20px;">
       <el-row :gutter="20">
         <el-col :span="6">
-          <el-select v-model="filters.status" placeholder="Durum" clearable @change="fetchFlights">
+          <el-select v-model="filters.status" placeholder="Durum" clearable @change="applyFilters">
             <el-option value="SCHEDULED" label="Planlandı" />
             <el-option value="DEPARTED" label="Kalktı" />
             <el-option value="ARRIVED" label="Vardı" />
@@ -34,7 +34,7 @@
           </el-select>
         </el-col>
         <el-col :span="6">
-          <el-select v-model="filters.type" placeholder="Tür" clearable @change="fetchFlights">
+          <el-select v-model="filters.type" placeholder="Tür" clearable @change="applyFilters">
             <el-option value="PASSENGER" label="Yolcu" />
             <el-option value="CARGO" label="Kargo" />
             <el-option value="MIXED" label="Karma" />
@@ -42,27 +42,27 @@
         </el-col>
         <el-col :span="6">
           <el-input
-            v-model="filters.flightNumber"
-            placeholder="Uçuş No"
-            clearable
-            @keyup.enter="fetchFlights"
+              v-model="filters.flightNumber"
+              placeholder="Uçuş No"
+              clearable
+              @keyup.enter="applyFilters"
           />
         </el-col>
         <el-col :span="6">
-          <el-button type="primary" @click="fetchFlights">Filtrele</el-button>
-          <el-button @click="clearFilters">Temizle</el-button>
+          <el-button type="primary" @click="applyFilters">Filtrele</el-button>
+          <el-button @click="handleClearFilters">Temizle</el-button>
         </el-col>
       </el-row>
     </el-card>
 
     <DataTable
-      :data="flights"
-      :loading="loading"
-      :total="total"
-      :current-page="currentPage"
-      :page-size="pageSize"
-      @current-change="changePage"
-      @size-change="changeSize"
+        :data="flights"
+        :loading="loading"
+        :total="total"
+        :current-page="currentPage"
+        :page-size="pageSize"
+        @current-change="changePage"
+        @size-change="changeSize"
     >
       <el-table-column prop="flightNumber" label="Uçuş No" width="120" />
       <el-table-column prop="airline.name" label="Havayolu" width="150" />
@@ -72,26 +72,46 @@
           {{ row.route?.routePath || `${row.originAirport?.iataCode} → ${row.destinationAirport?.iataCode}` || 'N/A' }}
         </template>
       </el-table-column>
-      <el-table-column prop="flightDate" label="Tarih" width="120">
+      <el-table-column prop="scheduledDeparture" label="STD" width="120">
         <template #default="{ row }">
-          {{ formatDate(row.flightDate) }}
+          <div>
+            <span>{{ formatTime(row.scheduledDeparture) }}</span>
+            <span v-if="row.actualDeparture"
+                  :style="{ color: isDelayed(row.scheduledDeparture, row.actualDeparture) ? '#f56c6c' : '#67c23a' }">
+              / {{ formatTime(row.actualDeparture) }}
+            </span>
+            <span v-else style="color: #909399"> / -</span>
+          </div>
         </template>
       </el-table-column>
-      <el-table-column prop="scheduledDeparture" label="STD" width="80">
+      <el-table-column prop="scheduledArrival" label="STA" width="120">
         <template #default="{ row }">
-          {{ formatTime(row.scheduledDeparture) }}
+          <div>
+            <span>{{ formatTime(row.scheduledArrival) }}</span>
+            <span v-if="row.actualArrival"
+                  :style="{ color: isDelayed(row.scheduledArrival, row.actualArrival) ? '#f56c6c' : '#67c23a' }">
+              / {{ formatTime(row.actualArrival) }}
+            </span>
+            <span v-else style="color: #909399"> / -</span>
+          </div>
         </template>
       </el-table-column>
-      <el-table-column prop="scheduledArrival" label="STA" width="80">
-        <template #default="{ row }">
-          {{ formatTime(row.scheduledArrival) }}
-        </template>
-      </el-table-column>
-      <el-table-column prop="type" label="Tür" width="100">
+      <el-table-column prop="type" label="Tür" width="140">
         <template #default="{ row }">
           <el-tag :type="getTypeColor(row.type)">
-            {{ getTypeLabel(row.type) }}
+            {{ getTypeWithDetails(row) }}
           </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="Gecikme" width="120">
+        <template #default="{ row }">
+          <span v-if="row.delayMinutes && row.delayMinutes > 0" style="color: #f56c6c">
+            {{ row.delayMinutes }}dk
+            <el-tooltip v-if="row.delayReason" :content="row.delayReason" placement="top">
+              <el-icon style="margin-left: 4px;"><InfoFilled /></el-icon>
+            </el-tooltip>
+          </span>
+          <span v-else style="color: #909399">-</span>
         </template>
       </el-table-column>
       <el-table-column prop="status" label="Durum" width="120">
@@ -104,17 +124,17 @@
       <el-table-column label="İşlemler" width="180">
         <template #default="{ row }">
           <el-button
-            v-if="auth.isAdmin"
-            size="small"
-            @click="openModal(row)"
+              v-if="auth.isAdmin"
+              size="small"
+              @click="openModal(row)"
           >
             Düzenle
           </el-button>
           <el-button
-            v-if="auth.isAdmin"
-            size="small"
-            type="danger"
-            @click="deleteFlight(row)"
+              v-if="auth.isAdmin"
+              size="small"
+              type="danger"
+              @click="deleteFlight(row)"
           >
             Sil
           </el-button>
@@ -360,7 +380,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Upload, Location, Position } from '@element-plus/icons-vue'
+import { Plus, Upload, Location, Position, InfoFilled } from '@element-plus/icons-vue'
 import AppLayout from '@/components/common/AppLayout.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import DataTable from '@/components/tables/DataTable.vue'
@@ -368,6 +388,7 @@ import FormModal from '@/components/forms/FormModal.vue'
 import { flightAPI, referenceAPI } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 import { usePagination, useLoading, rules, formatDate, formatTime } from '@/utils'
+import { useCsvUpload } from '@/composables/useCsvUpload'
 
 const auth = useAuthStore()
 const { loading, withLoading } = useLoading()
@@ -377,16 +398,29 @@ const {
   total,
   currentPage,
   pageSize,
+  filters,
   fetch: fetchFlights,
-  changePage
-} = usePagination(flightAPI.getFlights)
+  changePage,
+  changeSize,
+  applyFilters,
+  clearFilters
+} = usePagination(flightAPI.getFlights, {
+  status: '',
+  type: '',
+  flightNumber: ''
+})
+
+const {
+  uploading: csvUploading,
+  fileList: csvFileList,
+  handleFileSelect: handleCSVSelect,
+  uploadCsv
+} = useCsvUpload()
 
 const modalVisible = ref(false)
 const saving = ref(false)
 const isEdit = ref(false)
 const showCSVUpload = ref(false)
-const csvUploading = ref(false)
-const csvFileList = ref([])
 
 // Reference data
 const airlines = ref([])
@@ -409,13 +443,6 @@ const routes = computed(() => {
   return allRoutes.value.filter(r =>
     r.airlineId === form.airlineId || r.visibility === 'SHARED' || r.visibility === 'PUBLIC'
   )
-})
-
-// Filters
-const filters = reactive({
-  status: '',
-  type: '',
-  flightNumber: ''
 })
 
 const form = reactive({
@@ -466,20 +493,6 @@ const formRules = computed(() => {
 
   return baseRules
 })
-
-const changeSize = (size) => {
-  pageSize.value = size
-  fetchFlights()
-}
-
-const clearFilters = () => {
-  Object.assign(filters, {
-    status: '',
-    type: '',
-    flightNumber: ''
-  })
-  fetchFlights()
-}
 
 // Load functions - DÜZELTİLDİ
 const loadReferenceData = async () => {
@@ -647,6 +660,14 @@ const saveFlight = async () => {
   }
 }
 
+// Manual clear filters handler
+const handleClearFilters = () => {
+  filters.status = ''
+  filters.type = ''
+  filters.flightNumber = ''
+  applyFilters()
+}
+
 const deleteFlight = async (flight) => {
   try {
     await ElMessageBox.confirm('Bu uçuşu silmek istediğinizden emin misiniz?', 'Uyarı', {
@@ -663,27 +684,14 @@ const deleteFlight = async (flight) => {
   }
 }
 
-const handleCSVSelect = (file) => {
-  csvFileList.value = [file]
-}
-
 const uploadCSV = async () => {
-  if (csvFileList.value.length === 0) {
-    ElMessage.error('Lütfen bir CSV dosyası seçin')
-    return
-  }
-
-  csvUploading.value = true
   try {
-    await flightAPI.uploadCSV(csvFileList.value[0].raw)
-    ElMessage.success('CSV dosyası başarıyla yüklendi')
-    showCSVUpload.value = false
-    csvFileList.value = []
-    fetchFlights()
+    await uploadCsv(() => {
+      showCSVUpload.value = false
+      fetchFlights()
+    })
   } catch (error) {
-    ElMessage.error('CSV yükleme başarısız')
-  } finally {
-    csvUploading.value = false
+    console.error('CSV Upload Error:', error)
   }
 }
 
@@ -730,6 +738,28 @@ const getStatusColor = (status) => {
 onMounted(() => {
   withLoading(fetchFlights)
 })
+
+// Helper methods for enhanced table display
+const getTypeWithDetails = (row) => {
+  const baseLabel = getTypeLabel(row.type)
+
+  if (row.type === 'PASSENGER' && row.passengerCount) {
+    return `${baseLabel} (${row.passengerCount})`
+  }
+  if (row.type === 'CARGO' && row.cargoWeight) {
+    return `${baseLabel} (${row.cargoWeight}kg)`
+  }
+  return baseLabel
+}
+
+const isDelayed = (scheduled, actual) => {
+  if (!scheduled || !actual) return false
+
+  const scheduledTime = new Date(scheduled).getTime()
+  const actualTime = new Date(actual).getTime()
+
+  return actualTime > scheduledTime
+}
 </script>
 
 <style scoped>

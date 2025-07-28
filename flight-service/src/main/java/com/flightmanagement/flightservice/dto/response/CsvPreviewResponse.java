@@ -1,5 +1,7 @@
 package com.flightmanagement.flightservice.dto.response;
 
+
+import com.flightmanagement.flightservice.entity.enums.FlightStatus;
 import com.flightmanagement.flightservice.entity.enums.FlightType;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -41,6 +43,12 @@ public class CsvPreviewResponse {
         private LocalDateTime scheduledDeparture;
         private LocalDateTime scheduledArrival;
         private FlightType type;
+
+        // NEW FIELDS - Add these
+        private Integer delayMinutes;
+        private FlightStatus status;
+        private Integer passengerCount;
+        private Integer cargoWeight;
 
         // Route processing results
         private String creationMode; // "ROUTE" or "AIRPORTS"

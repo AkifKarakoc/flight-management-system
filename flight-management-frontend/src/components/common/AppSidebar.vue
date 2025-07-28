@@ -1,12 +1,24 @@
 <template>
   <div class="sidebar">
-    <div class="logo">UYS</div>
+    <div class="logo">
+      <span v-if="!collapsed">UYS</span>
+      <span v-else>U</span>
+    </div>
+
+    <div class="collapse-btn" @click="$emit('toggle')">
+      <el-icon>
+        <Expand v-if="collapsed" />
+        <Fold v-else />
+      </el-icon>
+    </div>
+
     <el-menu
-      :default-active="$route.path"
-      background-color="#001529"
-      text-color="#fff"
-      active-text-color="#1890ff"
-      router
+        :default-active="$route.path"
+        :collapse="collapsed"
+        background-color="#001529"
+        text-color="#fff"
+        active-text-color="#1890ff"
+        router
     >
       <el-menu-item index="/">
         <el-icon><House /></el-icon>
@@ -38,11 +50,21 @@
 </template>
 
 <script setup>
-import { House, Position, Setting, Document } from '@element-plus/icons-vue'
+import { House, Position, Setting, Document, Expand, Fold } from '@element-plus/icons-vue'
+
+defineProps({
+  collapsed: {
+    type: Boolean,
+    default: false
+  }
+})
+
+defineEmits(['toggle'])
 </script>
 
 <style scoped>
-.sidebar { height: 100%; }
+.sidebar { height: 100%; position: relative; }
+
 .logo {
   height: 60px;
   line-height: 60px;
@@ -51,6 +73,31 @@ import { House, Position, Setting, Document } from '@element-plus/icons-vue'
   font-size: 20px;
   font-weight: bold;
   border-bottom: 1px solid #303030;
+  transition: all 0.3s ease;
 }
-.el-menu { border: none; }
+
+.collapse-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  color: #fff;
+  cursor: pointer;
+  z-index: 10;
+  padding: 5px;
+  border-radius: 4px;
+  transition: background-color 0.3s ease;
+}
+
+.collapse-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.el-menu {
+  border: none;
+  transition: all 0.3s ease;
+}
+
+.el-menu--collapse {
+  width: 64px;
+}
 </style>

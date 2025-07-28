@@ -32,8 +32,9 @@ public class CsvProcessingService {
     private final AutoRouteService autoRouteService;
 
     private static final String[] EXPECTED_HEADERS = {
-            "flightNumber", "airlineId", "aircraftId", "route",
-            "flightDate", "scheduledDeparture", "scheduledArrival", "type"
+            "flightNumber", "airlineId", "aircraftId", "route", "flightDate",
+            "scheduledDeparture", "scheduledArrival", "type", "delayMinutes",
+            "status", "passengerCount", "cargoWeight"
     };
 
     private static final Pattern IATA_ROUTE_PATTERN = Pattern.compile("^[A-Z]{3}-[A-Z]{3}$");
@@ -136,13 +137,9 @@ public class CsvProcessingService {
         // Header
         template.append(String.join(",", EXPECTED_HEADERS)).append("\n");
 
-        // Examples - Route ID based
-        template.append("TK100,1,1,5,2025-07-28,2025-07-28 08:00,2025-07-28 09:30,PASSENGER\n");
-        template.append("CG100,1,2,3,2025-07-28,2025-07-28 20:00,2025-07-28 21:30,CARGO\n");
-
-        // Examples - IATA code based
-        template.append("TK200,1,2,IST-ANK,2025-07-28,2025-07-28 14:00,2025-07-28 16:30,PASSENGER\n");
-        template.append("TK300,2,3,ANK-IZM,2025-07-28,2025-07-28 18:00,2025-07-28 19:15,PASSENGER\n");
+        // Examples
+        template.append("TK100,1,1,IST-ANK,2025-07-28,2025-07-28 08:00,2025-07-28 10:30,PASSENGER,0,SCHEDULED,180,\n");
+        template.append("CG100,2,2,5,2025-07-28,2025-07-28 20:00,2025-07-29 02:30,CARGO,0,SCHEDULED,,2500\n");
 
         return template.toString();
     }
@@ -218,6 +215,18 @@ public class CsvProcessingService {
             // Flight Type
             data.setType(parseFlightType(row[7], "Flight Type"));
 
+            // Delay Minutes
+            data.setDelayMinutes(parseInteger(row[8], "Delay Minutes"));
+
+            // Status
+            data.setStatus(parseFlightStatus(row[9], "Status"));
+
+            // Passenger Count
+            data.setPassengerCount(parseInteger(row[10], "Passenger Count"));
+
+            // Cargo Weight
+            data.setCargoWeight(parseInteger(row[11], "Cargo Weight"));
+
             // Validate time logic
             if (data.getScheduledDeparture() != null && data.getScheduledArrival() != null) {
                 if (!data.getScheduledArrival().isAfter(data.getScheduledDeparture())) {
@@ -235,6 +244,28 @@ public class CsvProcessingService {
         }
 
         return data;
+    }
+
+    private Integer parseInteger(String value, String fieldName) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException e) {
+            throw new BusinessException(fieldName + " must be a valid number");
+        }
+    }
+
+    private FlightStatus parseFlightStatus(String value, String fieldName) {
+        if (value == null || value.trim().isEmpty()) {
+            return FlightStatus.SCHEDULED; // Default
+        }
+        try {
+            return FlightStatus.valueOf(value.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(fieldName + " must be one of: SCHEDULED, DEPARTED, ARRIVED, CANCELLED, DELAYED");
+        }
     }
 
     private void processRouteField(CsvPreviewResponse.ParsedFlightData data,

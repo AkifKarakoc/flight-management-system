@@ -71,23 +71,46 @@ export const useLoading = () => {
   return { loading, withLoading }
 }
 
-// Pagination helper
-export const usePagination = (fetchFn) => {
+// Enhanced Pagination helper with filter support
+export const usePagination = (fetchFn, initialFilters = {}) => {
   const data = ref([])
   const loading = ref(false)
   const total = ref(0)
   const currentPage = ref(1)
   const pageSize = ref(10)
+  const filters = reactive({ ...initialFilters })
 
-  const fetch = async () => {
+  const fetch = async (customFilters = {}) => {
     loading.value = true
     try {
-      const response = await fetchFn({
+      const params = {
         page: currentPage.value - 1,
-        size: pageSize.value
+        size: pageSize.value,
+        ...filters,
+        ...customFilters
+      }
+
+      // Clean empty values
+      Object.keys(params).forEach(key => {
+        if (params[key] === '' || params[key] === null || params[key] === undefined) {
+          delete params[key]
+        }
       })
-      data.value = response.content
-      total.value = response.totalElements
+
+      const response = await fetchFn(params)
+
+      // Handle different response formats
+      if (Array.isArray(response)) {
+        data.value = response
+        total.value = response.length
+      } else {
+        data.value = response.content || []
+        total.value = response.totalElements || 0
+      }
+    } catch (error) {
+      console.error('Pagination fetch error:', error)
+      data.value = []
+      total.value = 0
     } finally {
       loading.value = false
     }
@@ -98,5 +121,75 @@ export const usePagination = (fetchFn) => {
     fetch()
   }
 
-  return { data, loading, total, currentPage, pageSize, fetch, changePage }
+  const changeSize = (size) => {
+    pageSize.value = size
+    currentPage.value = 1
+    fetch()
+  }
+
+  const applyFilters = (newFilters = {}) => {
+    Object.assign(filters, newFilters)
+    currentPage.value = 1
+    fetch()
+  }
+
+  const clearFilters = () => {
+    Object.keys(filters).forEach(key => {
+      filters[key] = initialFilters[key] || ''
+    })
+    currentPage.value = 1
+    fetch()
+  }
+
+  return {
+    data,
+    loading,
+    total,
+    currentPage,
+    pageSize,
+    filters,
+    fetch,
+    changePage,
+    changeSize,
+    applyFilters,
+    clearFilters
+  }
+}
+
+// CSV Validation utilities
+export const csvValidation = {
+  validateFlightNumber: (value) => {
+    if (!value) return 'Uçuş numarası gerekli'
+    if (!/^[A-Z]{2}\d{1,4}$/.test(value)) return 'Format: AA123'
+    return null
+  },
+
+  validateDate: (value) => {
+    if (!value) return 'Tarih gerekli'
+    const date = new Date(value)
+    if (isNaN(date.getTime())) return 'Geçersiz tarih'
+    return null
+  },
+
+  validateTime: (value) => {
+    if (!value) return 'Saat gerekli'
+    if (!/^\d{2}:\d{2}$/.test(value)) return 'Format: HH:mm'
+    return null
+  },
+
+  validateRequired: (value, field) => {
+    if (!value || value.toString().trim() === '') {
+      return `${field} gerekli`
+    }
+    return null
+  }
+}
+
+// CSV processing helper
+export const processCsvRow = (row, headers) => {
+  const processed = {}
+  headers.forEach((header, index) => {
+    processed[header.trim()] = row[index]?.trim() || ''
+  })
+  return processed
 }
