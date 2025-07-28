@@ -63,8 +63,8 @@ public class Route {
     private Long airlineId;
 
     // Multi-segment support
-    @OneToMany(mappedBy = "route", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    @OrderBy("segmentOrder")
+    // CRITICAL: Cascade ALL ve orphanRemoval=true olmalı
+    @OneToMany(mappedBy = "route", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<RouteSegment> segments = new ArrayList<>();
 
     @CreationTimestamp
@@ -82,18 +82,21 @@ public class Route {
         return segments != null && segments.size() > 1;
     }
 
+    // Helper method for safe segment management
     public void addSegment(RouteSegment segment) {
-        if (segments == null) {
-            segments = new ArrayList<>();
-        }
-        segment.setRoute(this);
         segments.add(segment);
+        segment.setRoute(this);
     }
 
     public void removeSegment(RouteSegment segment) {
+        segments.remove(segment);
+        segment.setRoute(null);
+    }
+
+    public void clearSegments() {
         if (segments != null) {
-            segments.remove(segment);
-            segment.setRoute(null);
+            // Clear the collection, orphanRemoval will handle deletion
+            segments.clear();
         }
     }
 }

@@ -21,6 +21,7 @@ public class RouteSegment {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // CRITICAL: Route ile ManyToOne ilişkisi
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "route_id", nullable = false)
     private Route route;
