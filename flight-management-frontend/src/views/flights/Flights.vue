@@ -414,6 +414,10 @@ const openModal = async (flight = null) => {
   await loadReferenceData()
 
   if (flight) {
+    console.log('Flight data:', flight) // DEBUG: Backend'den gelen veri
+    console.log('scheduledDeparture:', flight.scheduledDeparture) // DEBUG
+    console.log('scheduledArrival:', flight.scheduledArrival) // DEBUG
+
     // Edit mode - mevcut flight verilerini set et
     form.id = flight.id
     form.flightNumber = flight.flightNumber || ''
@@ -424,8 +428,20 @@ const openModal = async (flight = null) => {
     form.type = flight.type || 'PASSENGER'
     form.passengerCount = flight.passengerCount || 0
     form.status = flight.status || 'SCHEDULED'
-    form.scheduledDeparture = extractTimeFromDateTime(flight.scheduledDeparture)
-    form.scheduledArrival = extractTimeFromDateTime(flight.scheduledArrival)
+
+    const depTime = extractTimeFromDateTime(flight.scheduledDeparture)
+    const arrTime = extractTimeFromDateTime(flight.scheduledArrival)
+
+    console.log('Extracted departure time:', depTime) // DEBUG
+    console.log('Extracted arrival time:', arrTime) // DEBUG
+
+    form.scheduledDeparture = depTime
+    form.scheduledArrival = arrTime
+
+    // Form set edildikten sonra değerleri kontrol et
+    nextTick(() => {
+      console.log('Form after set:', form.scheduledDeparture, form.scheduledArrival) // DEBUG
+    })
   } else {
     // Create mode - boş form
     form.id = null
@@ -449,17 +465,22 @@ const extractTimeFromDateTime = (datetime) => {
   if (!datetime) return ''
 
   try {
-    // Eğer T içeriyorsa datetime formatında
+    // Backend format: "2025-09-01 08:00" veya "2025-09-01T08:00:00"
+    let timepart = ''
+
     if (datetime.includes('T')) {
-      return datetime.split('T')[1]?.substring(0, 5) || ''
+      // ISO format: 2025-09-01T08:00:00
+      timepart = datetime.split('T')[1]?.substring(0, 5) || ''
+    } else if (datetime.includes(' ')) {
+      // Space format: 2025-09-01 08:00
+      timepart = datetime.split(' ')[1]?.substring(0, 5) || ''
+    } else if (datetime.includes(':')) {
+      // Pure time format: 08:00:00
+      timepart = datetime.substring(0, 5)
     }
 
-    // Eğer sadece time formatında ise (HH:mm:ss)
-    if (datetime.includes(':')) {
-      return datetime.substring(0, 5)
-    }
-
-    return datetime
+    console.log('DateTime input:', datetime, 'Extracted time:', timepart) // DEBUG
+    return timepart
   } catch (error) {
     console.error('Time parsing error:', error)
     return ''
