@@ -374,6 +374,69 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- CSV Preview Modal -->
+    <el-dialog v-model="showCSVPreview" title="CSV Önizleme" width="90%" top="5vh">
+      <div v-if="csvPreviewData">
+        <el-alert
+            :title="`${csvPreviewData.validRows} geçerli, ${csvPreviewData.invalidRows} geçersiz satır`"
+            :type="csvPreviewData.readyForImport ? 'success' : 'warning'"
+            style="margin-bottom: 20px;"
+        />
+
+        <el-table :data="csvPreviewData.previewData" style="width: 100%" max-height="400">
+          <el-table-column prop="rowNumber" label="Satır" width="60" />
+          <el-table-column label="Durum" width="80">
+            <template #default="{ row }">
+              <el-tag :type="row.valid ? 'success' : 'danger'">
+                {{ row.valid ? 'Geçerli' : 'Hata' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="parsedData.flightNumber" label="Uçuş No" width="100" />
+          <el-table-column label="Havayolu" width="80">
+            <template #default="{ row }">{{ row.parsedData.airlineId }}</template>
+          </el-table-column>
+          <el-table-column label="Güzergah" width="150">
+            <template #default="{ row }">
+              {{ row.parsedData.routeInfo || row.parsedData.routeInput }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="parsedData.type" label="Tür" width="100" />
+          <el-table-column prop="parsedData.status" label="Durum" width="100" />
+          <el-table-column label="Hatalar" min-width="200">
+            <template #default="{ row }">
+              <div v-if="!row.valid">
+                <el-tag v-for="(error, key) in row.fieldErrors" :key="key" type="danger" size="small" style="margin: 2px;">
+                  {{ error }}
+                </el-tag>
+              </div>
+              <span v-else style="color: #67c23a;">✓ Geçerli</span>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+
+      <template #footer>
+        <el-button @click="showCSVPreview = false">İptal</el-button>
+        <el-button
+            v-if="csvPreviewData?.readyForImport"
+            type="primary"
+            :loading="csvUploading"
+            @click="confirmCSVUpload"
+        >
+          Geçerli Satırları Yükle ({{ csvPreviewData.validRows }})
+        </el-button>
+        <el-button
+            v-else
+            type="warning"
+            :loading="csvUploading"
+            @click="confirmCSVUpload"
+        >
+          Sadece Geçerli Satırları Yükle ({{ csvPreviewData.validRows }})
+        </el-button>
+      </template>
+    </el-dialog>
   </AppLayout>
 </template>
 
@@ -392,6 +455,8 @@ import { useCsvUpload } from '@/composables/useCsvUpload'
 
 const auth = useAuthStore()
 const { loading, withLoading } = useLoading()
+const showCSVPreview = ref(false)
+const csvPreviewData = ref(null)
 
 const {
   data: flights,
@@ -685,13 +750,51 @@ const deleteFlight = async (flight) => {
 }
 
 const uploadCSV = async () => {
+  if (!csvFileList.value.length) {
+    ElMessage.error('Lütfen bir CSV dosyası seçin')
+    return
+  }
+
+  csvUploading.value = true
+
   try {
-    await uploadCsv(() => {
-      showCSVUpload.value = false
-      fetchFlights()
-    })
+    const formData = new FormData()
+    formData.append('file', csvFileList.value[0].raw)
+
+    const preview = await flightAPI.previewCSV(formData)
+
+    // Preview data'yı sakla ve modal'ı göster
+    csvPreviewData.value = preview
+    showCSVUpload.value = false
+    showCSVPreview.value = true
+
   } catch (error) {
-    console.error('CSV Upload Error:', error)
+    ElMessage.error('CSV önizleme hatası: ' + (error.message || 'Bilinmeyen hata'))
+    console.error('CSV Preview Error:', error)
+  } finally {
+    csvUploading.value = false
+  }
+}
+
+const confirmCSVUpload = async () => {
+  if (!csvPreviewData.value) return
+
+  csvUploading.value = true
+
+  try {
+    const validRows = csvPreviewData.value.previewData.filter(row => row.valid)
+    const result = await flightAPI.confirmCSVUpload(validRows)
+
+    ElMessage.success(`${result.successCount} uçuş başarıyla yüklendi!`)
+    showCSVPreview.value = false
+    csvFileList.value = []
+    csvPreviewData.value = null
+    fetchFlights()
+
+  } catch (error) {
+    ElMessage.error('CSV yükleme hatası: ' + (error.message || 'Bilinmeyen hata'))
+  } finally {
+    csvUploading.value = false
   }
 }
 
